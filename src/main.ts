@@ -94,13 +94,15 @@ function frame(now: number): void {
     travelSpeed: 0.4,
     bar: f.bar,
     tod,
+    bpm: music.bpm,
   });
   // Hall sounds: effects near the camera, and the belts' hum.
   for (const sd of scene.takeSounds()) music.sfx(sd.kind, sd.vol);
   music.setHum(scene.humLevel());
-  // The music follows how busy the hub is: relaxed, steady, driving, acid.
-  const r = scene.rate;
-  music.setMood(r <= 100 ? 0 : r <= 260 ? 1 : r <= 480 ? 2 : 3);
+  // The music follows how busy the hub is: 60 BPM ambient at the lowest rate, up to 160 BPM
+  // techno with an acid line at the highest; it moves a few BPM per bar.
+  const r = Math.max(0, Math.min(1, (scene.rate - 20) / 780));
+  music.setTempo(60 + 100 * Math.sqrt(r));
   hud.update();
   requestAnimationFrame(frame);
 }

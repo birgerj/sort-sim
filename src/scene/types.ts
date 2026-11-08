@@ -24,6 +24,8 @@ export interface SceneInput {
   bar?: number;
   /** Time of day: 0 day, 1 night (values between crossfade). */
   tod?: number;
+  /** The music's tempo now (beats per minute). */
+  bpm?: number;
 }
 
 /** A control the scene offers: an on/off switch, a choice, or a one-shot action. */
