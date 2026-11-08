@@ -57,9 +57,9 @@ const PITCH = 1;
 const LOOP_Y = 4;
 /** Corner radius and half depth (z) of the loop: a rounded rectangle, long in x. */
 const LOOP_R = 4;
-const LOOP_ZH = 11;
-/** One lap is 147 beats; every even metre mark on the loop is passed on a beat. */
-export const LOOP_LEN = 294;
+const LOOP_ZH = 8.5;
+/** One lap is 142 beats; every even metre mark on the loop is passed on a beat. */
+export const LOOP_LEN = 284;
 /** Length of the short (west and east) straights, and of a quarter bend. */
 const SIDE = 2 * LOOP_ZH - 2 * LOOP_R;
 const QUARTER = (Math.PI * LOOP_R) / 2;
@@ -80,18 +80,27 @@ const HH = 11;
 const MAX_PARCELS = 420;
 
 // Loop positions (metres from the start of the north straight; all even, so on a beat).
-// s 0–120: north straight, 20 dock chutes · 127–141: east side, to and from the store ·
-// 147–267: south straight, 20 robot station chutes · 274–288: west side, the four infeeds.
-const INDUCT = [274, 278, 282, 286];
+// s 0–120: north straight, 20 dock chutes · 127–136: east side, to and from the store ·
+// 142–262: south straight, 20 robot station chutes · 263–284: west end, the infeeds.
+/**
+ * Infeeds: four lanes from the west wall, two low and two high, each through
+ * its own scan tunnel. Each pair merges into one belt (a Y at 30°), and each of
+ * the two belts joins the west side of the loop at 30°, from the outside, the
+ * low one first. The lanes of a pair share the end of their path, so INDUCT is
+ * the same for both; parcels on them land on the beat, two metres apart.
+ */
+const INDUCT = [270, 270, 276, 276];
 const LANE_Y = [1.0, 1.0, 7.0, 7.0];
-/** z of the infeed lanes: each 3.2 m south of where it joins the loop. */
-const LANE_Z = INDUCT.map((s) => LOOP_ZH - LOOP_R - (s - (2 * STRAIGHT + 3 * QUARTER + SIDE)) + 3.2);
-const LANE_TUNNEL_X = -50;
+/** z of the lanes at the wall; lanes 1 and 2 run straight on, 0 and 3 join them. */
+const LANE_Z = [9.8, 7.2, 4.0, 1.4];
+const LANE_TUNNEL_X = -55;
 const LOOP_TUNNELS = [2, 148];
 const STORE_OUT = 128;
-const STORE_BACK = 138;
+const STORE_BACK = 134;
 /** Where the station chutes end, at the back of the pickup roller tables. */
-const STATION_Z = LOOP_ZH + 6.5;
+const STATION_Z = 14.5;
+/** Parcels that fit on a pickup station's roller table. */
+const STATION_CAP = 7;
 /**
  * Chutes: loop position and side (1 outside the loop, −1 inside).
  * Off the north straight, 20 chutes run north to the truck docks; off the
@@ -99,9 +108,9 @@ const STATION_Z = LOOP_ZH + 6.5;
  */
 const CHUTES: [number, number][] = [
   ...Array.from({ length: 20 }, (_, k): [number, number] => [4 + 6 * k, 1]),
-  ...Array.from({ length: 20 }, (_, k): [number, number] => [150 + 6 * k, 1]),
+  ...Array.from({ length: 20 }, (_, k): [number, number] => [144 + 6 * k, 1]),
 ];
-const FIRST_STATION_S = 147;
+const FIRST_STATION_S = 142;
 /**
  * Render quality. low: pixel ratio 1, no extras. normal: outlines, toon shading and
  * contact shadows (always on). high: also ambient occlusion, sun shadows around the
@@ -1515,7 +1524,10 @@ export class Sorter implements Scene3D {
         case 'table': {
           const q = this.stationQueue[p.station!]!;
           this.floor.tableSlot(p.station!, Math.max(0, q.indexOf(p)), this.p);
-          p.pos.lerp(this.p, Math.min(1, dt * 8));
+          // Roll along the table to its place in the queue (rollers: about 3 m/s at most).
+          this.n.subVectors(this.p, p.pos);
+          const gap = this.n.length();
+          if (gap > 1e-4) p.pos.addScaledVector(this.n, Math.min(gap, dt * 3) / gap);
           this.orient(p, this.t.set(0, 0, 1));
           break;
         }
@@ -1580,7 +1592,7 @@ export class Sorter implements Scene3D {
         ch.flash = 1;
         const st = this.stationOf.get(p.dest);
         if (st !== undefined) this.inbound.set(p.dest, Math.max(0, (this.inbound.get(p.dest) ?? 0) - 1));
-        if (st !== undefined && this.stationQueue[st]!.length < 4) {
+        if (st !== undefined && this.stationQueue[st]!.length < STATION_CAP) {
           // Onto the roller table, to wait for a robot.
           p.mode = 'table';
           p.station = st;
@@ -1612,7 +1624,7 @@ export class Sorter implements Scene3D {
   /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
   private room(dest: number): number {
     const st = this.stationOf.get(dest);
-    const free = st !== undefined ? 4 - this.stationQueue[st]!.length : this.docks.space(dest);
+    const free = st !== undefined ? STATION_CAP - this.stationQueue[st]!.length : this.docks.space(dest);
     return free - (this.inbound.get(dest) ?? 0);
   }
 
@@ -2322,7 +2334,7 @@ export class Sorter implements Scene3D {
     this.put(floor, 'night');
     // Walkway lines.
     const yel = new THREE.MeshBasicMaterial({ color: 0x8a7420 });
-    for (const z of [-15, 15]) this.box('line', yel, HCX, 0.012, z, HW - 12, 0.01, 0.15);
+    for (const z of [-15, 12]) this.box('line', yel, HCX, 0.012, z, HW - 12, 0.01, 0.15);
     for (const x of [WX + 6, EX - 6]) this.box('line', yel, x, 0.012, 0, 0.15, 0.01, 60);
 
     const ribs = canvasTex(128, 128, (g) => {
@@ -2620,15 +2632,20 @@ export class Sorter implements Scene3D {
     for (let k = 0; k < 4; k++) {
       const y = LANE_Y[k]!;
       const z = LANE_Z[k]!;
-      // They come in from the west wall, side by side, and join the west side of the loop at 30°.
+      // In from the west wall; lanes 0 and 3 swing into lanes 1 and 2 at 30° (after their
+      // scan tunnels), then each pair's belt ramps to loop height, turns 60° and joins the
+      // loop at 30° from the outside.
+      const pair = k < 2 ? 1 : 2;
+      const zp = LANE_Z[pair]!;
       loopAt(INDUCT[k]!, this.p, this.t);
-      const xi = this.p.x;
-      const zi = this.p.z;
-      const path = Path.fillet(
-        [v(WX - 1, y, z), v(-46, y, z), v(xi - 9, LOOP_Y, z), v(xi - 1.85, LOOP_Y, z), v(xi, LOOP_Y, zi)],
-        3,
-      );
-      belt(path, 0.6, path.len - 1.0);
+      const end = this.p.clone();
+      const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
+      const corner = end.clone().addScaledVector(into, -(zp - end.z) / -into.z).setY(LOOP_Y);
+      const join = Math.tan(Math.PI / 6);
+      const head = k === pair ? [v(WX - 1, y, z)] : [v(WX - 1, y, z), v(-45 - Math.abs(z - zp) / join, y, z)];
+      const path = Path.fillet([...head, v(-45, y, zp), v(-42, y, zp), v(corner.x - 6, LOOP_Y, zp), corner, end], 3);
+      // The shared part of a pair is drawn once.
+      belt(path, 0.6, k === pair ? path.len - 1.0 : path.acc[path.pts.findIndex((q) => q.x > -44.5)]!);
       const tunnel = this.tunnel(path, LANE_TUNNEL_X - WX + 1, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
       // Lit opening in the wall where the lane comes in.
@@ -2752,7 +2769,7 @@ export class Sorter implements Scene3D {
       outward(this.t, this.n);
       const E = this.p.clone();
       const at = (f: number, o: number) => E.clone().addScaledVector(this.t, f).addScaledVector(this.n, o);
-      this.intake = Path.fillet([E, at(1.6, 0.9), at(4, 2.6), v(LIFT_X - 3.5, LOOP_Y, -0.9), v(LIFT_X - 0.9, LOOP_Y, -0.9)], 2);
+      this.intake = Path.fillet([E, at(1.2, 0.7), at(2.3, 2.6), v(LIFT_X - 3.5, LOOP_Y, -0.9), v(LIFT_X - 0.9, LOOP_Y, -0.9)], 1.5);
       belt(this.intake, 0.9, this.intake.len, stripLoop);
     }
     {
@@ -2760,7 +2777,7 @@ export class Sorter implements Scene3D {
       outward(this.t, this.n);
       const E = this.p.clone();
       const at = (f: number, o: number) => E.clone().addScaledVector(this.t, f).addScaledVector(this.n, o);
-      this.back = Path.fillet([v(LIFT_X - 0.9, LOOP_Y, 0.9), v(LIFT_X - 3.5, LOOP_Y, 0.9), at(-4, 2.6), at(-1.6, 0.9), E], 2);
+      this.back = Path.fillet([v(LIFT_X - 0.9, LOOP_Y, 0.9), v(LIFT_X - 3.5, LOOP_Y, 0.9), at(-1.9, 2.6), at(-0.9, 0.7), E], 1.5);
       belt(this.back, 0, this.back.len - 0.9, stripLoop);
     }
 
@@ -3230,7 +3247,7 @@ export class Sorter implements Scene3D {
 
     // People and parcel trolleys.
     this.person(-57, 14, Math.PI / 2);
-    this.person(38.2, 16.4, Math.PI);
+    this.person(38.2, 12.9, Math.PI);
     this.person(LIFT_X - 2, -6, -Math.PI / 2);
     this.person(-30, -8, 0.4);
     this.person(EX - 8, 18, Math.PI * 0.8);
@@ -3364,15 +3381,15 @@ export class Sorter implements Scene3D {
       fixed('infeeds', v(-56, 3, 15), v(-44, 1.2, 7), 'Infeed'),
       fixed('scan tunnels', v(-44, 4.5, 13), v(-50, 2.2, 4), 'Scanning'),
       fixed('high infeeds', v(-38, 8, -9), v(-50, 7.2, 0)),
-      fixed('merge', v(-36, 6, 9), v(-24, 3.8, 0)),
+      fixed('merge', v(-36, 7, 12), v(-25, 3.8, 2)),
       fixed('loop scanner', v(-25, 6, -17), v(-18, 4.3, -11)),
       fixed('loop', v(-14, 8, 3), v(LCX, 3, 0), 'Sorter loop'),
       fixed('chutes', v(30, 5, -25), v(22, 1.5, -14), 'Chutes'),
       fixed('docks', v(DOCK_X[2]! + 6, 3.6, -23), v(DOCK_X[2]!, 1.2, -31), 'Docks'),
       fixed('store', v(LIFT_X - 6, 5, -7), v(LIFT_X + 2, 4.5, 0), 'Storage'),
       fixed('lift', v(LIFT_X - 4.5, 3.5, 4), v(LIFT_X, 4, 0)),
-      fixed('pickup stations', v(41, 4, 14.5), v(41, 1.2, 19.5), 'Robot stations'),
-      fixed('projectors', v(36, 6.6, 15.5), v(41, 5.8, 19)),
+      fixed('pickup stations', v(44, 4.2, 11), v(41, 1.2, 17.5), 'Robot stations'),
+      fixed('projectors', v(36, 6.6, 13.5), v(41, 5.8, 19)),
       fixed('bins', v(60, 3.8, 21), v(44, 0.8, 28), 'Robot floor'),
       fixed('parking', v(-14, 3.2, 21), v(-22, 0.6, 25), 'Robot parking'),
       fixed('manual sorting', v(-27, 3.6, 17.5), v(-33, 1, 22), 'Manual sorting'),

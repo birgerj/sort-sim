@@ -498,12 +498,15 @@ export class RobotFloor {
     const roller = k.std(0x9aa0a8, 0.35, 0.8, 0xe6e9ec);
     for (const i of cols) {
       const x = cellX(i);
-      const z = cellZ(0) - 0.75;
-      // A short roller table from the chute end to the pickup cell.
-      k.box('stable', alu, x, 0.98, z - 0.7, 1.1, 0.08, 1.7);
-      for (const sx of [-0.5, 0.5]) for (const sz of [-1.45, 0.05]) k.box('stable', alu, x + sx, 0.48, z + sz, 0.06, 0.96, 0.06);
-      for (let n = 0; n < 8; n++) k.box('sroll', roller, x, 1.04, z - 1.45 + n * 0.21, 1.0, 0.06, 0.06);
-      k.blob(x, z - 0.7, 1.6, 2.4);
+      // A roller table from the chute end to the pickup cell, long enough for a queue of parcels.
+      const z1 = cellZ(0) - 0.7;
+      const z0 = z1 - STATION_TABLE;
+      const zc = (z0 + z1) / 2;
+      k.box('stable', alu, x, 0.98, zc, 1.1, 0.08, STATION_TABLE);
+      for (const sx of [-0.5, 0.5]) for (let sz = z0 + 0.1; sz <= z1; sz += 1.5) k.box('stable', alu, x + sx, 0.48, sz, 0.06, 0.96, 0.06);
+      for (let zz = z0 + 0.1; zz < z1; zz += 0.21) k.box('sroll', roller, x, 1.04, zz, 1.0, 0.06, 0.06);
+      for (const sx of [-0.55, 0.55]) k.box('stable', alu, x + sx, 1.1, zc, 0.04, 0.12, STATION_TABLE);
+      k.blob(x, zc, 1.6, STATION_TABLE + 0.7);
       this.stations.push({ x, z: cellZ(0), projector: -1 });
     }
   }
@@ -941,6 +944,9 @@ function iconAtlas(): THREE.CanvasTexture {
     }
   });
 }
+
+/** Length of the pickup stations' roller tables (they start where the station chutes end). */
+export const STATION_TABLE = 4.8;
 
 /** Where the manual sort table stands. */
 export const TABLE = { x: -33, z: 22 };
