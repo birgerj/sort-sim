@@ -920,6 +920,9 @@ export class Sorter implements Scene3D {
   /** Tape across the top of the boxes. */
   private tapeMesh!: THREE.InstancedMesh;
   private ribbonMesh!: THREE.InstancedMesh;
+  /** The dock projectors' postcodes, on the first three parcels banked up on each dock belt. */
+  private dockCodes!: Labels;
+  private dockCodeText: string[] = [];
   private nextId = 400000 + Math.floor(Math.random() * 500000);
   private queue: Parcel[] = [];
 
@@ -1076,7 +1079,7 @@ export class Sorter implements Scene3D {
       for (const p of this.parcels) if (p.mode === 'held' && p.holder === g) p.dead = true;
     };
     this.trucks = new Trucks(this, [
-      ...NORTH_DOORS.map((x, k) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[k]!.name, pc: pcs(NORTH_CITIES[k]!), hold: () => this.docks.pending(x) })),
+      ...NORTH_DOORS.map((x, k) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[k]!.name, pc: pcs(NORTH_CITIES[k]!), hold: () => this.docks.pending(x), cages: () => (this.docks ? this.docks.cageFill(x) : 0) })),
       ...SOUTH_DOORS.map((x, k) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const, number: 21 + k, city: SOUTH_CITIES[k]!.name, pc: pcs(SOUTH_CITIES[k]!) })),
     ]);
     this.trucks.clock = () => this.hubTime();
@@ -2027,8 +2030,22 @@ export class Sorter implements Scene3D {
           break;
         }
         case 'fixed':
-        case 'dock':
+        case 'dock': {
+          // Banked up at the end of the dock belt: slide forward as the worker takes the ones in front.
+          const q = this.docks.queueOf(p.dest);
+          const i = q.indexOf(p as never);
+          const belt = this.chutes[p.dest]?.belt;
+          if (i < 0 || !belt) break;
+          let ahead = 0.1;
+          for (let j = 0; j < i; j++) ahead += (q[j] as unknown as Parcel).d + GAP;
+          const target = belt.len - ahead - p.d / 2;
+          if (p.sPrev < target - 0.005) {
+            p.sPrev = Math.min(target, p.sPrev + this.dct * BEAT_M);
+            belt.at(p.sPrev, p.pos, this.t);
+            this.orient(p, this.t);
+          }
           break;
+        }
         case 'manual':
           this.manual.place(p, bt);
           break;
@@ -2166,6 +2183,38 @@ export class Sorter implements Scene3D {
   private dockLoad = new Map<number, number>();
   /** Position of the back of the last parcel on each dock belt (recounted every frame). */
   private beltBack = new Map<Path, number>();
+
+  /**
+   * The flow projector over each dock belt shows the postcodes of the first three parcels
+   * waiting at its end, flat on top of them; a parcel's code goes when the worker lifts it.
+   */
+  private writeDockCodes(): void {
+    const o = this.o;
+    let i = 0;
+    for (const [chute] of this.dockOf) {
+      const q = this.docks.queueOf(chute);
+      for (let n = 0; n < 3; n++, i++) {
+        const p = q[n] as unknown as Parcel | undefined;
+        if (!p || p.mode !== 'dock') {
+          o.scale.set(0, 0, 0);
+        } else {
+          const text = pcDigits(p.pc);
+          if (this.dockCodeText[i] !== text) {
+            this.dockCodeText[i] = text;
+            this.dockCodes.set(i, text, null, { bg: 'rgba(23, 85, 254, 0.88)', fg: '#ffffff' });
+          }
+          o.position.set(p.pos.x, p.pos.y + p.h + 0.02, p.pos.z);
+          o.rotation.set(-Math.PI / 2, 0, 0);
+          const sc = Math.min(1, (p.w * 0.9) / 0.5);
+          o.scale.set(sc, sc, 1);
+        }
+        o.updateMatrix();
+        this.dockCodes.place(i, o.matrix);
+      }
+    }
+    o.scale.set(1, 1, 1);
+    this.dockCodes.flush();
+  }
 
   /** The parcel leaves its tray(s): they tilt and are free again. */
   private freeTrays(p: Parcel, side: number): void {
@@ -2468,6 +2517,7 @@ export class Sorter implements Scene3D {
     this.tapeMesh.instanceMatrix.needsUpdate = true;
     this.ribbonMesh.count = ribbons;
     this.ribbonMesh.instanceMatrix.needsUpdate = true;
+    this.writeDockCodes();
     // New labels are uploaded a few times a second at most (the canvas is large).
     if (this.labelsDirty && this.time - this.labelsDirty > 0.8) {
       this.labelTex.needsUpdate = true;
@@ -2519,10 +2569,13 @@ export class Sorter implements Scene3D {
       this.tunnelGlow(lane.tunnel, dt);
     }
     for (const lt of this.loopTunnels) this.tunnelGlow(lt.t, dt);
-    for (const ch of this.chutes) {
+    this.chutes.forEach((ch, k) => {
       ch.flash = Math.max(0, ch.flash - dt * 2);
-      ch.lamp.color.copy(ch.col).multiplyScalar(0.35 + ch.flash * 3 + this.kick * 0.3);
-    }
+      // A dock belt that is full: its lamp flashes red, and the sorter sends nothing more down
+      // (parcels for it go round again, or into the buffer store).
+      if (ch.belt && this.dockFree(k) < 0.9) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
+      else ch.lamp.color.copy(ch.col).multiplyScalar(0.35 + ch.flash * 3 + this.kick * 0.3);
+    });
 
     // Moving heads: a new figure every bar, moving with the beat.
     const pattern = Math.floor(bar) % 4;
@@ -3813,6 +3866,9 @@ export class Sorter implements Scene3D {
     this.ribbonMesh.count = 0;
     this.ribbonMesh.userData.noInk = true;
     this.put(this.ribbonMesh);
+    this.dockCodes = new Labels(20 * 3, 0.5, 0.24, 128, 60, { transparent: true });
+    this.dockCodes.mesh.userData.noInk = true;
+    this.put(this.dockCodes.mesh);
     this.labelMesh = new THREE.InstancedMesh(labelGeo, labelMat, MAX_PARCELS);
     this.labelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.labelMesh.frustumCulled = false;
