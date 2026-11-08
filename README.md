@@ -85,7 +85,7 @@ do one move per beat.
 
 ## As an app
 
-Sort sim is a progressive web app: install it from the browser (the **Install app** button, or on iPhone/iPad Share → Add to Home Screen) and it opens in its own window, full screen, and works offline (a service worker keeps every file). A new version shows an **Update** prompt instead of interrupting the hall. While it is on screen it keeps the screen awake; the music can be played and paused from the lock screen and media keys. **Full screen** button or key `Z`. Shortcuts from the app icon: night party, truck docks, control room, walk around.
+Sort sim is a progressive web app: install it from the browser (the **Install app** button, or on iPhone/iPad Share → Add to Home Screen) and it opens in its own window, full screen, and works offline (a service worker keeps every file). A new version shows an **Update** prompt instead of interrupting the hall. While it is on screen it keeps the screen awake; the music can be played and paused from the lock screen and media keys. **Full screen** button or key `Z`; `Space` pauses the whole simulation. Shortcuts from the app icon: night party, truck docks, control room, walk around.
 
 ## Controls
 

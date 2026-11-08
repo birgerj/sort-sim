@@ -3300,7 +3300,7 @@ export class Sorter implements Scene3D {
     for (const bp of beltPaths) belt(bp, 0, bp.len, stripIn);
 
     // A small display at every chute, on the loop's support pillar there (inside face, eye height),
-    // and a small work table beside it with the odds and ends people leave on one.
+    // and a work table under it with the odds and ends people leave on one.
     {
       const shows = new Labels(CHUTES.length, 0.8, 0.38, 216, 100);
       const dockXs = [...this.dockOf.entries()];
@@ -3324,9 +3324,9 @@ export class Sorter implements Scene3D {
           const c = NORTH_CITIES[dock]!;
           shows.set(k, `${dock + 1} · ${c.name}`, rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]), { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
         } else shows.set(k, 'Robots', `station ${(this.stationOf.get(k) ?? 0) + 1} · doors 21–40`, { bg: '#101114', fg: '#ffffff', sub: '#f6a6d6' });
-        // The table: beside the pillar, along the loop, its back to the track.
-        const tx = this.p.x + this.n.x * 0.75 + this.t.x * 1.3;
-        const tz = this.p.z + this.n.z * 0.75 + this.t.z * 1.3;
+        // The table: right under the display, against the pillar, along the loop.
+        const tx = this.p.x + this.n.x * 0.62;
+        const tz = this.p.z + this.n.z * 0.62;
         desk.table(tx, tz, Math.atan2(this.t.x, this.t.z), k * 7919 + 13);
       });
       desk.build();

@@ -74,6 +74,16 @@ const targetTod = (t: number) => {
   return Math.min(1, Math.max(0, (c - 0.25) * 2));
 };
 
+// Space pauses the whole simulation (the music, its clock and everything that runs on it).
+window.addEventListener('keydown', (e) => {
+  const tag = (e.target as HTMLElement | null)?.tagName;
+  if (e.code !== 'Space' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+  e.preventDefault();
+  music.setPaused(!music.paused);
+  if (music.paused) pwa.say('Paused. Press space to carry on.', 0);
+  else pwa.say('Running.', 800);
+});
+
 let last = performance.now();
 function frame(now: number): void {
   // (The first frame's timestamp can be earlier than the start time.)
@@ -81,6 +91,12 @@ function frame(now: number): void {
   last = now;
   walk.frame();
   const f = music.frame();
+  if (music.paused) {
+    f.notes.length = 0;
+    hud.update();
+    requestAnimationFrame(frame);
+    return;
+  }
   for (const n of f.notes) scene.note(n.color, n.pitch, n.vel, n.dur, n.role);
   tod += (targetTod(now / 1000) - tod) * Math.min(1, dt * 0.8);
   scene.render({

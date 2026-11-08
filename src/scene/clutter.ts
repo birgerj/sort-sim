@@ -14,6 +14,8 @@ interface Kind {
 }
 
 const TOP_Y = 0.92;
+/** Table size factor: 1.5× the top area of a plain 0.64 × 1.26 m table. */
+const F = Math.sqrt(1.5);
 
 export class Clutter {
   private kinds = new Map<string, Kind>();
@@ -56,17 +58,17 @@ export class Clutter {
     const top = k.std(0x6b7078, 0.6, 0.1, 0xe9ecef);
     const edge = k.std(0x8a6e00, 0.5, 0.2, 0xf2c200);
     const steel = k.std(0x50545b, 0.4, 0.6, 0xb9c0c8);
-    k.box('ctop', top, x, TOP_Y - 0.02, z, 0.64, 0.04, 1.26, undefined, yaw);
+    k.box('ctop', top, x, TOP_Y - 0.02, z, 0.64 * F, 0.04, 1.26 * F, undefined, yaw);
     for (const s of [-1, 1]) {
-      const e = at(0.33 * s, 0);
-      k.box('cedge', edge, e.x, TOP_Y - 0.03, e.z, 0.03, 0.05, 1.28, undefined, yaw);
+      const e = at(0.33 * F * s, 0);
+      k.box('cedge', edge, e.x, TOP_Y - 0.03, e.z, 0.03, 0.05, 1.26 * F + 0.02, undefined, yaw);
     }
-    for (const sx of [-0.28, 0.28]) for (const sz of [-0.58, 0.58]) {
+    for (const sx of [-0.28 * F, 0.28 * F]) for (const sz of [-0.58 * F, 0.58 * F]) {
       const l = at(sx, sz);
       k.box('cleg', steel, l.x, (TOP_Y - 0.04) / 2, l.z, 0.04, TOP_Y - 0.04, 0.04);
     }
-    k.box('cshelf', steel, x, 0.22, z, 0.56, 0.03, 1.16, undefined, yaw);
-    k.blob(x, z, 1.0, 1.6, yaw);
+    k.box('cshelf', steel, x, 0.22, z, 0.56 * F, 0.03, 1.16 * F, undefined, yaw);
+    k.blob(x, z, 1.0 * F, 1.6 * F, yaw);
     // Under the top: a crate or a few flat boxes.
     const crate = this.kind('crate', () => new THREE.BoxGeometry(0.4, 0.22, 0.55).translate(0, 0.11, 0));
     if (r.next() < 0.6) this.add(crate, base, rnd(-0.05, 0.05), 0.24 - TOP_Y, rnd(-0.3, 0.3), pick([0x2c62c8, 0x2fa58f, 0x3a3d44]), rnd(-0.1, 0.1));
@@ -75,11 +77,11 @@ export class Clutter {
       for (let i = 0; i < 1 + Math.floor(r.next() * 4); i++) this.add(flat, base, rnd(-0.03, 0.03), 0.24 - TOP_Y + i * 0.04, rnd(-0.25, 0.25), pick([0xc9a06c, 0xd9b07a, 0xb08a5e]), rnd(-0.15, 0.15));
     }
     // On top: places along the table, each gets a thing (or nothing).
-    const spots = [-0.5, -0.33, -0.16, 0.01, 0.18, 0.35, 0.5];
+    const spots = [-0.62, -0.44, -0.26, -0.08, 0.1, 0.28, 0.46, 0.62];
     const things = ['papers', 'clipboard', 'cup', 'tape', 'markers', 'scanner', 'cutter', 'notes', 'gloves', 'bottle', 'phone', 'labels', 'cup'];
     for (const sz of spots) {
       if (r.next() < 0.12) continue;
-      const lx = rnd(-0.16, 0.16);
+      const lx = rnd(-0.22, 0.22);
       const lz = sz + rnd(-0.05, 0.05);
       const turn = rnd(-0.6, 0.6);
       switch (pick(things)) {
