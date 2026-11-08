@@ -7,6 +7,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { hiVis } from './textures';
+import { XMAS } from '../sim/season';
 
 export interface Human {
   root: THREE.Group;
@@ -24,6 +25,8 @@ export interface HumanLook {
   vest?: number;
   /** Helmet colour (workers), or a cap. */
   helmet?: number;
+  /** Father Christmas (beard and sack; the suit is the shirt and trousers). */
+  santa?: boolean;
   cap?: number;
   skin?: number;
   hair?: number;
@@ -87,8 +90,30 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     brim: lathe([[0.118, 0.0], [0.15, -0.012], [0.15, -0.024], [0.118, -0.012]], 1.08, 0.795, 20).translate(0, 0, 0.01),
     cap: new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.3).scale(0.104, 0.1, 0.112).translate(0, 0.79, 0),
     peak: new THREE.CylinderGeometry(0.08, 0.08, 0.012, 14, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 1.15).translate(0, 0.8, 0.09),
+    // Christmas: a red hat that flops back (over the helmet for workers), its white brim and bobble.
+    hat: santaHat(0.108, 0.8),
+    hatH: santaHat(0.135, 0.86),
+    brimS: new THREE.TorusGeometry(0.106, 0.026, 6, 18).rotateX(Math.PI / 2).translate(0, 0.805, 0),
+    brimH: new THREE.TorusGeometry(0.133, 0.028, 6, 18).rotateX(Math.PI / 2).translate(0, 0.865, 0),
+    // Father Christmas: a full white beard and moustache, and a sack over his shoulder.
+    beard: merge(ell(0.085, 0.1, 0.06, 0, 0.66, 0.06, 12), ell(0.05, 0.018, 0.02, 0, 0.715, 0.1, 8)),
+    sack: ell(0.2, 0.26, 0.17, 0.06, 0.48, -0.24, 12),
   };
   return geo;
+}
+
+/** A floppy hat: a cone that bends back, the tip lower down behind. */
+function santaHat(r: number, y: number): THREE.BufferGeometry {
+  const g = new THREE.ConeGeometry(r, r * 2.4, 14, 6).translate(0, r * 1.2, 0);
+  const p = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const h = p.getY(i) / (r * 2.4);
+    p.setZ(i, p.getZ(i) - h * h * r * 1.6);
+    p.setY(i, p.getY(i) - h * h * r * 0.7);
+  }
+  g.computeVertexNormals();
+  const bob = new THREE.SphereGeometry(r * 0.32, 10, 8).translate(0, r * 1.7, -r * 1.6);
+  return mergeGeometries([g.toNonIndexed(), bob.toNonIndexed()])!.translate(0, y, 0);
 }
 
 const HAIR = [0x2a1d14, 0x4a3221, 0x7a5a3a, 0xc9a26a, 0x1b1b1d, 0x8f8f8f];
@@ -147,7 +172,17 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   add(torso, g.face!, M.dark);
   const hair = look.hair ?? HAIR[(look.shirt * 7 + (look.skin ?? 0)) % HAIR.length]!;
   add(torso, g.hair!, M.cloth, hair);
-  if (look.helmet !== undefined) {
+  if (look.santa) {
+    add(torso, g.beard!, M.cloth, 0xffffff);
+    add(torso, g.sack!, M.cloth, 0x8a5a2a);
+  }
+  if (XMAS || look.santa) {
+    // Christmas hats for everyone (over the helmet for workers).
+    const h = look.helmet !== undefined;
+    if (h) add(torso, g.helmet!, M.hard, look.helmet);
+    add(torso, h ? g.hatH! : g.hat!, M.cloth, 0xc8102e);
+    add(torso, h ? g.brimH! : g.brimS!, M.cloth, 0xffffff);
+  } else if (look.helmet !== undefined) {
     add(torso, g.helmet!, M.hard, look.helmet);
     add(torso, g.brim!, M.hard, look.helmet);
   } else {

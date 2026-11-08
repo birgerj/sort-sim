@@ -8,6 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
 import { buildHuman } from './people';
+import { XMAS } from '../sim/season';
 
 export interface ForkliftModel {
   g: THREE.Group;
@@ -83,6 +84,15 @@ function geometry(): Record<string, G> {
   return parts;
 }
 
+const xmasMats = new Map<number, THREE.MeshBasicMaterial>();
+/** Lit materials for the Christmas bulbs (shared, so the parts stay instanced). */
+function xmasMat(k: FloorKit, i: number, c: THREE.Color): THREE.MeshBasicMaterial {
+  void k;
+  let m = xmasMats.get(i);
+  if (!m) xmasMats.set(i, (m = new THREE.MeshBasicMaterial({ color: c })));
+  return m;
+}
+
 /** Materials shared by all forklifts (one set per kit), so their parts can be instanced. */
 const mats = new WeakMap<FloorKit, Record<'yellow' | 'black' | 'steel' | 'lights' | 'rear' | 'pallet' | 'load', THREE.Material>>();
 const loadGeo = {
@@ -133,6 +143,19 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   // (No floor shadow for someone on a seat.)
   for (const c of [...d.root.children]) if (c.userData.noInk) d.root.remove(c);
   g.add(d.root);
+  if (XMAS) {
+    // Christmas: bulbs along the overhead guard (red, green, gold) and a red nose on the mast.
+    const bulb = (x: number, z: number) => new THREE.SphereGeometry(0.04, 6, 5).translate(x, 2.25, z);
+    const cols = [[1.8, 0.15, 0.1], [0.2, 1.6, 0.3], [1.8, 1.3, 0.2]] as const;
+    cols.forEach(([r, gg, bb], c) => {
+      const pts: THREE.BufferGeometry[] = [];
+      let i = 0;
+      for (let z = -0.54; z <= 0.66; z += 0.15) for (const x of [-0.56, 0.56]) if (i++ % 3 === c) pts.push(bulb(x, z));
+      for (let x = -0.45; x <= 0.46; x += 0.15) for (const z of [-0.54, 0.66]) if (i++ % 3 === c) pts.push(bulb(x, z));
+      add(mergeGeometries(pts)!, xmasMat(k, c, new THREE.Color(r, gg, bb)));
+    });
+    add(new THREE.SphereGeometry(0.1, 10, 8).translate(0, 2.0, 1.14), xmasMat(k, 3, new THREE.Color(2.2, 0.12, 0.08)));
+  }
   const beacon = new THREE.MeshBasicMaterial({ color: 0x000000 });
   const b = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), beacon);
   b.position.set(0, 2.32, -0.4);

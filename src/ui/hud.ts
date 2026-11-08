@@ -7,6 +7,7 @@ import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
 import { COUNTRIES, COUNTRY, type CountryId } from '../sim/countries';
+import { XMAS } from '../sim/season';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
 
@@ -17,6 +18,8 @@ export interface Settings {
   /** Parcels per minute into the hub. */
   rate: number;
   quality: Quality;
+  /** Christmas decorations. */
+  xmas?: boolean;
   /** Country the hub serves (unset: from the browser's language). */
   country?: CountryId;
   muted: boolean;
@@ -349,6 +352,20 @@ export class Hud {
     };
     mb.append(this.soundBtn, vol);
     m.append(mb, el('span', 'set-help', 'Music that follows how busy the hub is, and the sounds of the hall. Key M; Space pauses everything.'));
+    const x = el('div', 'set-row');
+    x.append(el('span', 'set-label', 'Christmas'));
+    const xb = el('div', 'set-opts');
+    for (const [on, label] of [[false, 'Off'], [true, 'On']] as const) {
+      const b = el('button', on === XMAS ? 'on' : '', label);
+      b.onclick = () => {
+        if (on === XMAS) return;
+        this.settings.xmas = on;
+        saveSettings(this.settings);
+        location.reload();
+      };
+      xb.append(b);
+    }
+    x.append(xb, el('span', 'set-help', 'Trees, garlands, lights, wreaths, candy canes, stars, presents on the belts, Christmas hats, Father Christmas, a Christmas market, bells in the music and a countdown. Restarts the hall.'));
     const c = el('div', 'set-row');
     c.append(el('span', 'set-label', 'Country'));
     const cb = el('div', 'set-opts');
@@ -368,7 +385,7 @@ export class Hud {
     const close = el('button', '', 'Close');
     close.onclick = () => this.toggleSettings();
     row.append(close);
-    p.append(head, t, m, q, c, row);
+    p.append(head, t, m, q, x, c, row);
     this.root.append(p);
     this.settingsPanel = p;
   }

@@ -56,6 +56,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/life.ts` | Walkers (day), ride-on scrubber, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |
 | `src/scene/crowd.ts` | Night crowd inside the loop (instanced body parts, a few draw calls for 520 dancers) on an LED tile floor. |
 | `src/ui/walk.ts` | Walk-mode input: keyboard, mouse drag, touch stick and look; feeds `Sorter.walkInput`. |
+| `src/scene/xmas.ts` | Christmas decorations (`XMAS` from `src/sim/season.ts`, read at load): trees, garlands, light strings, wreaths, candy canes, stars, snowflakes, market. Hats and Father Christmas in `people.ts`/`life.ts`, forklift lights in `forklift.ts`, gift parcels (`gift`, `ribbonMesh`) in `sorter.ts`, bells in `music.ts`, countdown in `screens.ts`. |
 | `src/scene/party.ts` | Night party: DJ booth on the maintenance platform inside the loop's west end (`PLATFORM_X`), laser fans, mirror-ball floor spots, confetti on the drop. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |

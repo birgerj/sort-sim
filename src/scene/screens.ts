@@ -2,6 +2,7 @@
 // boards, and wall clocks with the real time. Drawn on canvases and redrawn
 // every couple of seconds (clocks every second).
 import * as THREE from 'three';
+import { daysToChristmas, XMAS } from '../sim/season';
 
 /** Counters the scene keeps; rates are worked out here. */
 export interface HubStats {
@@ -115,7 +116,7 @@ export class Screens {
     g.fillStyle = '#ffffff';
     g.font = '700 30px system-ui, sans-serif';
     g.textBaseline = 'middle';
-    g.fillText('Hub plan · live', 20, 27);
+    g.fillText(XMAS ? 'Hub plan · live · Happy holidays ★' : 'Hub plan · live', 20, 27);
     g.font = '600 18px system-ui, sans-serif';
     const clear = m.doors.filter((d) => d.state === 'cleardown' || d.state === 'closing').length;
     const away = m.doors.filter((d) => d.state !== 'open' && d.state !== 'cleardown' && d.state !== 'closing').length;
@@ -249,7 +250,11 @@ export class Screens {
     };
     cell(24, 'Parcels / hour', Math.round(this.rate()).toLocaleString('en'), PURPLE);
     cell(360, 'Boxes to trucks', String(s.boxesShipped), TEAL);
-    cell(690, 'Full boxes', String(s.fullBoxes), MAGENTA);
+    if (XMAS) {
+      // Christmas: a countdown instead of the full boxes.
+      const d = daysToChristmas();
+      cell(690, d ? 'Days to Christmas' : 'Merry Christmas', d ? String(d) : '★', '#c8102e');
+    } else cell(690, 'Full boxes', String(s.fullBoxes), MAGENTA);
     this.bars(g, 24, 200, 976, 160, '#86d3c3');
   }
 
