@@ -4,6 +4,7 @@
 // new goes in, then the door rolls down, the truck pulls away with its load, a
 // new empty one backs in and the door rolls up again. All in whole beats.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
 import { Labels } from './labels';
@@ -49,6 +50,9 @@ const CAP: Record<Cargo, number> = { cage: 2, box: 4 };
 const DUR: Record<Exclude<State, 'open'>, number> = { cleardown: 4, closing: 2, leaving: 4, away: 6, arriving: 4, opening: 2 };
 const NEXT: Record<Exclude<State, 'open'>, State> = { cleardown: 'closing', closing: 'leaving', leaving: 'away', away: 'arriving', arriving: 'opening', opening: 'open' };
 
+/** Trailer and cab colours (plain, no liveries). */
+const TRUCK_COLS = [0xf3f4f6, 0xe6e9ed, 0x1755fe, 0xe2231a, 0x2fa58f, 0x3a3d44, 0xf2c200, 0x6b3fd1];
+
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
 
 export class Trucks {
@@ -56,6 +60,9 @@ export class Trucks {
   /** Cleardown warning lamps, one per door (flashing amber before the door closes). */
   private lamps: THREE.InstancedMesh;
   private readonly c = new THREE.Color();
+  /** Sounds since the last frame (the cleardown buzzer), with where they come from. */
+  readonly sounds: { kind: 'buzz'; at: THREE.Vector3 }[] = [];
+  private lastBeat = -1;
   /** Screens above the doors: destination, postcodes, and what the truck is doing. */
   private screens: Labels;
 
@@ -77,6 +84,30 @@ export class Trucks {
     const doorG = new THREE.BoxGeometry(3.2, 1, 0.08).translate(0, -0.5, 0);
     const cageG = new THREE.BoxGeometry(1.3, 1.7, 1.0).translate(0, 0.95, 0);
     const boxG = new THREE.BoxGeometry(1.2, 1.0, 1.2).translate(0, 0.5, 0);
+    // The trailer's outside: a box without the end at the door and without a floor.
+    const skin = (open: number) => {
+      const g = new THREE.BoxGeometry(W + 0.08, H + 0.08, L + 0.04);
+      const idx = g.getIndex()!.array;
+      const keep: number[] = [];
+      for (const grp of g.groups) if (grp.materialIndex !== open && grp.materialIndex !== 3) for (let i = grp.start; i < grp.start + grp.count; i++) keep.push(idx[i]!);
+      g.setIndex(keep);
+      g.clearGroups();
+      return g;
+    };
+    const skinN = skin(4);
+    const skinS = skin(5);
+    const skinM = k.std(0xffffff, 0.5, 0.2, 0xffffff);
+    const wheelG = new THREE.CylinderGeometry(0.5, 0.5, 0.35, 18).rotateZ(Math.PI / 2);
+    const wheelM = k.std(0x15161a, 0.9, 0, 0x26282e);
+    // Tractor: cab with a raised roof, bonnet and bumper (facing away from the trailer, local −z).
+    const cabG = mergeGeometries([
+      new THREE.BoxGeometry(2.5, 2.4, 2.2).translate(0, 2.0, 0.2),
+      new THREE.BoxGeometry(2.4, 0.6, 2.0).translate(0, 3.5, 0.3),
+      new THREE.BoxGeometry(2.5, 1.0, 1.2).translate(0, 1.0, -1.3),
+      new THREE.BoxGeometry(2.6, 0.3, 0.2).translate(0, 0.55, -1.95),
+    ].map((g) => g.toNonIndexed()))!;
+    const glassG = new THREE.BoxGeometry(2.3, 0.9, 0.05).translate(0, 2.6, -0.92);
+    const glassM = k.std(0x0d1016, 0.15, 0.8, 0x2a3442);
     for (const d of doors) {
       const trailer = new THREE.Group();
       trailer.position.set(d.x, 0, d.wallZ - d.dir * (L / 2 + 0.02));
@@ -84,6 +115,22 @@ export class Trucks {
       k.batch(shell, inside, trailer).position.y = H / 2;
       k.batch(floorG, floorM, trailer).position.y = 0.02;
       k.batch(lampG, lamp, trailer).position.y = H - 0.12;
+      // Outside: the trailer's skin (open at the door end), wheels, and the tractor in front.
+      k.batch(d.dir > 0 ? skinN : skinS, skinM, trailer, TRUCK_COLS[(d.number * 5) % TRUCK_COLS.length]).position.y = H / 2;
+      for (const zz of [L / 2 - 1.6, L / 2 - 2.8]) for (const sx of [-1, 1]) {
+        const w = k.batch(wheelG, wheelM, trailer);
+        w.position.set(sx * (W / 2 + 0.22), 0.5, -d.dir * zz);
+      }
+      const cab = new THREE.Group();
+      cab.position.set(0, 0, -d.dir * (L / 2 + 1.7));
+      if (d.dir < 0) cab.rotation.y = Math.PI;
+      trailer.add(cab);
+      k.batch(cabG, skinM, cab, TRUCK_COLS[(d.number * 3 + 1) % TRUCK_COLS.length]);
+      k.batch(glassG, glassM, cab);
+      for (const sx of [-1, 1]) for (const zz of [-0.6, 0.9]) {
+        const w = k.batch(wheelG, wheelM, cab);
+        w.position.set(sx * 1.1, 0.5, zz);
+      }
       // Cargo slots: two across, from the far end towards the door.
       const slots: THREE.Object3D[] = [];
       for (let n = 0; n < 8; n++) {
@@ -145,6 +192,12 @@ export class Trucks {
   }
 
   update(bt: number): void {
+    // The cleardown buzzer sounds on every other beat at a door in cleardown.
+    const beat = Math.floor(bt);
+    if (beat !== this.lastBeat) {
+      this.lastBeat = beat;
+      if (beat % 2 === 0) for (const d of this.docks) if (d.state === 'cleardown' || d.state === 'closing') this.sounds.push({ kind: 'buzz', at: new THREE.Vector3(d.x, 4, d.wallZ) });
+    }
     for (const d of this.docks) {
       if (d.state === 'open') {
         if (d.load >= CAP[d.cargo]) {

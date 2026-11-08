@@ -25,7 +25,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
-import { BOX_FULL, RobotFloor } from './floor';
+import { BOX_FULL, DECK_Y, DROP, RobotFloor, STATION_START_Z } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -36,6 +36,7 @@ import { Party } from './party';
 import { Crowd } from './crowd';
 import { Batcher } from './batch';
 import { Trucks } from './trucks';
+import { Labels } from './labels';
 import { BPM } from '../audio/composer';
 import { CITIES, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
 import { ManualSort } from './manualSort';
@@ -80,6 +81,11 @@ const HW = EX - WX;
 const HZ = 34;
 const HH = 11;
 const MAX_PARCELS = 1500;
+/** Shipping label canvas: cells of LABEL_W × LABEL_H pixels. */
+const LABEL_W = 96;
+const LABEL_H = 64;
+const LABEL_COLS = 21;
+const LABEL_ROWS = 32;
 
 // Loop positions (metres from the start of the north straight; all even, so on a beat).
 // s 0–120: north straight, 20 dock chutes · 127–136: east side, to and from the store ·
@@ -108,7 +114,7 @@ const LOOP_TUNNELS = [2, 148];
 const STORE_OUT = 128;
 const STORE_BACK = 134;
 /** Where the station chutes end, at the back of the pickup roller tables. */
-const STATION_Z = 14.5;
+const STATION_Z = STATION_START_Z;
 /** Parcels that fit on a pickup station's roller table. */
 const STATION_CAP = 7;
 /**
@@ -119,7 +125,13 @@ const STATION_CAP = 7;
 const CHUTES: [number, number][] = [
   ...Array.from({ length: 20 }, (_, k): [number, number] => [4 + 6 * k, 1]),
   ...Array.from({ length: 20 }, (_, k): [number, number] => [144 + 6 * k, 1]),
+  // No-reads: off the south-west bend, down to the belt to the manual sort table.
+  [264, 1],
 ];
+/** The no-read chute (last in CHUTES). */
+const REJECT = 40;
+/** x of the no-read belt, where it runs south to the manual sort belt. */
+const REJECT_X = -26.4;
 const FIRST_STATION_S = 142;
 /**
  * Render quality. low: pixel ratio 1, no extras. normal: outlines, toon shading and
@@ -576,6 +588,8 @@ interface Parcel {
   flash: number;
   /** Chute index, or −1 for the store. */
   dest: number;
+  /** Its cell in the label canvas (0: a plain label). */
+  labelCell?: number;
   /** In a cage or box: what holds it. */
   holder?: THREE.Object3D;
   /** Place in the queue at its infeed lane's hold point (0 = next to go). */
@@ -591,7 +605,11 @@ interface Parcel {
   manual?: boolean;
   mode: Mode;
   path?: Path;
-  pathKind: 'lane' | 'chute' | 'intake' | 'back' | 'dock';
+  pathKind: 'lane' | 'chute' | 'intake' | 'back' | 'dock' | 'reject';
+  /** Its label could not be read yet (it goes to the no-read chute unless a loop scanner reads it). */
+  noread?: boolean;
+  /** On its way down the no-read chute. */
+  rejected?: boolean;
   lane: number;
   t0: number;
   t1: number;
@@ -650,6 +668,8 @@ interface Tunnel {
   lineMat: THREE.MeshBasicMaterial;
   depth: number;
   read: boolean;
+  /** Its display (index into scanLabels; two faces). */
+  screen: number;
 }
 
 interface Chute {
@@ -837,6 +857,18 @@ export class Sorter implements Scene3D {
   /** Parcels by shape (0 box, 1 polybag, 2 tube): one instanced mesh and glow buffer each. */
   private shapes: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute }[] = [];
   private labelMesh!: THREE.InstancedMesh;
+  /** Displays on the scan tunnels. */
+  private scanLabels!: Labels;
+  private scanCount = 0;
+  private scanDirty = false;
+  /** Each parcel's own shipping label (postcode, city, barcode): cells of one canvas, drawn when it is made. */
+  private labelCanvas!: CanvasRenderingContext2D;
+  private labelTex!: THREE.CanvasTexture;
+  private labelCellAttr!: THREE.InstancedBufferAttribute;
+  private freeCells: number[] = [];
+  private labelsDirty = 0;
+  /** Tape across the top of the boxes. */
+  private tapeMesh!: THREE.InstancedMesh;
   private nextId = 400000 + Math.floor(Math.random() * 500000);
   private queue: Parcel[] = [];
 
@@ -1331,6 +1363,43 @@ export class Sorter implements Scene3D {
   backlog = 0;
   private due = 0;
   private readonly hq = new THREE.Quaternion();
+  private readonly qa = new THREE.Quaternion();
+  private readonly qb = new THREE.Quaternion();
+
+  /** Draw a shipping label: postcode, city, a barcode from the parcel number, and a sorting code. */
+  private drawLabel(cell: number, p: Parcel | null): void {
+    const g = this.labelCanvas;
+    const x = (cell % LABEL_COLS) * LABEL_W;
+    const y = Math.floor(cell / LABEL_COLS) * LABEL_H;
+    g.fillStyle = '#ffffff';
+    g.fillRect(x, y, LABEL_W, LABEL_H);
+    g.fillStyle = '#111';
+    g.fillRect(x + 1, y + 1, LABEL_W - 2, 1);
+    // Barcode: bar widths from the parcel number.
+    let seed = (p?.id ?? 7) * 2654435761;
+    for (let bx = x + 6; bx < x + LABEL_W - 8; ) {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      const w = 1 + (seed >>> 29) % 3;
+      g.fillRect(bx, y + 34, w, 18);
+      bx += w + 1 + ((seed >>> 26) & 1);
+    }
+    if (p) {
+      g.textBaseline = 'top';
+      g.font = '700 17px system-ui, sans-serif';
+      g.fillText(String(p.pc), x + 5, y + 4);
+      g.font = '600 10px system-ui, sans-serif';
+      const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
+      g.fillText(city.slice(0, 15), x + 5, y + 22);
+      g.font = '500 8px system-ui, sans-serif';
+      g.fillText(String(p.id).padStart(8, '0'), x + 6, y + 54);
+      // A sorting code box in the corner: chute number.
+      g.fillRect(x + LABEL_W - 26, y + 4, 22, 16);
+      g.fillStyle = '#fff';
+      g.font = '700 11px system-ui, sans-serif';
+      g.fillText(String((p.dest >= 0 ? p.dest + 1 : 0)).padStart(2, '0'), x + LABEL_W - 22, y + 6);
+    }
+    if (!this.labelsDirty) this.labelsDirty = this.time || 0.001;
+  }
 
   /** Put a parcel in a cage or box (local position): it keeps its shape and colour and moves with it. */
   private hold(p: Parcel, holder: THREE.Object3D, local: V3): void {
@@ -1463,7 +1532,7 @@ export class Sorter implements Scene3D {
       return;
     }
     const stations = CHUTES.map((_, k) => k).filter((k) => this.stationOf.has(k));
-    if (Math.random() < 0.012) {
+    if (Math.random() < 0.03) {
       // Manual sorting: from one of the westmost stations (the last ones along the loop).
       p.manual = true;
       p.dest = stations[stations.length - 1 - Math.floor(Math.random() * 3)]!;
@@ -1522,6 +1591,8 @@ export class Sorter implements Scene3D {
       dead: false,
     };
     this.assign(p);
+    p.labelCell = this.freeCells.pop() ?? 0;
+    if (p.labelCell) this.drawLabel(p.labelCell, p);
     this.parcels.push(p);
     return p;
   }
@@ -1582,8 +1653,15 @@ export class Sorter implements Scene3D {
     p.sIn = s;
     p.tIn = t;
     p.sPrev = s;
-    const target = p.dest >= 0 ? this.chutes[p.dest]!.s : STORE_OUT;
-    p.divertAt = t + beatsAlong(s, target);
+    this.retarget(p);
+  }
+
+  /** When to leave the loop: at its chute (or the no-read chute), the next time it passes. */
+  private retarget(p: Parcel): void {
+    const target = p.noread ? this.chutes[REJECT]!.s : p.dest >= 0 ? this.chutes[p.dest]!.s : STORE_OUT;
+    let at = p.tIn + beatsAlong(p.sIn, target);
+    while (at <= this.ct + 0.01 && p.mode === 'loop' && at > p.tIn + 0.5) at += LOOP_LEN / BEAT_M;
+    p.divertAt = at;
   }
 
   private updateParcels(dt: number): void {
@@ -1659,9 +1737,26 @@ export class Sorter implements Scene3D {
           }
           path.at(s, p.pos, this.t);
           this.orient(p, this.t);
+          if (p.pathKind === 'chute') {
+            // Sliding down a chute: it rocks over and turns a little (each its own way), and settles at the bottom.
+            const u = clamp((ct - p.t0) / (p.t1 - p.t0), 0, 1);
+            const side = p.id % 2 ? 1 : -1;
+            const k = Math.sin(u * Math.PI);
+            this.qa.setFromAxisAngle(this.t.normalize(), side * k * (p.shape === 1 ? 0.15 : 0.32));
+            this.qb.setFromAxisAngle(UP, side * (0.25 + (p.id % 5) * 0.08) * k);
+            p.q.premultiply(this.qb).premultiply(this.qa);
+            // A small hop where the steep part meets the level run-out.
+            p.pos.y += Math.max(0, Math.sin((u - 0.55) * Math.PI * 4)) * 0.05 * (u > 0.55 && u < 0.8 ? 1 : 0);
+          }
           if (p.pathKind === 'lane') {
             const lane = this.lanes[p.lane]!;
-            if (p.sPrev < lane.tunnelS && s >= lane.tunnelS) this.scan(p, lane.tunnel);
+            if (p.sPrev < lane.tunnelS && s >= lane.tunnelS) {
+              this.scan(p, lane.tunnel);
+              if (!lane.tunnel.read && p.dest >= 0) {
+                p.noread = true;
+                if (p.labelCell) this.drawLabel(p.labelCell, p);
+              }
+            }
           }
           p.sPrev = s;
           if (ct >= p.t1 && p.pathKind !== 'dock') this.pathEnd(p);
@@ -1672,7 +1767,14 @@ export class Sorter implements Scene3D {
           loopAt(s, p.pos, this.t);
           this.orient(p, this.t);
           for (const lt of this.loopTunnels) {
-            if (Math.floor((p.sPrev - lt.s) / LOOP_LEN) !== Math.floor((s - lt.s) / LOOP_LEN)) this.scan(p, lt.t);
+            if (Math.floor((p.sPrev - lt.s) / LOOP_LEN) !== Math.floor((s - lt.s) / LOOP_LEN)) {
+              this.scan(p, lt.t);
+              // A loop scanner may still read a label the infeed could not (then on to its own chute).
+              if (p.noread && Math.random() < 0.35) {
+                p.noread = false;
+                this.retarget(p);
+              }
+            }
           }
           p.sPrev = s;
           if (ct >= p.divertAt) this.divert(p);
@@ -1748,6 +1850,7 @@ export class Sorter implements Scene3D {
     }
     // Drop finished parcels.
     if (this.parcels.some((p) => p.dead)) {
+      for (const p of this.parcels) if (p.dead && p.labelCell) this.freeCells.push(p.labelCell);
       this.parcels = this.parcels.filter((p) => !p.dead);
       if (this.follow?.dead) this.follow = null;
     }
@@ -1767,6 +1870,12 @@ export class Sorter implements Scene3D {
     // Now and then a label cannot be read (a red line); the next scanner gets it.
     t.read = Math.random() > 0.05;
     t.col.copy(p.glow);
+    const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
+    for (const side of [0, 1]) {
+      if (t.read) this.scanLabels.set(t.screen * 2 + side, `${p.pc} ${city}`, `${String(p.id).padStart(8, '0')} · chute ${p.dest >= 0 ? p.dest + 1 : 'store'}`, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+      else this.scanLabels.set(t.screen * 2 + side, 'NO READ', String(p.id).padStart(8, '0'), { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
+    }
+    this.scanDirty = true;
   }
 
   private pathEnd(p: Parcel): void {
@@ -1779,6 +1888,15 @@ export class Sorter implements Scene3D {
         this.induct(p, STORE_BACK, p.t1);
         break;
       case 'chute': {
+        if (p.rejected) {
+          // Down the no-read chute: onto the belt to the manual sort table.
+          const rb = this.chutes[REJECT]!.belt!;
+          this.chutes[REJECT]!.flash = 1;
+          this.inbound.set(REJECT, Math.max(0, (this.inbound.get(REJECT) ?? 0) - 1));
+          p.rejected = false;
+          this.onPath(p, rb, 'reject', p.t1, p.t1 + Math.max(2, Math.round(rb.len / BEAT_M)), 0);
+          break;
+        }
         const ch = this.chutes[p.dest]!;
         ch.flash = 1;
         const st = this.stationOf.get(p.dest);
@@ -1788,12 +1906,18 @@ export class Sorter implements Scene3D {
           p.mode = 'table';
           p.station = st;
           this.stationQueue[st]!.push(p);
+
         } else if (ch.belt) {
           // Onto the roller belt to the dock.
           this.onPath(p, ch.belt, 'dock', p.t1, p.t1 + Math.max(2, Math.round(ch.belt.len / BEAT_M)), 0);
         } else p.dead = true;
         break;
       }
+      case 'reject':
+        // Onto the manual sort table's belt: the worker there gives it a new label.
+        p.mode = 'manual';
+        this.manual.arrive(p, this.bt, true);
+        break;
       case 'dock':
         this.inbound.set(p.dest, Math.max(0, (this.inbound.get(p.dest) ?? 0) - 1));
         this.stats.toDocks++;
@@ -1814,6 +1938,10 @@ export class Sorter implements Scene3D {
 
   /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
   private room(dest: number): number {
+    if (dest === REJECT) {
+      const onRobots = this.floor.fleet.bots.filter((b) => b.bin === this.floor.tableBin).length;
+      return this.manual.room(onRobots + (this.inbound.get(REJECT) ?? 0), 6) ? 1 : 0;
+    }
     const st = this.stationOf.get(dest);
     // A pickup table holds as many as fit by length (about 0.8 m kept per parcel on its way).
     const used = st !== undefined ? this.stationQueue[st]!.reduce((a, p) => a + p.d + GAP, 0) : 0;
@@ -1822,6 +1950,23 @@ export class Sorter implements Scene3D {
   }
 
   private divert(p: Parcel): void {
+    // A no-read leaves by the no-read chute (its own chute is unknown to the sorter).
+    const to = p.noread && p.dest >= 0 ? REJECT : p.dest;
+    if (to !== p.dest) {
+      if (this.room(REJECT) <= 0) {
+        p.divertAt += LOOP_LEN / BEAT_M;
+        return;
+      }
+      this.inbound.set(REJECT, (this.inbound.get(REJECT) ?? 0) + 1);
+      if (p.tray >= 0) {
+        if (this.trayOwner[p.tray] === p) this.trayOwner[p.tray] = null;
+        this.trayTilt[p.tray] = 1;
+        p.tray = -1;
+      }
+      p.rejected = true;
+      this.onPath(p, this.chutes[REJECT]!.path, 'chute', p.divertAt, p.divertAt + 1.5, 1);
+      return;
+    }
     if (p.dest >= 0 && this.room(p.dest) <= 0) {
       // Destination full: the parcel stays on its tray and goes round again (recirculation).
       p.divertAt += LOOP_LEN / BEAT_M;
@@ -1925,6 +2070,7 @@ export class Sorter implements Scene3D {
     this.retrieving++;
     this.lastRetrieve = this.bt;
     this.assign(p);
+    if (p.labelCell) this.drawLabel(p.labelCell, p);
     p.glow.copy(this.chutes[p.dest]!.col);
     p.pathKind = 'back';
     sh.runner.steps.push(
@@ -2007,6 +2153,7 @@ export class Sorter implements Scene3D {
     const o = this.o;
     const counts = [0, 0, 0];
     let labels = 0;
+    let tapes = 0;
     let hull = 0;
     for (const p of this.parcels) {
       const set = this.shapes[p.shape]!;
@@ -2036,10 +2183,23 @@ export class Sorter implements Scene3D {
       glow[k * 3 + 2] = this.c.b + p.flash * 0.6;
       // Shipping label on top (tubes have theirs wrapped round, not drawn).
       if (p.shape === 2) continue;
-      o.position.copy(p.pos).addScaledVector(this.n, p.h + 0.004);
+      // Boxes get a strip of tape along the top first.
+      if (p.shape === 0 && p.h > 0.15) {
+        o.position.copy(p.pos).addScaledVector(this.n, p.h + 0.002);
+        o.quaternion.copy(p.q).multiply(this.qLabel);
+        o.scale.set(0.09, p.d * 1.002, 1);
+        o.updateMatrix();
+        this.tapeMesh.setMatrixAt(tapes++, o.matrix);
+      }
+      o.position.copy(p.pos).addScaledVector(this.n, p.h + 0.005);
+      // The label sits off-centre, beside the tape.
+      this.t.set(1, 0, 0).applyQuaternion(p.q);
+      if (p.shape === 0 && p.h > 0.15) o.position.addScaledVector(this.t, Math.min(p.w * 0.22, 0.2));
       o.quaternion.copy(p.q).multiply(this.qLabel);
-      o.scale.set(Math.min(p.w * 0.6, 0.34), Math.min(p.d * 0.6, 0.24), 1);
+      const lw = Math.min(p.w * 0.5, 0.3);
+      o.scale.set(lw, lw * (LABEL_H / LABEL_W), 1);
       o.updateMatrix();
+      this.labelCellAttr.setX(labels, p.labelCell ?? 0);
       this.labelMesh.setMatrixAt(labels++, o.matrix);
     }
     this.shapes.forEach((set, k) => {
@@ -2048,7 +2208,19 @@ export class Sorter implements Scene3D {
       if (set.mesh.instanceColor) set.mesh.instanceColor.needsUpdate = true;
       set.glow.needsUpdate = true;
     });
+    if (this.scanDirty) {
+      this.scanLabels.flush();
+      this.scanDirty = false;
+    }
     this.labelMesh.count = labels;
+    this.labelCellAttr.needsUpdate = true;
+    this.tapeMesh.count = tapes;
+    this.tapeMesh.instanceMatrix.needsUpdate = true;
+    // New labels are uploaded a few times a second at most (the canvas is large).
+    if (this.labelsDirty && this.time - this.labelsDirty > 0.8) {
+      this.labelTex.needsUpdate = true;
+      this.labelsDirty = 0;
+    }
     this.hull.count = hull;
     this.hull.instanceMatrix.needsUpdate = true;
     if (this.hull.instanceColor) this.hull.instanceColor.needsUpdate = true;
@@ -2803,12 +2975,14 @@ export class Sorter implements Scene3D {
         if (h > 1.5) this.box('leg', legMat, this.p.x, 0.35, this.p.z, Math.abs(this.n.x) * half * 2 + 0.1, 0.06, Math.abs(this.n.z) * half * 2 + 0.1);
       }
     };
-    const belt = (path: Path, s0: number, s1: number, led = stripIn) => {
+    /** A belt from s0 to s1; `rails` can limit each side rail to some stretches (where belts merge). */
+    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }) => {
       geo.belt!.push(extrude(path, BELT, s0, s1));
       geo.frame!.push(extrude(path, FRAME, s0, s1));
       const k = led === stripIn ? 'sIn' : led === stripLoop ? 'sLoop' : 'sChute';
       geo[k]!.push(extrude(path, LEDL, s0, s1), extrude(path, LEDR, s0, s1));
-      geo.rail!.push(extrude(path, RAIL_L, s0, s1), extrude(path, RAIL_R, s0, s1));
+      for (const [a, b] of rails?.L ?? [[s0, s1]]) if (b > a) geo.rail!.push(extrude(path, RAIL_L, a, b));
+      for (const [a, b] of rails?.R ?? [[s0, s1]]) if (b > a) geo.rail!.push(extrude(path, RAIL_R, a, b));
       legs(path, s0, s1, 0.6);
       // Drive motors under the frame, one per section.
       for (let s = s0 + 4; s < s1 - 2; s += 12) {
@@ -2837,8 +3011,19 @@ export class Sorter implements Scene3D {
       const join = Math.tan(Math.PI / 6);
       const head = k === pair ? [v(WX - 1, y, z)] : [v(WX - 1, y, z), v(-45 - Math.abs(z - zp) / join, y, z)];
       const path = Path.fillet([...head, v(-45, y, zp), v(-42, y, zp), v(corner.x - 6, LOOP_Y, zp), corner, end], 3);
-      // The shared part of a pair is drawn once.
-      belt(path, 0.6, k === pair ? path.len - 1.0 : path.acc[path.pts.findIndex((q) => q.x > -44.5)]!);
+      // The shared part of a pair is drawn once. Where the side lane joins, the main lane's rail on
+      // that side is open, and the side lane's inner rail stops where it meets the main lane's edge.
+      const sAt = (x: number) => path.acc[Math.max(0, path.pts.findIndex((q) => q.x > x))]!;
+      const joinSide: 'L' | 'R' = pair === 1 ? 'R' : 'L';
+      if (k === pair) {
+        const end = path.len - 1.0;
+        belt(path, 0.6, end, stripIn, { [joinSide]: [[0.6, sAt(-48.2)], [sAt(-44.0), end]] });
+      } else {
+        const end = sAt(-44.3);
+        const inner: 'L' | 'R' = joinSide === 'R' ? 'L' : 'R';
+        belt(path, 0.6, end, stripIn, { [inner]: [[0.6, sAt(-48.3)]] });
+      }
+
       const tunnel = this.tunnel(path, LANE_TUNNEL_X - WX + 1, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
       // Lit opening in the wall where the lane comes in.
@@ -2908,11 +3093,13 @@ export class Sorter implements Scene3D {
       const N = this.n.clone();
       const at = (f: number, o: number, y: number) => E.clone().addScaledVector(T, f).addScaledVector(N, o).setY(y);
       // The outer chutes of the front straight end at robot pickup stations, square to the robot floor.
-      const station = side === 1 && s >= FIRST_STATION_S;
+      const station = side === 1 && s >= FIRST_STATION_S && k !== REJECT;
       const end = at(2.4, 6.5, 1.0);
       if (station) {
         end.x = RobotFloor.stationX(end.x);
         end.z = STATION_Z;
+        // Level with the robots' deck, so parcels slide straight across from table to robot.
+        end.y = DECK_Y;
       }
       // From the tray, over the edge of the track (the mouth, just below tray height), down a
       // smooth S-curve, and level for the last metre so parcels run straight onto the dock belt
@@ -2928,6 +3115,13 @@ export class Sorter implements Scene3D {
       legs(path, 1.2, path.len - 0.6, 0.7);
       const col = new THREE.Color().setHSL(k / CHUTES.length, 0.85, 0.55);
       const lamp = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      if (k === REJECT) {
+        // A roller belt from the chute end, south, onto the manual sort table's belt from the side.
+        const belt = Path.fillet([end, end.clone().addScaledVector(N, 1.0), v(REJECT_X, 1.05, end.z + 3), v(REJECT_X, 1.1, DROP.z - 0.75), v(REJECT_X, 1.1, DROP.z - 0.35)], 1.0);
+        beltPaths.push(belt);
+        this.chutes[k] = { s, side, path, col: new THREE.Color(DAY.red), lamp, flash: 0, belt };
+        return;
+      }
       if (station) {
         this.stationOf.set(k, this.stationXs.length);
         this.stationXs.push(end.x);
@@ -3066,7 +3260,21 @@ export class Sorter implements Scene3D {
     const fan = add(new THREE.PlaneGeometry(W - 0.4, H - 0.9), fanMat, 0, 0.35 + (H - 0.9) / 2, 0);
     fan.visible = false;
     line.userData.fan = fan;
-    return { ring, curtain, flash: 0, col: new THREE.Color(0.3, 1, 0.5), line, lineMat, depth: D, read: true };
+    // A display on the roof, both faces: the last postcode read (or NO READ).
+    if (!this.scanLabels) {
+      this.scanLabels = new Labels(16, 1.15, 0.42, 276, 100);
+      this.put(this.scanLabels.mesh);
+    }
+    const screen = this.scanCount++;
+    add(new THREE.BoxGeometry(1.25, 0.5, 0.12), dark, 0, H + 0.62, 0);
+    g.updateMatrixWorld();
+    for (const side of [0, 1]) {
+      const m = new THREE.Matrix4().makeRotationY(side * Math.PI).setPosition(0, H + 0.62, side ? -0.065 : 0.065);
+      this.scanLabels.place(screen * 2 + side, m.premultiply(g.matrixWorld));
+      this.scanLabels.set(screen * 2 + side, 'Ready', 'scanner ' + (screen + 1), { bg: '#101114', fg: '#5be0a0', sub: '#9aa0a8' });
+    }
+    this.scanLabels.flush();
+    return { ring, curtain, flash: 0, col: new THREE.Color(0.3, 1, 0.5), line, lineMat, depth: D, read: true, screen };
   }
 
   private buildStore(): void {
@@ -3224,7 +3432,36 @@ export class Sorter implements Scene3D {
       }
       g.fillRect(4, 32, 30, 4);
     });
-    this.labelMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: barcode, roughness: 0.5 }), MAX_PARCELS);
+    void barcode;
+    const c = document.createElement('canvas');
+    c.width = LABEL_COLS * LABEL_W;
+    c.height = LABEL_ROWS * LABEL_H;
+    this.labelCanvas = c.getContext('2d')!;
+    this.labelTex = new THREE.CanvasTexture(c);
+    this.labelTex.colorSpace = THREE.SRGBColorSpace;
+    this.labelTex.anisotropy = 4;
+    // Cell 0: a plain label, for when every cell is taken.
+    this.drawLabel(0, null);
+    for (let i = LABEL_COLS * LABEL_ROWS - 1; i > 0; i--) this.freeCells.push(i);
+    const labelGeo = new THREE.PlaneGeometry(1, 1);
+    this.labelCellAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS), 1);
+    this.labelCellAttr.setUsage(THREE.DynamicDrawUsage);
+    labelGeo.setAttribute('aCell', this.labelCellAttr);
+    const labelMat = new THREE.MeshStandardMaterial({ map: this.labelTex, roughness: 0.5 });
+    labelMat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aCell;')
+        .replace('#include <uv_vertex>', `#include <uv_vertex>\nvMapUv = vec2((mod(aCell, ${LABEL_COLS}.0) + vMapUv.x) / ${LABEL_COLS}.0, 1.0 - (floor(aCell / ${LABEL_COLS}.0) + 1.0 - vMapUv.y) / ${LABEL_ROWS}.0);`);
+    };
+    labelMat.customProgramCacheKey = () => 'parcel-labels';
+    toonify(labelMat);
+    this.tapeMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), this.std(0x8a6a3a, 0.4, 0, 0xc9a46a), MAX_PARCELS);
+    this.tapeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.tapeMesh.frustumCulled = false;
+    this.tapeMesh.count = 0;
+    this.tapeMesh.userData.noInk = true;
+    this.put(this.tapeMesh);
+    this.labelMesh = new THREE.InstancedMesh(labelGeo, labelMat, MAX_PARCELS);
     this.labelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.labelMesh.frustumCulled = false;
     this.labelMesh.count = 0;
@@ -3654,6 +3891,25 @@ export class Sorter implements Scene3D {
   cleardown(numbers: number[]): void {
     const list = this.trucks.list();
     this.trucks.cleardown(numbers.map((n) => list.findIndex((d) => d.number === n)).filter((i) => i >= 0), this.bt);
+  }
+
+  /** Hall sounds since the last call, with a volume by distance from the camera. */
+  takeSounds(): { kind: 'horn' | 'beep' | 'buzz'; vol: number }[] {
+    const out: { kind: 'horn' | 'beep' | 'buzz'; vol: number }[] = [];
+    const cam = this.camera.position;
+    for (const list of [this.trucks.sounds, this.yard.sounds] as { kind: 'horn' | 'beep' | 'buzz'; at: V3 }[][]) {
+      for (const sd of list) {
+        const vol = 1 - cam.distanceTo(sd.at) / 40;
+        if (vol > 0.05 && out.length < 4 && !out.some((o) => o.kind === sd.kind)) out.push({ kind: sd.kind, vol });
+      }
+      list.length = 0;
+    }
+    return out;
+  }
+
+  /** How loud the belts hum: with belt speed and how busy the hub is. */
+  humLevel(): number {
+    return Math.min(1, 0.35 + 0.15 * this.speed) * (this.dayShown === false ? 0.5 : 1);
   }
 
   setRate(perMin: number): void {

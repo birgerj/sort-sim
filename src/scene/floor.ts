@@ -55,6 +55,8 @@ const WHITE = new THREE.Color(1, 1, 1);
 const PROJ_Y = 6.4;
 const BEAMS = 4;
 const TOP_Y = 1.42;
+/** Height a parcel rests at on a robot's deck: the pickup tables and the manual drop are level with it. */
+export const DECK_Y = TOP_Y + 0.08;
 
 function tex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -162,7 +164,7 @@ interface Projector {
 }
 
 /** Parcels in a box before it counts as full. */
-export const BOX_FULL = 8;
+export const BOX_FULL = 6;
 
 export interface BinView {
   code: string;
@@ -277,12 +279,12 @@ export class RobotFloor {
   /** A place on station s's roller table, `dist` metres back from the pickup end (the parcel's centre). */
   tableSlot(s: number, dist: number, out: THREE.Vector3): void {
     const st = this.stations[s]!;
-    out.set(st.x, 1.06, st.z - 0.75 - dist);
+    out.set(st.x, DECK_Y, st.z - 0.75 - dist);
   }
 
   binPos(b: number, out: THREE.Vector3): void {
     if (b === this.tableBin) {
-      out.set(DROP.x, 1.24, DROP.z);
+      out.set(DROP.x, DECK_Y - 0.06, DROP.z);
       return;
     }
     const bin = this.bins[b]!;
@@ -576,10 +578,12 @@ export class RobotFloor {
       const z1 = cellZ(0) - 0.7;
       const z0 = z1 - STATION_TABLE;
       const zc = (z0 + z1) / 2;
-      k.box('stable', alu, x, 0.98, zc, 1.1, 0.08, STATION_TABLE);
-      for (const sx of [-0.5, 0.5]) for (let sz = z0 + 0.1; sz <= z1; sz += 1.5) k.box('stable', alu, x + sx, 0.48, sz, 0.06, 0.96, 0.06);
-      for (let zz = z0 + 0.1; zz < z1; zz += 0.21) k.box('sroll', roller, x, 1.04, zz, 1.0, 0.06, 0.06);
-      for (const sx of [-0.55, 0.55]) k.box('stable', alu, x + sx, 1.1, zc, 0.04, 0.12, STATION_TABLE);
+      // (Rollers on top at the robots' deck height, so a parcel slides level onto a robot.)
+      const top = DECK_Y;
+      k.box('stable', alu, x, top - 0.1, zc, 1.1, 0.08, STATION_TABLE);
+      for (const sx of [-0.5, 0.5]) for (let sz = z0 + 0.1; sz <= z1; sz += 1.5) k.box('stable', alu, x + sx, (top - 0.14) / 2, sz, 0.06, top - 0.14, 0.06);
+      for (let zz = z0 + 0.1; zz < z1; zz += 0.21) k.box('sroll', roller, x, top - 0.03, zz, 1.0, 0.06, 0.06);
+      for (const sx of [-0.55, 0.55]) k.box('stable', alu, x + sx, top + 0.04, zc, 0.04, 0.12, STATION_TABLE);
       k.blob(x, zc, 1.6, STATION_TABLE + 0.7);
       this.stations.push({ x, z: cellZ(0), projector: -1 });
     }
@@ -1027,6 +1031,8 @@ function iconAtlas(): THREE.CanvasTexture {
 
 /** Length of the pickup stations' roller tables (they start where the station chutes end). */
 export const STATION_TABLE = 4.8;
+/** Where the pickup tables start (the station chutes end there). */
+export const STATION_START_Z = FLOOR.z0 - 0.7 - STATION_TABLE;
 
 /** Where the manual sort table stands. */
 export const TABLE = { x: -33, z: 22 };

@@ -8,13 +8,15 @@
 // robots keep the envelopes on the boxes instead.
 import * as THREE from 'three';
 
-import { DROP, TABLE, type FloorKit } from './floor';
+import { DECK_Y, DROP, TABLE, type FloorKit } from './floor';
 import { buildHuman, type Human } from './people';
 
 /** What ManualSort moves: a parcel, by its base position. */
 export interface Item {
   pos: THREE.Vector3;
   dead?: boolean;
+  /** Its label could not be read: the worker prints and sticks on a new one first. */
+  noread?: boolean;
 }
 
 type Stage = 'belt' | 'table' | 'hand' | 'cubby' | 'crate';
@@ -61,6 +63,8 @@ export class ManualSort {
   private moves: Move[] = [];
   private move: Move | null = null;
   private mt0 = 0;
+  /** Beat the next move may start on, after a pause (−1: not set). */
+  private next = -1;
   private from = { x: HOME.x, face: TO_TABLE, reach: 0 };
   private now = { x: HOME.x, face: TO_TABLE, reach: 0 };
   /** Parcels that went out in the crates. */
@@ -81,10 +85,11 @@ export class ManualSort {
     for (let x = BELT_X1 + 0.4; x < BELT_X0; x += 1.6) for (const dz of [-0.26, 0.26]) k.box('mleg', frame, x, (BELT_Y - 0.09) / 2, BELT_Z + dz, 0.06, BELT_Y - 0.09, 0.06);
     k.blob(mid, BELT_Z, len + 0.6, 1.0);
     // Hopper: a sloped tray the robot tips into, with side walls.
-    k.box('mhop', teal, DROP.x, 1.2, DROP.z, 0.8, 0.05, 0.9);
-    for (const dz of [-0.45, 0.45]) k.box('mhop', teal, DROP.x, 1.32, DROP.z + dz, 0.8, 0.28, 0.04);
-    k.box('mhop', teal, DROP.x + 0.4, 1.36, DROP.z, 0.04, 0.36, 0.9);
-    k.box('mleg', frame, DROP.x, 0.59, DROP.z, 0.1, 1.18, 0.1);
+    // (Its lip is just under the robots' deck, so parcels slide off the robot into it.)
+    const hy = DECK_Y - 0.1;
+    k.box('mhop', teal, DROP.x, hy, DROP.z, 0.8, 0.05, 0.9);
+    for (const dz of [-0.45, 0.45]) k.box('mhop', teal, DROP.x, hy + 0.12, DROP.z + dz, 0.8, 0.28, 0.04);
+    k.box('mleg', frame, DROP.x, hy / 2, DROP.z, 0.1, hy, 0.1);
     // The worker at the table (by day).
     const was = k.only;
     k.only = 'day';
@@ -93,15 +98,20 @@ export class ManualSort {
   }
 
   /** Room for another parcel, with `onRobots` already on their way here. */
-  room(onRobots: number): boolean {
+  room(onTheWay: number, cap = 4): boolean {
     let here = 0;
     for (const s of this.items.values()) if (s.stage !== 'cubby' && s.stage !== 'crate') here++;
-    return onRobots + here < 3 && this.fill.some((f) => f < CUBBY_CAP);
+    return onTheWay + here < cap && this.fill.some((f) => f < CUBBY_CAP);
   }
 
+  /** Called when the worker sticks a new label on a parcel (to redraw it). */
+  relabel: (it: Item) => void = () => {};
+
   /** A robot tipped `it` into the hopper. */
-  arrive(it: Item, bt: number): void {
-    this.items.set(it, { stage: 'belt', t0: Math.round(bt), from: it.pos.clone(), cubby: -1, slot: 0 });
+  arrive(it: Item, bt: number, onBelt = false): void {
+    // From the hopper, or (from the no-read chute) straight onto the belt where it lands.
+    const u0 = onBelt ? 0.5 + (3 * (it.pos.x - BELT_X0)) / (BELT_X1 - BELT_X0) : 0;
+    this.items.set(it, { stage: 'belt', t0: onBelt ? bt - u0 : Math.round(bt), from: it.pos.clone(), cubby: -1, slot: 0 });
   }
 
   /** Position of an item this beat (call per frame for each item it owns). */
@@ -156,8 +166,10 @@ export class ManualSort {
     if (!this.move && !this.moves.length && day) this.plan();
     if (!this.move && this.moves.length) {
       // Straight after the previous move, or on the next whole beat after a pause.
-      const start = bt - this.mt0 < 1 ? this.mt0 : Math.ceil(bt);
+      if (bt - this.mt0 >= 1 && this.next < 0) this.next = Math.ceil(bt);
+      const start = bt - this.mt0 < 1 ? this.mt0 : this.next;
       if (bt >= start) {
+        this.next = -1;
         this.move = this.moves.shift()!;
         this.mt0 = start;
         this.from = { ...this.now };
@@ -227,6 +239,22 @@ export class ManualSort {
       this.moves.push(
         { x: spot.x, face: TO_TABLE, reach: 0, beats: 1 },
         { x: spot.x, face: TO_TABLE, reach: 1, beats: 1, done: () => (s.stage = 'hand') },
+        // No-read: hold it at the label printer, and stick on a new label.
+        ...(it.noread
+          ? [
+              { x: TABLE.x - 1.2, face: TO_TABLE, reach: 0.4, beats: 1 },
+              {
+                x: TABLE.x - 1.2,
+                face: TO_TABLE,
+                reach: 0.9,
+                beats: 1,
+                done: () => {
+                  it.noread = false;
+                  this.relabel(it);
+                },
+              },
+            ]
+          : []),
         {
           x: cx,
           face: TO_SHELF,

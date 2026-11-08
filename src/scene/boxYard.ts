@@ -12,7 +12,7 @@ import type { FloorKit, RobotFloor } from './floor';
 import { buildForklift, FORK_REACH, type ForkliftModel } from './forklift';
 
 /** Centre line of the forklift aisle, and the wall. */
-export const AISLE_Z = 32.3;
+export const AISLE_Z = 31.1;
 const WALL_Z = 34;
 /** 20 dock doors on the south wall: [x, number, in use]; door k serves south city k (its two boxes stand right by it). */
 export const DOORS: [number, number, boolean][] = Array.from({ length: 20 }, (_, k) => [-16 + 6 * k, 21 + k, true]);
@@ -29,6 +29,8 @@ interface Key {
   wait?: () => boolean;
   /** Runs when the key is reached. */
   done?: () => void;
+  /** A sound as the move starts. */
+  sound?: 'horn' | 'beep';
 }
 
 interface Lift extends ForkliftModel {
@@ -43,6 +45,8 @@ interface Lift extends ForkliftModel {
   carry: number | null;
   job: number | null;
   home: number;
+  /** Beat the next move may start on, after a pause (−1: not set). */
+  next: number;
   /** Stretch of the aisle this forklift serves. */
   x0: number;
   x1: number;
@@ -54,6 +58,8 @@ const SOUTH = 0;
 
 export class BoxYard {
   readonly lifts: Lift[] = [];
+  /** Sounds since the last frame: a horn when a forklift sets off, beeps while it reverses. */
+  readonly sounds: { kind: 'horn' | 'beep'; at: THREE.Vector3 }[] = [];
   private jobs: number[] = [];
 
   constructor(
@@ -67,7 +73,7 @@ export class BoxYard {
     const paint = kit.std(0x8a6e00, 0.8, 0, 0xf2c200);
     const x0 = floor.bins[0]!.x - 3;
     const x1 = floor.bins[floor.bins.length - 1]!.x + 3;
-    for (const z of [AISLE_Z - 1.75, AISLE_Z + 1.4]) kit.box('aisle', paint, (x0 + x1) / 2, 0.012, z, x1 - x0, 0.01, 0.1);
+    for (const z of [AISLE_Z - 2.4, AISLE_Z + 2.2]) kit.box('aisle', paint, (x0 + x1) / 2, 0.012, z, x1 - x0, 0.01, 0.1);
     for (let k = 0; k < LIFTS; k++) {
       const m = buildForklift(kit, null);
       const lx0 = x0 + ((x1 - x0) * k) / LIFTS;
@@ -86,6 +92,7 @@ export class BoxYard {
         carry: null,
         job: null,
         home,
+        next: -1,
         x0: lx0,
         x1: lx1,
       };
@@ -112,10 +119,14 @@ export class BoxYard {
       // Next key: straight after the previous one, or on the next whole beat after a pause.
       if (!l.key && l.keys.length) {
         const k = l.keys[0]!;
-        const start = bt - l.t0 < 1 ? l.t0 : Math.ceil(bt);
+        // (When idle for a while, the next whole beat; remembered, so it is reached.)
+        if (bt - l.t0 >= 1 && l.next < 0) l.next = Math.ceil(bt);
+        const start = bt - l.t0 < 1 ? l.t0 : l.next;
         if (bt >= start && (!k.wait || k.wait())) {
+          l.next = -1;
           l.keys.shift();
           l.key = k;
+          if (k.sound) this.sounds.push({ kind: k.sound, at: new THREE.Vector3(l.x, 2, l.z) });
           l.t0 = start;
           l.from = { x: l.x, z: l.z, yaw: l.yaw, fork: l.fork };
         }
@@ -177,7 +188,7 @@ export class BoxYard {
     this.truck.reserve(door, 1);
     const nose = bin.z + FORK_REACH;
     l.job = b;
-    keys.push({ z: AISLE_Z, beats: 1 });
+    keys.push({ z: AISLE_Z, beats: 1, sound: 'horn' });
     this.drive(keys, l.x, bin.x);
     keys.push({ yaw: NORTH, beats: 1 });
     // Wait until no robot is still on its way to this box.
@@ -188,7 +199,8 @@ export class BoxYard {
     this.drive(keys, bin.x, door);
     keys.push({ yaw: SOUTH, beats: 1 });
     // Into the truck; the box is emptied there.
-    keys.push({ z: WALL_Z + 1.2, beats: 2 });
+    // All the way into the trailer (the forklift too), set the box down at the front of the load.
+    keys.push({ z: WALL_Z + 3.0, beats: 3 });
     keys.push({
       fork: 0.3,
       beats: 2,
@@ -199,7 +211,9 @@ export class BoxYard {
       },
     });
     keys.push({ fork: 0.45, beats: 1 });
-    keys.push({ z: AISLE_Z, beats: 2, done: () => this.truck.reserve(door, -1) });
+    // Reversing out of the truck: the beeper sounds on each beat.
+    keys.push({ z: WALL_Z + 0.5, beats: 2, sound: 'beep' });
+    keys.push({ z: AISLE_Z, beats: 1, sound: 'beep', done: () => this.truck.reserve(door, -1) });
     this.drive(keys, door, bin.x);
     keys.push({ yaw: NORTH, beats: 1 });
     keys.push({ z: nose, beats: 1 });

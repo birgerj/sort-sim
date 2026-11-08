@@ -152,6 +152,7 @@ export class Docks {
   readonly docks: Dock[] = [];
   private boardsDay: boolean | null = null;
   private readonly t = new THREE.Vector3();
+  private readonly hands = new THREE.Vector3();
   private readonly o = new THREE.Object3D();
   private readonly q = new THREE.Quaternion();
   /** Postcode boards on the cages (two per cage, back to back). */
@@ -390,7 +391,8 @@ export class Docks {
   /** Where the next parcel goes in this cage (world). */
   private cageTop(c: Cage): V3 {
     c.g.updateMatrixWorld();
-    return cageSlot(c.n, new THREE.Vector3()).setY(cageSlot(c.n, this.t).y + 0.3).applyMatrix4(c.g.matrixWorld);
+    const p = cageSlot(c.n, new THREE.Vector3());
+    return p.setY(p.y + 0.3).applyMatrix4(c.g.matrixWorld);
   }
 
   private put(d: Dock, cage: number, p: DockParcel): void {
@@ -441,7 +443,8 @@ export class Docks {
       }
       // The parcel follows the hands.
       if (w.parcel && (st.pose === 'pick' || st.pose === 'carry' || st.pose === 'drop')) {
-        const hands = this.t.set(Math.sin(w.yaw) * 0.55, 0.95, Math.cos(w.yaw) * 0.55).add(w.root.position).setY(0.95);
+        // (Its own vector: cageTop below uses this.t.)
+        const hands = this.hands.set(Math.sin(w.yaw) * 0.55, 0.95, Math.cos(w.yaw) * 0.55).add(w.root.position).setY(0.95);
         if (st.pose === 'pick') w.parcel.pos.lerpVectors(w.pickFrom, hands, ease(ph));
         else if (st.pose === 'drop') w.parcel.pos.lerpVectors(hands, this.cageTop(d.cages[w.cage]!), ease(ph));
         else w.parcel.pos.copy(hands);

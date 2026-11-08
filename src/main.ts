@@ -95,6 +95,9 @@ function frame(now: number): void {
     bar: f.bar,
     tod,
   });
+  // Hall sounds: effects near the camera, and the belts' hum.
+  for (const sd of scene.takeSounds()) music.sfx(sd.kind, sd.vol);
+  music.setHum(scene.humLevel());
   hud.update();
   requestAnimationFrame(frame);
 }
