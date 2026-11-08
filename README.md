@@ -27,11 +27,14 @@ sound is generated in code.
                       south wall: 20 dock doors (box trucks)
 ```
 
-1. **Infeed (west).** Four lanes, 5 m apart, come through the west wall at
-   floor level, each through a scan tunnel just inside it, then a buffer
-   (where parcels queue), then up a ramp onto the west end of the loop from
-   the outside at 30°, 4 m apart. Two land on the beat and two half a beat
-   later, so every tray can be filled. Parcels come in
+1. **Infeed (north-west).** Four lanes, 4 m apart, come through the north
+   wall at floor level, each through a scan tunnel just inside it, then a
+   buffer (where parcels queue), then down a ramp to loop height and, one
+   after the other, turn left onto the north straight from the outside at
+   30°, 4 m apart, before the first dock chute. Two land on the beat and two
+   half a beat later, so every tray can be filled. A maintenance walkway with
+   a stair runs along the lanes. The loop now runs almost to the west wall;
+   inside its west end is a maintenance platform (the DJ's at night). Parcels come in
    at a set rate; when that is more than the lanes take, they queue at the
    buffers after the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every

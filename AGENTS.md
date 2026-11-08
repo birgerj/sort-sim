@@ -56,7 +56,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/life.ts` | Walkers (day), ride-on scrubber, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |
 | `src/scene/crowd.ts` | Night crowd inside the loop (instanced body parts, a few draw calls for 520 dancers) on an LED tile floor. |
 | `src/ui/walk.ts` | Walk-mode input: keyboard, mouse drag, touch stick and look; feeds `Sorter.walkInput`. |
-| `src/scene/party.ts` | Night party: DJ booth on the mezzanine, laser fans, mirror-ball floor spots, confetti on the drop. |
+| `src/scene/party.ts` | Night party: DJ booth on the maintenance platform inside the loop's west end (`PLATFORM_X`), laser fans, mirror-ball floor spots, confetti on the drop. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
 | `src/sim/rng.ts` | Seeded random numbers. |
@@ -98,13 +98,15 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
 
 ## Layout constants (sorter.ts, top)
 
-- Loop: rounded rectangle, `LOOP_LEN` 284 m (`LOOP_ZH` 8.5), `LOOP_R` corner radius,
+- Loop: rounded rectangle, `LOOP_LEN` 352 m (`LOOP_ZH` 8.5), `LOOP_R` corner radius,
   `LOOP_ZH` half depth, `LX` start x of the north straight. `loopAt(s)` gives
   position and direction; `s` runs east along the north side. Section
   starts are in the comment above `INDUCT`.
-- `CHUTES`: 20 dock chutes (s 4…118) and 20 station chutes (s 144…258), 6 m
-  apart. Infeeds: `INDUCT` (four join points on the west end, from the
-  outside, s 268, 272, 276, 280; `LANE_PHASE` lands lanes 1 and 3 half a beat
+- `CHUTES`: 20 dock chutes (s 38…152) and 20 station chutes (s 178…292), 6 m
+  apart; their x positions are as before (`LX` −54 moved the start of the
+  loop west). Infeeds: `INDUCT` (four join points on the north straight, from
+  the outside, s 10, 14, 18, 22; lanes come in through the north wall, x set by
+  `LANE_OUT`; `LANE_PHASE` lands lanes 1 and 3 half a beat
   later so they fill the odd trays; one parcel per lane per beat; `LANE_Z`;
   the belt reaches over the tray edge, so there is no gap), `HOLD_S` (queue point), `LANE_QUEUE`.
   Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).

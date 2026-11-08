@@ -66,14 +66,14 @@ const LOOP_Y = 4;
 const LOOP_R = 4;
 const LOOP_ZH = 8.5;
 /** One lap is 142 beats; every even metre mark on the loop is passed on a beat. */
-export const LOOP_LEN = 284;
+export const LOOP_LEN = 352;
 /** Length of the short (west and east) straights, and of a quarter bend. */
 const SIDE = 2 * LOOP_ZH - 2 * LOOP_R;
 const QUARTER = (Math.PI * LOOP_R) / 2;
 /** Length of the long (north and south) straights. */
 const STRAIGHT = (LOOP_LEN - 2 * SIDE - 4 * QUARTER) / 2;
 /** x where the north straight starts (s = 0); it runs east from here. */
-const LX = -20;
+const LX = -54;
 /** Centre of the loop. */
 const LCX = LX + STRAIGHT / 2;
 const TRAYS = LOOP_LEN / PITCH;
@@ -92,25 +92,27 @@ const LABEL_COLS = 21;
 const LABEL_ROWS = 32;
 
 // Loop positions (metres from the start of the north straight; chutes on even marks, so on a beat).
-// s 0–120: north straight, 20 dock chutes · 127–136: east side, to and from the store ·
-// 142–262: south straight, 20 robot station chutes · 263–284: west end.
+// s 0–154: north straight (infeeds at 10–22, 20 dock chutes from 38) · 161–170: east side, to and
+// from the store · 176–330: south straight, 20 robot station chutes from 178 · 330–352: west end.
 /**
- * Infeeds: four lanes come in through the west wall at floor level, 5 m apart, each
+ * Infeeds: four lanes come in through the north wall at floor level, 4 m apart, each
  * through its own scan tunnel just inside the wall, then a buffer (the hold point
- * where parcels queue), then up a ramp to loop height and onto the west end of the
- * loop from the outside at 30°, 4 m apart. The joins are on even marks: lanes 0
- * and 2 land on the beat (even trays), lanes 1 and 3 half a beat later (odd
- * trays), so every tray can be filled.
+ * where parcels queue), then down the hall on a ramp to loop height, a turn to the
+ * left and onto the north straight from the outside at 30°, 4 m apart, before the
+ * first dock chute. The joins are on even marks: lanes 0 and 2 land on the beat
+ * (even trays), lanes 1 and 3 half a beat later (odd trays), so every tray can be filled.
  */
-const INDUCT = [268, 272, 276, 280];
+const INDUCT = [10, 14, 18, 22];
 /** Half-beat offset of each lane's landing (see above). */
 const LANE_PHASE = [0, 0.5, 0, 0.5];
 const LANE_Y = 0.9;
-/** z of the lanes (south to north); they keep it until they turn onto the loop. */
-const LANE_Z = [11.6, 6.6, 1.6, -3.4];
-const LANE_TUNNEL_X = -58.4;
-/** The mezzanine (the DJ's at night), north of the lanes. */
-const MEZZ_Z = -7.2;
+/** How far out from the loop's centre line each lane turns onto it (sets the lane's x). */
+const LANE_OUT = 3.6;
+/** z of the scan tunnels (just inside the north wall). */
+const LANE_TUNNEL_Z = -30.4;
+/** The maintenance platform inside the loop at its west end (the DJ's at night): centre x, top y. */
+const PLATFORM_X = -49;
+const PLATFORM_Y = 2.4;
 /** The buffer: where parcels queue on an infeed lane (metres along it, after the scan tunnel). */
 const HOLD_S = 16;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
@@ -135,9 +137,9 @@ const hhmmOf = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0'
 const GAP = 0.06;
 /** Length of a pickup table the queue may use. */
 const TABLE_ROOM = 4.2;
-const LOOP_TUNNELS = [2, 148];
-const STORE_OUT = 128;
-const STORE_BACK = 134;
+const LOOP_TUNNELS = [30, 182];
+const STORE_OUT = 162;
+const STORE_BACK = 168;
 /** Where the station chutes end, at the back of the pickup roller tables. */
 const STATION_Z = STATION_START_Z;
 /** Parcels that fit on a pickup station's roller table. */
@@ -148,16 +150,16 @@ const STATION_CAP = 7;
  * south straight, 20 run south to the robot pickup stations.
  */
 const CHUTES: [number, number][] = [
-  ...Array.from({ length: 20 }, (_, k): [number, number] => [4 + 6 * k, 1]),
-  ...Array.from({ length: 20 }, (_, k): [number, number] => [144 + 6 * k, 1]),
+  ...Array.from({ length: 20 }, (_, k): [number, number] => [38 + 6 * k, 1]),
+  ...Array.from({ length: 20 }, (_, k): [number, number] => [178 + 6 * k, 1]),
   // No-reads: off the south-east bend, down to the belt to the manual sort table (east of the robots).
-  [140, 1],
+  [174, 1],
 ];
 /** The no-read chute (last in CHUTES). */
 const REJECT = 40;
 /** x of the no-read belt, where it runs south to the manual sort belt. */
 const REJECT_X = 105.1;
-const FIRST_STATION_S = 142;
+const FIRST_STATION_S = 176;
 /**
  * Render quality. low: pixel ratio 1, no extras. normal: outlines, toon shading and
  * contact shadows (always on). high: also ambient occlusion, sun shadows around the
@@ -170,7 +172,7 @@ const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }
 /** Belt speeds the conveyor clock can run at: multiples of the beat, so events stay on 8th and 16th notes. */
 export const BELT_SPEEDS = [0.5, 1, 2, 4];
 /** x of the 20 truck docks on the north wall: straight north of each dock chute's end. */
-const DOCK_X = Array.from({ length: 20 }, (_, k) => LX + 4 + 6 * k + 2.4);
+const DOCK_X = Array.from({ length: 20 }, (_, k) => LX + CHUTES[k]![0] + 2.4);
 /** Openings in the long walls, where trailers stand: x of each open door. */
 const NORTH_DOORS = DOCK_X;
 const SOUTH_DOORS = DOORS.filter((d) => d[2]).map((d) => d[0]);
@@ -1110,9 +1112,9 @@ export class Sorter implements Scene3D {
       columnsNorth: COLUMNS.map((x) => x + 2.4),
       columnsSouth: COLUMNS,
     });
-    this.party = new Party(this, v(-50.2, 6.21, MEZZ_Z), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
+    this.party = new Party(this, v(PLATFORM_X - 0.6, PLATFORM_Y + 0.0, 0), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
-    this.crowd = new Crowd(this, LX + 1, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
+    this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.buildBoards();
     this.buildDay();
     this.buildCamera();
@@ -2992,15 +2994,33 @@ export class Sorter implements Scene3D {
     for (let x = WX + 22; x <= EX - 20; x += 20) this.box('strobe', this.strobe, x, HH - 0.3, 0, 2.4, 0.08, 0.5);
     this.only = undefined;
 
-    // Mezzanine by the infeeds, with stairs.
-    const grate = this.std(0x3a3e45, 0.6, 0.7, 0xc9ced4);
-    const rail = this.std(0xd9a400, 0.5, 0.4);
-    const MZ = MEZZ_Z;
-    this.box('grate', grate, -55, 6.15, MZ, 14, 0.12, 2.2);
-    this.box('rail', rail, -55, 7.2, MZ + 1, 14, 0.06, 0.06);
-    for (let x = -62; x <= -48; x += 2) this.box('rail', rail, x, 6.65, MZ + 1, 0.06, 1.1, 0.06);
-    for (let k = 0; k < 20; k++) this.box('grate', grate, -47.7 + k * 0.6, 6.0 - k * 0.3, MZ - 0.5, 0.6, 0.08, 1.2);
-    for (let x = -60; x <= -50; x += 5) this.box('steel', steel, x, 3.05, MZ - 0.9, 0.2, 6.1, 0.2);
+    // Maintenance platform inside the loop at its west end, with railings and a stair
+    // down to the east (at night the DJ plays up here).
+    {
+      const grate = this.std(0x3a3e45, 0.6, 0.7, 0xc9ced4);
+      const rail = this.std(0xd9a400, 0.5, 0.4, 0xf2c200);
+      const PX = PLATFORM_X;
+      const PY = PLATFORM_Y;
+      const PW = 7;
+      const PD = 8;
+      this.box('grate', grate, PX, PY - 0.06, 0, PW, 0.12, PD);
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) this.box('steel', steel, PX + x * (PW / 2 - 0.2), (PY - 0.12) / 2, z * (PD / 2 - 0.2), 0.16, PY - 0.12, 0.16);
+      // Railings round three sides; the stair side is open in the middle.
+      for (const z of [-PD / 2, PD / 2]) {
+        this.box('rail', rail, PX, PY + 1.05, z, PW, 0.05, 0.05);
+        this.box('rail', rail, PX, PY + 0.55, z, PW, 0.05, 0.05);
+        for (let x = PX - PW / 2; x <= PX + PW / 2 + 0.01; x += 1.4) this.box('rail', rail, x, PY + 0.53, z, 0.05, 1.05, 0.05);
+      }
+      for (const z of [-PD / 2, -1, 1, PD / 2]) this.box('rail', rail, PX - PW / 2, PY + 0.53, z, 0.05, 1.05, 0.05);
+      this.box('rail', rail, PX - PW / 2, PY + 1.05, 0, 0.05, 0.05, PD);
+      for (const sz of [-1, 1]) {
+        this.box('rail', rail, PX + PW / 2, PY + 1.05, sz * (PD / 4 + 0.5), 0.05, 0.05, PD / 2 - 1);
+        this.box('rail', rail, PX + PW / 2, PY + 0.53, sz * (PD / 2), 0.05, 1.05, 0.05);
+      }
+      // The stair: down to the east, between the rail ends.
+      const steps = 12;
+      for (let k = 0; k < steps; k++) this.box('grate', grate, PX + PW / 2 + 0.15 + k * 0.26, PY - (k + 1) * (PY / steps), 0, 0.28, 0.06, 1.8);
+    }
     // Control room with lit windows.
     this.buildControlRoom(-48, 26);
     // Pallets with wrapped goods along the walls.
@@ -3013,8 +3033,9 @@ export class Sorter implements Scene3D {
       this.box('wrap', wrap, x, 0.14 + h / 2, z, 1.15, h, 0.95);
     };
     // (North wall east of x 12: truck docks; south wall east of x −8: box forklift aisle.)
-    for (let x = -58; x < -18; x += 1.6) if (Math.random() < 0.65) stack(x, -32.6);
-    for (let k = 0; k < 18; k++) stack(rnd(-58, -32), rnd(-28, -12));
+    // (Not where the infeed lanes come in through the north wall, x −52 … −35.)
+    for (let x = -60; x < -18; x += 1.6) if ((x < -53 || x > -34) && Math.random() < 0.65) stack(x, -32.6);
+    for (let k = 0; k < 14; k++) stack(rnd(-33, -21), rnd(-28, -14));
     // (South wall west of the box doors: the break area.)
   }
 
@@ -3197,29 +3218,49 @@ export class Sorter implements Scene3D {
       }
     };
 
-    // Infeeds: four lanes side by side at floor level, each through its own scan tunnel.
+    // Infeeds: four lanes side by side at floor level, in from the north wall, each through its own scan tunnel.
     for (let k = 0; k < 4; k++) {
       const y = LANE_Y;
-      const z = LANE_Z[k]!;
-      // In from the west wall, scan, buffer, up the ramp, then a short straight that
-      // meets the loop at 30° from the outside (`into`), starting where it crosses z.
+      // Where it meets the loop, and where it turns towards it (LANE_OUT out from the
+      // centre line, on the 30° line in from the outside); the lane runs straight south to there.
       loopAt(INDUCT[k]!, this.p, this.t);
       const end = this.p.clone();
       const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
-      const corner = end.clone().addScaledVector(into, (z - end.z) / into.z);
-      const path = Path.fillet([v(WX - 1, y, z), v(-44, y, z), v(corner.x - 4, LOOP_Y, z), corner, end], 3);
+      const corner = end.clone().addScaledVector(into, -LANE_OUT / Math.abs(into.z));
+      corner.y = LOOP_Y - 0.5;
+      const x = corner.x;
+      const z0 = -HZ - 1;
+      const path = Path.fillet([v(x, y, z0), v(x, y, -23.5), v(x, corner.y, corner.z), end], 3);
       // The belt runs right up to the loop: its end reaches over the edge of the trays
       // (just above them), so parcels transfer straight onto their tray with no gap.
       belt(path, 0.6, path.len - 1.75, stripIn);
 
-      const tunnel = this.tunnel(path, LANE_TUNNEL_X - WX + 1, 1.2);
+      const tunnelS = LANE_TUNNEL_Z - z0;
+      const tunnel = this.tunnel(path, tunnelS, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-      // Lit opening in the wall where the lane comes in.
-      this.box('dark', new THREE.MeshBasicMaterial({ color: 0x020203 }), WX + 0.05, y + 0.6, z, 0.05, 1.8, 1.8);
-      this.box(`door${k}`, doorMat, WX + 0.1, y + 1.55, z, 0.08, 0.1, 2.0);
-      this.box(`door${k}`, doorMat, WX + 0.1, y + 0.6, z - 0.95, 0.08, 1.9, 0.1);
-      this.box(`door${k}`, doorMat, WX + 0.1, y + 0.6, z + 0.95, 0.08, 1.9, 0.1);
-      this.lanes.push({ path, tunnelS: LANE_TUNNEL_X - WX + 1, lastArrive: -99, lastSpawn: -99, tunnel, door: doorMat, doorFlash: 0, doorCol: new THREE.Color(1, 1, 1) });
+      // Lit opening in the north wall where the lane comes in.
+      this.box('dark', new THREE.MeshBasicMaterial({ color: 0x020203 }), x, y + 0.6, -HZ + 0.05, 1.8, 1.8, 0.05);
+      this.box(`door${k}`, doorMat, x, y + 1.55, -HZ + 0.1, 2.0, 0.1, 0.08);
+      this.box(`door${k}`, doorMat, x - 0.95, y + 0.6, -HZ + 0.1, 0.1, 1.9, 0.08);
+      this.box(`door${k}`, doorMat, x + 0.95, y + 0.6, -HZ + 0.1, 0.1, 1.9, 0.08);
+      this.lanes.push({ path, tunnelS, lastArrive: -99, lastSpawn: -99, tunnel, door: doorMat, doorFlash: 0, doorCol: new THREE.Color(1, 1, 1) });
+    }
+    // A maintenance walkway along the infeeds (east of them), with a stair up to where the belts are high.
+    {
+      const grate = this.std(0x3a3e45, 0.6, 0.7, 0xc9ced4);
+      const rail = this.std(0xd9a400, 0.5, 0.4, 0xf2c200);
+      const steel = this.std(0x4c515a, 0.5, 0.7, DAY.steel);
+      loopAt(INDUCT[3]!, this.p, this.t);
+      const wx = this.p.x - LANE_OUT / Math.tan(Math.PI / 6) + 1.7;
+      const wy = LOOP_Y - 1.0;
+      const z1 = -23.5 + ((wy - LANE_Y) / (LOOP_Y - 0.5 - LANE_Y)) * (-8.5 - LANE_OUT + 23.5);
+      const z0 = z1 - 6;
+      this.box('grate', grate, wx, wy - 0.05, (z0 + z1) / 2, 1.1, 0.1, z1 - z0);
+      for (const z of [z0, (z0 + z1) / 2, z1]) this.box('steel', steel, wx, (wy - 0.1) / 2, z, 0.12, wy - 0.1, 0.12);
+      for (const yy of [0.55, 1.05]) this.box('rail', rail, wx + 0.55, wy + yy, (z0 + z1) / 2, 0.05, 0.05, z1 - z0);
+      for (let z = z0; z <= z1 + 0.01; z += 1.5) this.box('rail', rail, wx + 0.55, wy + 0.53, z, 0.05, 1.05, 0.05);
+      const steps = 14;
+      for (let k = 0; k < steps; k++) this.box('grate', grate, wx, wy - (k + 1) * (wy / steps), z0 - 0.15 - k * 0.24, 1.0, 0.05, 0.26);
     }
 
     // The loop: a track with trays riding on it and LEDs along both sides.
@@ -3898,14 +3939,14 @@ export class Sorter implements Scene3D {
     this.person(-57, 14, Math.PI / 2);
     this.person(38.2, 12.9, Math.PI);
     this.person(LIFT_X - 2, -6, -Math.PI / 2);
-    this.person(-30, -8, 0.4);
+    this.person(-30, -15, 0.4);
     this.person(EX - 8, 18, Math.PI * 0.8);
     this.trolley(-58.5, 16);
     this.trolley(-56, -29.5);
     this.trolley(-40, 18);
 
     // Hanging signs, as the labels in the illustration.
-    this.sign('Scanning', '#e8960c', -50, 8.05, 7.9, Math.PI / 2, (g) => {
+    this.sign('Scanning', '#e8960c', -44.2, 6.4, -27, 0, (g) => {
       g.beginPath();
       g.ellipse(0, 0, 24, 14, 0, 0, 7);
       g.stroke();
@@ -4027,11 +4068,9 @@ export class Sorter implements Scene3D {
       },
     });
     this.pois = [
-      fixed('infeeds', v(-31, 7.6, 9), v(-24.5, 3.8, 1.5), 'Infeed'),
-      fixed('scan tunnels', v(-44, 4.5, 13), v(-50, 2.2, 4), 'Scanning'),
-      fixed('high infeeds', v(-38, 8, -9), v(-50, 7.2, 0)),
-      fixed('merge', v(-36, 7, 12), v(-25, 3.8, 2)),
-      fixed('loop scanner', v(-25, 6, -17), v(-18, 4.3, -11)),
+      fixed('infeeds', v(-33, 7.4, -17), v(-40, 3.6, -9.5), 'Infeed'),
+      fixed('scan tunnels', v(-36, 4.2, -22), v(-44, 1.4, -30.5), 'Scanning'),
+      fixed('loop scanner', v(-30, 6, -15.5), v(LX + LOOP_TUNNELS[0]!, 4.3, -LOOP_ZH)),
       fixed('loop', v(-14, 8, 3), v(LCX, 3, 0), 'Sorter loop'),
       fixed('chutes', v(30, 5, -25), v(22, 1.5, -14), 'Chutes'),
       fixed('docks', v(DOCK_X[2]! + 6, 3.6, -23), v(DOCK_X[2]!, 1.2, -31), 'Docks'),
@@ -4044,7 +4083,8 @@ export class Sorter implements Scene3D {
       fixed('manual sorting', v(103.5, 3.6, 16.5), v(109, 1, 22), 'Manual sorting'),
       { ...fixed('control room', v(-48, 2.85, 17.2), v(-48, 2.75, 21.6), 'Control room'), still: true },
       fixed('boxes', v(28, 4.2, 25.5), v(32, 0.8, 32), 'Boxes & trucks'),
-      fixed('dj', v(-40, 7.5, 2), v(-50, 7, -4.5)),
+      fixed('dj', v(-40, 5.2, 3), v(PLATFORM_X, PLATFORM_Y + 1.2, 0)),
+      fixed('platform', v(-41, 4.6, -5), v(PLATFORM_X, PLATFORM_Y, 0)),
       fixed('dance floor', v(LCX - 30, 6.5, -5), v(LCX - 10, 1.2, 1), 'Dance floor'),
       fixed('break', v(-29, 3.2, 26.8), v(-36.5, 0.8, 31.2)),
       {
