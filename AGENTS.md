@@ -40,6 +40,9 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/sorter.ts` | The `Sorter` scene: renderer, post-processing, hall, infeed, loop, chutes, store and lift, parcels, club (night), day scenery, camera and tour. Owns the kit (`box`, `std`, `put`, `inkify`, `person`, `sign`) that the other scene modules use. |
 | `src/scene/floor.ts` | `RobotFloor`: pickup stations, boxes on pallets, robots, flow projectors (all of them, including over the dock belts), manual sort table, floor details. |
 | `src/scene/docks.ts` | `Docks`: north dock doors, roll cages and dock workers (work by day, dance by night). Also `buildDockDoor`, shared with the south wall. |
+| `src/scene/batch.ts` | `Batcher`: models are built from proxy objects; one `InstancedMesh` per geometry+material, matrices copied every frame (`kit.batch`). Robots, people, forklifts, cages and trailers use it. |
+| `src/scene/trucks.ts` | `Trucks`: a trailer behind every dock door. Full (4 loads) → cleardown (amber lamp flashes, nothing new goes in) → door down → truck leaves → new empty truck → door up. |
+| `src/scene/manualSort.ts` | `ManualSort`: robots tip envelopes into a hopper west of row 2; a roller belt takes them to the table; a worker puts them in pigeonholes and empties full ones into the crates. Day only, few parcels. |
 | `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
 | `src/scene/forklift.ts` | Forklift with driver (forks point to local +z); parts merged per material. |
 | `src/scene/people.ts` | `buildHuman`: jointed people (workers with hi-vis vest and helmet, staff with cap). |
@@ -72,9 +75,14 @@ Read this before changing code. README.md describes the hall and the controls.
 → `loop` (on a tray) → divert into a chute → `path` (chute) → then one of:
 
 - dock chute → `path` (`pathKind: 'dock'`, the roller belt) → `dock` (owned
-  by `Docks`: queue, worker, cage) → dead;
+  by `Docks`: queue, worker, cage) → in the cage's pile → the cage goes into
+  the trailer and leaves with the truck;
 - station chute → `table` (queue at a pickup station) → `robot` (rides a
-  robot; `dropAt` tips it into the box) → dead;
+  robot; `dropAt` tips it into the box) → in the box's pile → a forklift takes
+  the box into a truck; small envelopes (by day, west stations) go to the
+  manual drop instead → `manual` (owned by `ManualSort`);
+- destination full (`room()`): the parcel stays on its tray and goes round
+  the loop again (`laps`).
 - store: `path` (intake) → `queue` → `carriage` (lift) → `shuttle` → `fixed`
   (in the rack) → back out via `tween`/`carriage` → `path` (`back`) → loop.
 

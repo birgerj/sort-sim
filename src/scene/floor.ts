@@ -26,6 +26,8 @@ export interface FloorKit {
   /** Soft contact shadow on the floor, static or following an object. */
   blob(x: number, z: number, w: number, d: number, ry?: number): void;
   blobUnder(obj: THREE.Object3D, w: number, d: number): void;
+  /** Add an instanced part to a model (see Batcher): returns its proxy, attached to `parent`. */
+  batch(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, color?: THREE.ColorRepresentation): THREE.Object3D;
   person(x: number, z: number, ry: number): void;
   sign(text: string, color: string, x: number, y: number, z: number, ry: number, icon: (g: CanvasRenderingContext2D) => void): void;
   dayOnly: THREE.Object3D[];
@@ -36,6 +38,8 @@ export interface FloorKit {
 export interface FloorHandlers {
   /** Station s has a parcel ready. */
   waiting(s: number): boolean;
+  /** Robot k just loaded a parcel for manual sorting (a small one, with room at the table). */
+  manual(k: number): boolean;
   event(e: FleetEvent): void;
   /** A box is full: it waits for a forklift. */
   full(bin: number): void;
@@ -112,7 +116,8 @@ const glowTex = () =>
 interface RobotView {
   g: THREE.Group;
   top: THREE.Group;
-  glow: THREE.MeshBasicMaterial;
+  /** Underglow colour (night). */
+  glow: THREE.Color;
   num: number;
   yaw: number;
   yawFrom: number;
@@ -164,13 +169,19 @@ export class RobotFloor {
   /** Boxes taken to a truck so far. */
   shippedBoxes = 0;
   readonly stations: { x: number; z: number; projector: number }[] = [];
-  private robots: RobotView[] = [];
+  readonly robots: RobotView[] = [];
+  /** The fleet's "bin" for the drop to the manual sort table (not a box). */
+  readonly tableBin: number;
   private projectors: Projector[] = [];
   private cageProjector = new Map<number, number>();
   private tableProjectors: number[] = [];
   private beams!: THREE.InstancedMesh;
   private beamMat!: THREE.MeshBasicMaterial;
+  private readonly pm = new THREE.Matrix4();
   private spots!: THREE.InstancedMesh;
+  private plates!: THREE.InstancedMesh;
+  private plateCell!: THREE.InstancedBufferAttribute;
+  private under!: THREE.InstancedMesh;
   private iconAttr!: THREE.InstancedBufferAttribute;
   private gridMat!: THREE.MeshBasicMaterial;
   private parkMat!: THREE.MeshBasicMaterial;
@@ -190,8 +201,11 @@ export class RobotFloor {
   ) {
     const cols = stationXs.map((x) => Math.round((x - FLOOR.x0) / FLOOR.cs));
     const layout = sorterFloor(cols);
-    this.fleet = new Fleet(layout.grid, layout.parks, layout.stations, layout.bins, 20);
+    this.fleet = new Fleet(layout.grid, layout.parks, layout.stations, layout.bins, 40);
     this.fleet.isOpen = (b) => this.bins[b]?.open ?? true;
+    this.tableBin = layout.bins.findIndex((b) => b.manual);
+    // Only from the stations at the west end (near the table), so the trip stays short.
+    this.fleet.choose = (k) => (this.fleet.bots[k]!.i < 30 && this.handlers.manual(k) ? this.tableBin : null);
     this.buildFloor(layout.parks);
     this.buildStations(cols);
     this.buildBins();
@@ -212,7 +226,7 @@ export class RobotFloor {
     const drop = b % 4 === 1 || b % 4 === 3;
     for (const e of this.fleet.step(b, (s) => this.handlers.waiting(s), drop)) {
       if (e.t === 'load') this.flash(this.stations[e.station]!.projector, null);
-      if (e.t === 'dropped') {
+      if (e.t === 'dropped' && e.bin !== this.tableBin) {
         const bin = this.bins[e.bin]!;
         bin.n = Math.min(BOX_FULL, bin.n + 1);
         this.writeFill(e.bin);
@@ -239,6 +253,10 @@ export class RobotFloor {
   }
 
   binPos(b: number, out: THREE.Vector3): void {
+    if (b === this.tableBin) {
+      out.set(DROP.x, 1.24, DROP.z);
+      return;
+    }
     const bin = this.bins[b]!;
     out.set(bin.g.position.x, bin.g.position.y + 0.35 + Math.min(bin.n, BOX_FULL) * 0.09, bin.g.position.z);
   }
@@ -341,8 +359,20 @@ export class RobotFloor {
       r.g.position.set(x, 0, z);
       r.g.rotation.y = r.yaw + (party ? r.spin : 0);
       r.top.position.y = TOP_Y + (party ? 0.06 * s.kick : 0);
-      r.glow.color.copy(s.cols[b.k % s.cols.length]!).multiplyScalar(0.4 + s.kick * (party ? 1.2 : 0.7));
+      r.glow.copy(s.cols[b.k % s.cols.length]!).multiplyScalar(0.4 + s.kick * (party ? 1.2 : 0.7));
+      // Number plates on both sides, and the underglow, follow the robot.
+      r.g.updateMatrix();
+      for (const [n, sz] of [[0, 0.462], [1, -0.462]] as const) {
+        this.pm.makeRotationY(sz < 0 ? Math.PI : 0).setPosition(0, 0.82, sz).premultiply(r.g.matrix);
+        this.plates.setMatrixAt(b.k * 2 + n, this.pm);
+      }
+      this.pm.makeTranslation(0, 0.03, 0).premultiply(r.g.matrix);
+      this.under.setMatrixAt(b.k, this.pm);
+      this.under.setColorAt(b.k, r.glow);
     }
+    this.plates.instanceMatrix.needsUpdate = true;
+    this.under.instanceMatrix.needsUpdate = true;
+    if (this.under.instanceColor) this.under.instanceColor.needsUpdate = true;
   }
 
   private updateProjectors(dt: number, bt: number, s: { hat: number; kick: number; dayShown: boolean; cols: THREE.Color[]; pad: THREE.Color | null; bar: number }): void {
@@ -506,6 +536,7 @@ export class RobotFloor {
       k.inkify(m, 30);
     };
     for (const b of this.fleet.bins) {
+      if (b.manual) continue;
       const x = cellX(b.i);
       const z = cellZ(b.j);
       const g = new THREE.Group();
@@ -567,45 +598,52 @@ export class RobotFloor {
     const wheelMat = k.std(0x111111, 0.8, 0.1, 0x2a2c31);
     const lightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.6, 1.8) });
     const ledGeo = new THREE.SphereGeometry(0.04, 10, 8);
-    const part = (g: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, edge: 'ink' | 'hull' | null = 'ink') => {
-      const m = new THREE.Mesh(geo, mat);
-      g.add(m);
-      if (edge === 'ink') k.inkify(m, 30);
-      else if (edge === 'hull') k.outline(m, 0.018);
-      return m;
+    // Every part is instanced across the fleet (one draw call per part for all robots).
+    const part = (g: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material) => k.batch(geo, mat, g);
+    const ledMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.4, 0.5) });
+    const ledG = ledGeo.clone().translate(0.36, 0.1, 0.42);
+    // Fleet numbers: one atlas, one instanced mesh for all plates (two per robot).
+    const nums = this.fleet.bots.map((b) => 1800 + ((b.k * 37 + 3) % 99));
+    this.plates = new THREE.InstancedMesh(plateGeo(), new THREE.MeshBasicMaterial({ map: numberAtlas(nums) }), nums.length * 2);
+    this.plateCell = new THREE.InstancedBufferAttribute(new Float32Array(nums.length * 2), 1);
+    this.plates.geometry.setAttribute('aCell', this.plateCell);
+    for (let i = 0; i < nums.length * 2; i++) this.plateCell.setX(i, Math.floor(i / 2));
+    (this.plates.material as THREE.MeshBasicMaterial).onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aCell;')
+        .replace('#include <uv_vertex>', `#include <uv_vertex>\nvMapUv = vec2((mod(aCell, ${ATLAS_COLS}.0) + vMapUv.x) / ${ATLAS_COLS}.0, 1.0 - (floor(aCell / ${ATLAS_COLS}.0) + 1.0 - vMapUv.y) / ${ATLAS_ROWS}.0);`);
     };
+    this.plates.frustumCulled = false;
+    k.put(this.plates);
+    // Underglow, night only: one instanced mesh, coloured per robot.
+    this.under = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(2, 2.1).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+      nums.length,
+    );
+    this.under.setColorAt(0, new THREE.Color(0x3a7bff));
+    this.under.frustumCulled = false;
+    this.under.userData.noInk = true;
+    k.put(this.under);
+    k.nightOnly.push(this.under);
     for (const b of this.fleet.bots) {
       const g = new THREE.Group();
       k.put(g, undefined);
       k.blobUnder(g, 1.5, 1.6);
-      part(g, bodyGeo, blue, 'hull');
-      part(g, skirtGeo, black, 'hull');
-      part(g, wheelGeo, wheelMat, null);
+      part(g, bodyGeo, blue);
+      part(g, skirtGeo, black);
+      part(g, wheelGeo, wheelMat);
       part(g, padGeo, yellow);
       part(g, frameGeo, black);
-      part(g, lightGeo, lightMat, null);
+      part(g, lightGeo, lightMat);
       const top = new THREE.Group();
       top.position.y = TOP_Y;
       g.add(top);
       part(top, deckGeo, black);
-      part(top, rollerGeo, rollerMat, null);
-      const led = new THREE.Mesh(ledGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.4, 0.5) }));
-      led.position.set(0.36, 0.1, 0.42);
-      top.add(led);
-      const num = 1800 + ((b.k * 37 + 3) % 99);
-      const plate = new THREE.MeshBasicMaterial({ map: numberTex(num) });
-      for (const sz of [0.462, -0.462]) {
-        const p = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.31), plate);
-        p.position.set(0, 0.82, sz);
-        if (sz < 0) p.rotation.y = Math.PI;
-        g.add(p);
-      }
-      const gm = new THREE.MeshBasicMaterial({ map: glow, color: 0x3a7bff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-      const under = new THREE.Mesh(new THREE.PlaneGeometry(2, 2.1), gm);
-      under.rotation.x = -Math.PI / 2;
-      under.position.y = 0.03;
-      g.add(under);
-      k.nightOnly.push(under);
+      part(top, rollerGeo, rollerMat);
+      part(top, ledG, ledMat);
+      const num = nums[b.k]!;
+      const gm = new THREE.Color(0x3a7bff);
       const yaw = b.i === 0 ? Math.PI / 2 : -Math.PI / 2;
       const at = v(cellX(b.i), 0, cellZ(b.j));
       this.robots.push({ g, top, glow: gm, num, yaw, yawFrom: yaw, yawTo: yaw, beat: -1, spin: 0, S: at.clone(), C: at.clone(), E: at.clone(), ease: { in: false, out: false } });
@@ -757,13 +795,13 @@ export class RobotFloor {
     // People work here by day only: the night is for the robots.
     const was = k.only;
     k.only = 'day';
-    k.person(x, z + 1.7, Math.PI);
+    // (The worker between the table and the shelf is in ManualSort: it puts the robots' envelopes away.)
     k.person(x - 1.6, z - 1.5, 0.3);
     k.only = was;
     // Blue crates and bollards around the table.
     const crate = k.std(0x1f3f80, 0.6, 0.1, 0x2c62c8);
-    for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) k.box('crate', crate, x + 3.6 + a * 0.95, 0.2 + b * 0.42, z + 1.5, 0.9, 0.4, 0.6);
-    for (let b = 0; b < 3; b++) k.box('crate', crate, x + 3.6, 0.2 + b * 0.42, z + 2.2, 0.9, 0.4, 0.6);
+    for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) k.box('crate', crate, x + 3.6 + a * 0.95, 0.2 + b * 0.42, z + 1.9, 0.9, 0.4, 0.6);
+    for (let b = 0; b < 3; b++) k.box('crate', crate, x + 3.6, 0.2 + b * 0.42, z + 2.6, 0.9, 0.4, 0.6);
     const bollard = k.std(0x8a6e00, 0.5, 0.3, 0xf2c200);
     for (const [bx, bz] of [[-2.8, -1.6], [2.8, -1.6], [-2.8, 1.6], [2.8, 1.6]] as const) k.box('bollard', bollard, x + bx, 0.5, z + bz, 0.2, 1.0, 0.2);
     k.only = 'day';
@@ -822,6 +860,35 @@ export class RobotFloor {
 }
 
 const ICONS = 5;
+const ATLAS_COLS = 8;
+const ATLAS_ROWS = 8;
+
+/** A plate: front only (each robot has two, back to back). */
+function plateGeo(): THREE.PlaneGeometry {
+  return new THREE.PlaneGeometry(0.62, 0.31);
+}
+
+/** All fleet numbers on one canvas, ATLAS_COLS × ATLAS_ROWS cells, filled row by row from the top. */
+function numberAtlas(nums: number[]): THREE.CanvasTexture {
+  const W = 128;
+  const H = 64;
+  return tex(W * ATLAS_COLS, H * ATLAS_ROWS, (g) => {
+    nums.forEach((n, i) => {
+      const x = (i % ATLAS_COLS) * W;
+      const y = Math.floor(i / ATLAS_COLS) * H;
+      g.fillStyle = '#ffffff';
+      g.fillRect(x, y, W, H);
+      g.fillStyle = '#1d1d1f';
+      g.font = '800 40px system-ui, sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(String(n), x + W / 2, y + H / 2 + 2);
+      g.strokeStyle = '#1d1d1f';
+      g.lineWidth = 4;
+      g.strokeRect(x + 2, y + 2, W - 4, H - 4);
+    });
+  });
+}
 
 /** Icons the projectors throw, side by side: arrow, tick, number frame, star, ring. White on clear. */
 function iconAtlas(): THREE.CanvasTexture {
@@ -877,6 +944,8 @@ function iconAtlas(): THREE.CanvasTexture {
 
 /** Where the manual sort table stands. */
 export const TABLE = { x: -33, z: 22 };
+/** The hopper robots tip small parcels into (west of cell (0, 2)), at the start of the belt to the table. */
+export const DROP = { x: FLOOR.x0 - 1.15, z: FLOOR.z0 + 2 * FLOOR.cs };
 
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
 

@@ -83,34 +83,46 @@ function geometry(): Record<string, G> {
   return parts;
 }
 
+/** Materials shared by all forklifts (one set per kit), so their parts can be instanced. */
+const mats = new WeakMap<FloorKit, Record<'yellow' | 'black' | 'steel' | 'lights' | 'rear' | 'pallet' | 'load', THREE.Material>>();
+const loadGeo = {
+  pallet: new THREE.BoxGeometry(1.1, 0.12, 1.0).translate(0, 0.1, FORK_REACH),
+  box: new THREE.BoxGeometry(1.0, 0.8, 0.9).translate(0, 0.56, FORK_REACH),
+};
+
 export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   const p = geometry();
-  const yellow = k.std(0xe8b400, 0.45, 0.3, 0xf2c200);
-  const black = k.std(0x1b1c1f, 0.7, 0.3, 0x2a2c31);
-  const steel = k.std(0x50555e, 0.4, 0.8, 0x9aa0a8);
+  let M = mats.get(k);
+  if (!M) {
+    M = {
+      yellow: k.std(0xe8b400, 0.45, 0.3, 0xf2c200),
+      black: k.std(0x1b1c1f, 0.7, 0.3, 0x2a2c31),
+      steel: k.std(0x50555e, 0.4, 0.8, 0x9aa0a8),
+      lights: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.7, 1.4) }),
+      rear: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.1, 0.05) }),
+      pallet: k.std(0x8a6a44, 0.9, 0, 0xc49a6c),
+      load: k.std(0xffffff, 0.6, 0, 0xffffff),
+    };
+    mats.set(k, M);
+  }
   const g = new THREE.Group();
-  const add = (geo: G, mat: THREE.Material, parent: THREE.Object3D = g, edge: 'ink' | 'hull' | null = 'ink') => {
-    const m = new THREE.Mesh(geo, mat);
-    parent.add(m);
-    if (edge === 'ink') k.inkify(m, 35);
-    else if (edge === 'hull') k.outline(m, 0.02);
-    return m;
-  };
+  // Every part is instanced across all forklifts.
+  const add = (geo: G, mat: THREE.Material, parent: THREE.Object3D = g, color?: number) => k.batch(geo, mat, parent, color);
   k.blobUnder(g, 1.9, 3.6);
-  add(p.body!, yellow);
-  add(p.dark!, black);
-  add(p.wheels!, black, g, null);
-  add(p.hubs!, steel, g, null);
-  add(p.chains!, steel, g, null);
-  add(p.lights!, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.7, 1.4) }), g, null);
-  add(p.rear!, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.1, 0.05) }), g, null);
+  add(p.body!, M.yellow);
+  add(p.dark!, M.black);
+  add(p.wheels!, M.black);
+  add(p.hubs!, M.steel);
+  add(p.chains!, M.steel);
+  add(p.lights!, M.lights);
+  add(p.rear!, M.rear);
   const forks = new THREE.Group();
   forks.position.set(0, 0.15, 0);
   g.add(forks);
-  add(p.forks!, black, forks);
+  add(p.forks!, M.black, forks);
   if (load !== null) {
-    add(new THREE.BoxGeometry(1.1, 0.12, 1.0).translate(0, 0.1, FORK_REACH), k.std(0x8a6a44, 0.9, 0, 0xc49a6c), forks);
-    add(new THREE.BoxGeometry(1.0, 0.8, 0.9).translate(0, 0.56, FORK_REACH), k.std(load, 0.6, 0, load), forks);
+    add(loadGeo.pallet, M.pallet, forks);
+    add(loadGeo.box, M.load, forks, load);
   }
   // The driver, seated.
   const d = buildHuman(k, { shirt: 0x2f3b6b, trousers: 0x22283f, vest: 0xc8ff3a, helmet: 0xffffff });
