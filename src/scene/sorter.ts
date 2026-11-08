@@ -33,6 +33,8 @@ import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
 import { Life } from './life';
+import { HUMANS } from './people';
+import { FORKLIFTS } from './forklift';
 import { Xmas } from './xmas';
 import { XMAS } from '../sim/season';
 import { Party } from './party';
@@ -993,6 +995,8 @@ export class Sorter implements Scene3D {
   // Camera.
   private camMode: CamMode = 'auto';
   private follow: Parcel | null = null;
+  /** Something else being followed (after a click): a robot, a forklift or a person. */
+  private followThing: { obj: THREE.Object3D; h: number; kind: 'robot' | 'forklift' | 'person'; name: string; last: THREE.Vector3 } | null = null;
   private autoFollow = false;
   private lastShotBar = -1;
   /** Fly mode: a random tour past points of interest. */
@@ -1265,6 +1269,7 @@ export class Sorter implements Scene3D {
 
   caption(): string {
     if (this.camMode === 'visit') return this.pois[this.visitPoi]!.dept ?? '';
+    if (this.camMode === 'follow' && this.followThing) return `Following ${this.followThing.name}`;
     if (this.camMode === 'walk') return matchMedia('(pointer: coarse)').matches ? 'Walking · left thumb to walk, right thumb to look' : 'Walking · W A S D to move, drag to look, Shift to run, Esc to stop';
     const f = this.follow;
     if (!f || this.camMode === 'fly' || (this.camMode === 'auto' && !this.autoFollow)) return '';
@@ -1313,6 +1318,7 @@ export class Sorter implements Scene3D {
     } else if (id === 'cam' && (value === 'auto' || value === 'fly' || value === 'follow')) {
       this.camMode = value;
       this.follow = null;
+      this.followThing = null;
       this.autoFollow = false;
       try {
         localStorage.setItem(CAM_KEY, value);
@@ -1322,6 +1328,7 @@ export class Sorter implements Scene3D {
     } else if (id === 'speed') {
       this.setBeltSpeed(Number(value));
     } else if (id === 'next') {
+      this.followThing = null;
       if (this.camMode === 'fly' || this.camMode === 'visit') this.camMode = 'follow';
       this.autoFollow = true;
       this.pickFollow();
@@ -2711,7 +2718,21 @@ export class Sorter implements Scene3D {
     }
     const p = following ? this.follow : null;
     if (p && p.mode === 'fixed' && p.pathKind !== 'back') this.follow = null;
-    if (p) {
+    const th = this.camMode === 'follow' ? this.followThing : null;
+    if (th) {
+      // A robot, forklift or person: behind it and a little to the side, looking where it goes.
+      this.tour = null;
+      const c = th.obj.getWorldPosition(this.p);
+      const vel = this.n.copy(c).sub(th.last).setY(0);
+      th.last.copy(c);
+      c.y += th.h * 0.6;
+      if (dt > 0 && vel.lengthSq() > 1e-6) this.fwd.lerp(vel.normalize(), 1 - Math.exp(-dt * 2)).normalize();
+      const side = this.t.set(-this.fwd.z, 0, this.fwd.x);
+      const back = th.kind === 'person' ? 3.2 : th.kind === 'robot' ? 3.0 : 4.6;
+      this.want.copy(c).addScaledVector(this.fwd, -back).addScaledVector(side, back * 0.45);
+      this.want.y = clamp(c.y + back * 0.55, 1.2, HH - 0.8);
+      this.wantLook.copy(c).addScaledVector(this.fwd, 1.5);
+    } else if (p) {
       // Back in fly mode, the tour starts afresh from wherever the camera is.
       this.tour = null;
       const c = this.p.copy(p.pos);
@@ -4263,8 +4284,58 @@ export class Sorter implements Scene3D {
     return best;
   }
 
+  /**
+   * The robot, forklift or person nearest this screen point (within a few dozen pixels of
+   * where it shows), or null. Only things in the current look (day or night) count.
+   */
+  pickThing(clientX: number, clientY: number): { obj: THREE.Object3D; h: number; kind: 'robot' | 'forklift' | 'person'; name: string } | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const shown = (o: THREE.Object3D | null): boolean => {
+      for (let x = o; x; x = x.parent) if (!x.visible) return false;
+      return true;
+    };
+    const cands: { obj: THREE.Object3D; h: number; kind: 'robot' | 'forklift' | 'person'; name: string }[] = [
+      ...this.floor.robots.map((r) => ({ obj: r.g as THREE.Object3D, h: 0.6, kind: 'robot' as const, name: `robot ${r.num}` })),
+      ...FORKLIFTS.map((g) => ({ obj: g, h: 2.0, kind: 'forklift' as const, name: 'a forklift' })),
+      ...HUMANS.filter((r) => !FORKLIFTS.some((f) => f === r.parent)).map((r) => ({ obj: r, h: 1.75, kind: 'person' as const, name: 'a person' })),
+    ];
+    let best: (typeof cands)[number] | null = null;
+    let bd = 48;
+    const w = this.p;
+    for (const c of cands) {
+      if (!c.obj.parent || !shown(c.obj)) continue;
+      // Test the middle and the top of it, so a click anywhere on it counts.
+      for (const f of [0.3, 0.8]) {
+        c.obj.getWorldPosition(w);
+        w.y += c.h * f;
+        const dist = w.distanceTo(this.camera.position);
+        w.project(this.camera);
+        if (w.z > 1 || w.z < -1) continue;
+        const sx = rect.left + ((w.x + 1) / 2) * rect.width;
+        const sy = rect.top + ((1 - w.y) / 2) * rect.height;
+        // (Nearer things count a little more, so the one in front wins.)
+        const d = Math.hypot(sx - clientX, sy - clientY) * (0.8 + dist / 120);
+        if (d < bd) {
+          bd = d;
+          best = c;
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Follow a robot, forklift or person with the camera. */
+  followObject(t: { obj: THREE.Object3D; h: number; kind: 'robot' | 'forklift' | 'person'; name: string }): void {
+    if (this.camMode === 'walk') return;
+    this.camMode = 'follow';
+    this.follow = null;
+    this.autoFollow = false;
+    this.followThing = { ...t, last: t.obj.getWorldPosition(new THREE.Vector3()) };
+  }
+
   /** Follow this parcel with the camera (after clicking it). */
   followParcel(p: Parcel): void {
+    this.followThing = null;
     // (Not one resting in the store rack: the camera would only stand there.)
     if (p.mode === 'fixed' || p.mode === 'held') return;
     if (this.camMode !== 'follow' && this.camMode !== 'auto') this.camMode = 'follow';
