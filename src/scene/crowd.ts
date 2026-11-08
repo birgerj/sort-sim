@@ -108,8 +108,8 @@ export class Crowd {
       const pattern = Math.floor(beat / 4) % 3;
       this.tileXY.forEach(([x, z], i) => {
         const v = pattern === 0 ? Math.floor(Math.hypot(x - 40, z) / 3) : pattern === 1 ? Math.floor(x / 3.2) : Math.floor(x / 1.6) + Math.floor(z / 1.6);
-        const on = (v + beat) % (pattern === 2 ? 2 : 3) === 0;
-        this.tiles.setColorAt(i, on ? this.c.copy(s.cols[(v + beat) % s.cols.length]!) : this.c.setRGB(0.02, 0.02, 0.04));
+        const on = Math.abs(v + beat) % (pattern === 2 ? 2 : 3) === 0;
+        this.tiles.setColorAt(i, on ? this.c.copy(s.cols[(((v + beat) % s.cols.length) + s.cols.length) % s.cols.length]!) : this.c.setRGB(0.02, 0.02, 0.04));
       });
       if (this.tiles.instanceColor) this.tiles.instanceColor.needsUpdate = true;
     }

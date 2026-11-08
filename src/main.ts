@@ -34,6 +34,8 @@ const speed = Number(q.get('speed') ?? settings.speed);
 scene.setBeltSpeed(speed);
 const dept = q.get('dept');
 if (dept) scene.visit(dept, true);
+const rate = Number(q.get('rate'));
+if (rate > 0) settings.rate = rate;
 const showUi = q.get('ui') !== '0';
 const mute = q.get('mute') === '1' || !showUi;
 music.setVolume(settings.volume);

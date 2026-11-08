@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 
 import type { FloorKit } from './floor';
+import { Labels } from './labels';
 import { checkerPlate, sectionalDoor } from './textures';
 
 export type Cargo = 'cage' | 'box';
@@ -16,6 +17,12 @@ export interface TruckDoor {
   wallZ: number;
   dir: 1 | -1;
   cargo: Cargo;
+  /** Door number, destination city and its postcodes, for the screen above the door. */
+  number: number;
+  city: string;
+  pc: string;
+  /** During cleardown: still loading (the dock workers push the last cages in), so wait. */
+  hold?: () => boolean;
 }
 
 type State = 'open' | 'cleardown' | 'closing' | 'leaving' | 'away' | 'arriving' | 'opening';
@@ -29,14 +36,16 @@ interface Dock extends TruckDoor {
   door: THREE.Object3D;
   trailer: THREE.Group;
   slots: THREE.Object3D[];
+  /** What the screen shows now (redrawn when it changes). */
+  shown: string;
 }
 
 const L = 12; // trailer length
 const W = 3.1;
 const H = 3.7;
 const DOOR_H = 3.8;
-/** Loads per truck. */
-const CAP = 4;
+/** Loads after which a truck leaves on its own: two full roll cages (the rest go in at cleardown), or four boxes. */
+const CAP: Record<Cargo, number> = { cage: 2, box: 4 };
 const DUR: Record<Exclude<State, 'open'>, number> = { cleardown: 4, closing: 2, leaving: 4, away: 6, arriving: 4, opening: 2 };
 const NEXT: Record<Exclude<State, 'open'>, State> = { cleardown: 'closing', closing: 'leaving', leaving: 'away', away: 'arriving', arriving: 'opening', opening: 'open' };
 
@@ -47,6 +56,8 @@ export class Trucks {
   /** Cleardown warning lamps, one per door (flashing amber before the door closes). */
   private lamps: THREE.InstancedMesh;
   private readonly c = new THREE.Color();
+  /** Screens above the doors: destination, postcodes, and what the truck is doing. */
+  private screens: Labels;
 
   constructor(k: FloorKit, doors: TruckDoor[]) {
     const inside = k.std(0x1b1d22, 0.7, 0.3, 0xe6e9ed);
@@ -86,8 +97,18 @@ export class Trucks {
       k.put(door);
       const panel = k.batch(doorG, doorM, door);
       panel.scale.y = 0.6;
-      this.docks.push({ ...d, state: 'open', t0: 0, load: 0, reserved: 0, door: panel, trailer, slots });
+      this.docks.push({ ...d, state: 'open', t0: 0, load: 0, reserved: 0, door: panel, trailer, slots, shown: '' });
     }
+    this.screens = new Labels(doors.length, 3.4, 1.0, 340, 100);
+    const sm = new THREE.Matrix4();
+    const frame = k.std(0x1b1c20, 0.5, 0.3, 0x1d1d1f);
+    this.docks.forEach((d, i) => {
+      sm.makeRotationY(d.dir < 0 ? Math.PI : 0).setPosition(d.x, 6.6, d.wallZ + d.dir * 0.14);
+      this.screens.place(i, sm);
+      k.box('dscreen', frame, d.x, 6.6, d.wallZ + d.dir * 0.08, 3.6, 1.2, 0.1);
+    });
+    k.put(this.screens.mesh);
+    this.drawScreens();
     // Warning lamps on the wall beside each door, above the traffic light.
     this.lamps = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.16, 0.22, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial(), doors.length);
     const o = new THREE.Object3D();
@@ -99,6 +120,11 @@ export class Trucks {
     });
     this.lamps.frustumCulled = false;
     k.put(this.lamps);
+  }
+
+  /** In cleardown (warning, still loading the last things). */
+  clearing(i: number): boolean {
+    return this.docks[i]?.state === 'cleardown';
   }
 
   isOpen(i: number): boolean {
@@ -121,15 +147,16 @@ export class Trucks {
   update(bt: number): void {
     for (const d of this.docks) {
       if (d.state === 'open') {
-        if (d.load >= CAP) {
+        if (d.load >= CAP[d.cargo]) {
           // Cleardown: warn first, take nothing new.
           d.state = 'cleardown';
           d.t0 = Math.ceil(bt);
         }
-      } else if (d.state === 'cleardown' && bt >= d.t0 + DUR.cleardown && d.reserved > 0) {
+      } else if (d.state === 'cleardown' && bt >= d.t0 + DUR.cleardown && (d.reserved > 0 || d.hold?.())) {
         // Still something on its way out of the trailer: keep warning.
       } else if (bt >= d.t0 + DUR[d.state]) {
-        d.t0 += DUR[d.state];
+        // (After a held cleardown, the next state starts now, not when it would have.)
+        d.t0 = bt - (d.t0 + DUR[d.state]) > 1 ? Math.floor(bt) : d.t0 + DUR[d.state];
         d.state = NEXT[d.state];
         if (d.state === 'arriving') {
           d.load = 0;
@@ -138,7 +165,7 @@ export class Trucks {
       }
       const f = d.state === 'open' ? 1 : clamp01((bt - d.t0) / DUR[d.state]);
       // Door: rolled up (0.6 m showing) when open, down (3.8 m) when closed.
-      const down = d.state === 'closing' ? ease(f) : d.state === 'opening' ? 1 - ease(f) : d.state === 'open' ? 0 : 1;
+      const down = d.state === 'closing' ? ease(f) : d.state === 'opening' ? 1 - ease(f) : d.state === 'open' || d.state === 'cleardown' ? 0 : 1;
       d.door.scale.y = 0.6 + (DOOR_H - 0.6) * down;
       // Trailer: pulls away from the wall and comes back.
       const out = d.state === 'leaving' ? ease(f) : d.state === 'away' ? 1 : d.state === 'arriving' ? 1 - ease(f) : 0;
@@ -150,6 +177,36 @@ export class Trucks {
       this.lamps.setColorAt(this.docks.indexOf(d), on ? this.c.setRGB(3, 1.4, 0.1) : this.c.setRGB(0.25, 0.12, 0.02));
     }
     if (this.lamps.instanceColor) this.lamps.instanceColor.needsUpdate = true;
+    this.drawScreens();
+  }
+
+  /** Doors for the cleardown panel: number, city, postcodes and state. */
+  list(): { number: number; city: string; pc: string; state: State; load: number; cap: number }[] {
+    return this.docks.map((d) => ({ number: d.number, city: d.city, pc: d.pc, state: d.state, load: d.load, cap: CAP[d.cargo] }));
+  }
+
+  /** Start a cleardown at these doors (by index): the truck leaves with what it has. */
+  cleardown(idx: number[], bt: number): void {
+    for (const i of idx) {
+      const d = this.docks[i];
+      if (d && d.state === 'open') {
+        d.state = 'cleardown';
+        d.t0 = Math.ceil(bt);
+      }
+    }
+  }
+
+  private drawScreens(): void {
+    this.docks.forEach((d, i) => {
+      const status =
+        d.state === 'open' ? `Loading ${d.load}/${CAP[d.cargo]}` : d.state === 'cleardown' || d.state === 'closing' ? 'CLEARDOWN' : d.state === 'opening' ? 'Opening' : 'Truck on its way';
+      const key = status;
+      if (d.shown === key) return;
+      d.shown = key;
+      const warn = d.state === 'cleardown' || d.state === 'closing';
+      this.screens.set(i, `${d.number} · ${d.city}`, `${d.pc} · ${status}`, { bg: warn ? '#3a1f00' : '#101114', fg: '#ffffff', sub: warn ? '#ffb020' : d.state === 'open' ? '#5be0a0' : '#9aa0a8' });
+    });
+    this.screens.flush();
   }
 }
 

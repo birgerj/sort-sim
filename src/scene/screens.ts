@@ -29,6 +29,8 @@ export interface HubMap {
   /** Parcels on the loop (positions), and how many go round again. */
   parcels: [number, number][];
   recirculating: number;
+  /** Parcels waiting at the infeed (on the lanes and outside). */
+  queue: number;
 }
 
 const PURPLE = '#6b3fd1';
@@ -114,7 +116,7 @@ export class Screens {
     const clear = m.doors.filter((d) => d.state === 'cleardown' || d.state === 'closing').length;
     const away = m.doors.filter((d) => d.state !== 'open' && d.state !== 'cleardown' && d.state !== 'closing').length;
     const full = m.chutes.filter((c) => c.fill >= 1).length;
-    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}`, 330, 27);
+    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}   ·   infeed queue ${m.queue}`, 330, 27);
     // Hall outline.
     g.strokeStyle = '#3a3d44';
     g.lineWidth = 2;

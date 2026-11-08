@@ -4,7 +4,7 @@
  * remembered in localStorage; URL parameters override them for one visit.
  */
 import type { Music } from '../audio/music';
-import { BELT_SPEEDS, type Quality, type Sorter } from '../scene/sorter';
+import { BELT_SPEEDS, Sorter, type Quality } from '../scene/sorter';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
 
@@ -12,6 +12,8 @@ export interface Settings {
   time: TimeMode;
   /** Belt speed multiple (see BELT_SPEEDS). */
   speed: number;
+  /** Parcels per minute into the hub. */
+  rate: number;
   quality: Quality;
   muted: boolean;
   volume: number;
@@ -20,7 +22,7 @@ export interface Settings {
 const KEY = 'sortsim.settings';
 
 export function loadSettings(): Settings {
-  const s: Settings = { time: 'day', speed: 1, quality: 'normal', muted: false, volume: 0.8 };
+  const s: Settings = { time: 'day', speed: 1, rate: 150, quality: 'normal', muted: false, volume: 0.8 };
   try {
     Object.assign(s, JSON.parse(localStorage.getItem(KEY) ?? '{}'));
   } catch {
@@ -54,6 +56,8 @@ export class Hud {
   private speedBtns = new Map<number, HTMLButtonElement>();
   private qualityBtns = new Map<Quality, HTMLButtonElement>();
   private soundBtn!: HTMLButtonElement;
+  private rateOut!: HTMLElement;
+  private panel: HTMLElement | null = null;
   private hideTimer = 0;
   private hidden = false;
 
@@ -86,6 +90,16 @@ export class Hud {
     for (const [id, b] of this.timeBtns) b.classList.toggle('on', id === this.settings.time);
     for (const [v, b] of this.speedBtns) b.classList.toggle('on', v === this.scene.beltSpeed());
     for (const [v, b] of this.qualityBtns) b.classList.toggle('on', v === this.settings.quality);
+    const most = this.scene.infeedCapacity();
+    const q = this.scene.backlog;
+    const txt = `${this.settings.rate}/min${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
+    if (this.rateOut.textContent !== txt) this.rateOut.textContent = txt;
+    if (this.panel) {
+      this.refreshPanel();
+      // Stay clear of the control bar below.
+      const h = `${Math.max(160, window.innerHeight - this.bar.offsetHeight - 48)}px`;
+      if (this.panel.style.maxHeight !== h) this.panel.style.maxHeight = h;
+    }
     const on = this.music.audible;
     this.soundBtn.textContent = on ? 'Sound on' : 'Sound off';
     this.soundBtn.classList.toggle('on', on);
@@ -142,6 +156,25 @@ export class Hud {
     const next = el('button', '', 'Next parcel');
     next.onclick = () => this.scene.setControl('next', true);
     cam.append(next);
+    const hub = this.group('Hub');
+    const clear = el('button', '', 'Cleardown…');
+    clear.title = 'Choose dock doors whose trucks should leave now';
+    clear.onclick = () => this.togglePanel();
+    const rate = el('input');
+    rate.type = 'range';
+    rate.min = '20';
+    rate.max = String(Sorter.MAX_RATE);
+    rate.step = '10';
+    rate.value = String(this.settings.rate);
+    rate.setAttribute('aria-label', 'Parcels per minute');
+    this.rateOut = el('span', 'rate');
+    rate.oninput = () => {
+      this.settings.rate = Number(rate.value);
+      this.scene.setRate(this.settings.rate);
+      saveSettings(this.settings);
+    };
+    this.scene.setRate(this.settings.rate);
+    hub.append(clear, rate, this.rateOut);
     const belt = this.group('Belt speed');
     for (const v of BELT_SPEEDS) {
       // 2 m per beat at the music's tempo.
@@ -192,6 +225,79 @@ export class Hud {
       saveSettings(this.settings);
     };
     music.append(this.soundBtn, vol);
+  }
+
+  /** The cleardown panel: doors 1–40 with their destinations; pick some and start. */
+  private togglePanel(): void {
+    if (this.panel) {
+      this.panel.remove();
+      this.panel = null;
+      return;
+    }
+    const p = el('div', 'panel');
+    const head = el('div', 'head');
+    head.append(el('h2', '', 'Cleardown'), el('p', '', 'Pick dock doors: their trucks leave with what they have, and new empty ones come. 1–20 roll cages, 21–40 robot boxes.'));
+    const grid = el('div', 'doors');
+    for (const d of this.scene.doors()) {
+      const b = el('button', 'door');
+      b.dataset.n = String(d.number);
+      b.append(el('b', '', String(d.number)), el('span', 'city', d.city), el('span', 'pc', d.pc), el('span', 'st'));
+      b.onclick = () => {
+        if (b.classList.contains('busy')) return;
+        b.classList.toggle('on');
+        this.panelCount();
+      };
+      grid.append(b);
+    }
+    const row = el('div', 'row');
+    const all = el('button', '', 'All');
+    all.onclick = () => {
+      grid.querySelectorAll<HTMLButtonElement>('.door:not(.busy)').forEach((b) => b.classList.add('on'));
+      this.panelCount();
+    };
+    const none = el('button', '', 'None');
+    none.onclick = () => {
+      grid.querySelectorAll('.door').forEach((b) => b.classList.remove('on'));
+      this.panelCount();
+    };
+    const go = el('button', 'primary go', 'Start cleardown');
+    go.onclick = () => {
+      const n = [...grid.querySelectorAll<HTMLButtonElement>('.door.on')].map((b) => Number(b.dataset.n));
+      if (!n.length) return;
+      this.scene.cleardown(n);
+      this.togglePanel();
+    };
+    const close = el('button', '', 'Close');
+    close.onclick = () => this.togglePanel();
+    row.append(all, none, go, close);
+    p.append(head, grid, row);
+    this.root.append(p);
+    this.panel = p;
+    this.refreshPanel();
+    this.panelCount();
+  }
+
+  private panelCount(): void {
+    const go = this.panel?.querySelector<HTMLButtonElement>('.go');
+    if (!go) return;
+    const n = this.panel!.querySelectorAll('.door.on').length;
+    go.textContent = n ? `Start cleardown (${n})` : 'Start cleardown';
+    go.disabled = !n;
+  }
+
+  /** Door states in the panel (a door already in cleardown or away cannot be picked). */
+  private refreshPanel(): void {
+    const doors = this.scene.doors();
+    this.panel?.querySelectorAll<HTMLButtonElement>('.door').forEach((b) => {
+      const d = doors.find((x) => x.number === Number(b.dataset.n));
+      if (!d) return;
+      const busy = d.state !== 'open';
+      const st = busy ? (d.state === 'cleardown' || d.state === 'closing' ? 'Cleardown' : d.state === 'opening' ? 'Opening' : 'Truck away') : `Loading ${d.load}/${d.cap}`;
+      const span = b.querySelector('.st')!;
+      if (span.textContent !== st) span.textContent = st;
+      b.classList.toggle('busy', busy);
+      if (busy) b.classList.remove('on');
+    });
   }
 
   setSpeed(v: number): void {
@@ -259,6 +365,8 @@ export class Hud {
     // Any movement, tap or key brings it back.
     this.hideTimer = window.setTimeout(() => {
       if (this.bar.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement) return this.wake();
+      // Keep the controls up while the cleardown panel is open.
+      if (this.panel) return this.wake();
       this.hidden = true;
       this.root.classList.add('idle');
       (document.activeElement as HTMLElement | null)?.blur?.();

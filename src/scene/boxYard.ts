@@ -14,8 +14,8 @@ import { buildForklift, FORK_REACH, type ForkliftModel } from './forklift';
 /** Centre line of the forklift aisle, and the wall. */
 export const AISLE_Z = 32.3;
 const WALL_Z = 34;
-/** 20 dock doors on the south wall: [x, number, in use]; every fourth is closed (no truck). */
-export const DOORS: [number, number, boolean][] = Array.from({ length: 20 }, (_, k) => [-16 + 6 * k, 21 + k, k % 4 !== 3]);
+/** 20 dock doors on the south wall: [x, number, in use]; door k serves south city k (its two boxes stand right by it). */
+export const DOORS: [number, number, boolean][] = Array.from({ length: 20 }, (_, k) => [-16 + 6 * k, 21 + k, true]);
 /** Forklifts; each serves one stretch of the row of boxes, with the doors in it. */
 const LIFTS = 4;
 
@@ -167,10 +167,9 @@ export class BoxYard {
   private plan(l: Lift, b: number): void {
     const bin = this.floor.bins[b]!;
     const keys: Key[] = [];
-    // The nearest door with a truck at it (none: try again later).
-    let door = Infinity;
-    for (const [x, , open] of DOORS) if (open && this.truck.open(x) && Math.abs(x - bin.x) < Math.abs(door - bin.x)) door = x;
-    if (!Number.isFinite(door)) {
+    // The door of the box's city; if its truck is not there (cleardown, away), try again later.
+    const door = DOORS[bin.city]![0];
+    if (!this.truck.open(door)) {
       this.jobs.push(b);
       return;
     }
