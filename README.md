@@ -35,7 +35,7 @@ sound is generated in code.
    at a set rate; when that is more than the lanes take, they queue at the
    buffers after the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
-   parcel carries a Dutch postcode (four digits): about 88% for the 20 largest
+   parcel carries a postcode of the chosen country: about 88% for the 20 largest
    municipalities (north docks), about 12% for the next 20 (robots; fewer while
    their pickup tables fill up), and now and
    then an exception for manual sorting. When its chute is full, a parcel
@@ -79,6 +79,7 @@ do one move per beat.
 
 - **Hub time** starts at 18:00; a beat is 15 seconds of hub time.
 - **Departures:** every door has a truck leaving every hour (the doors' times are spread over the hour). The cleardown starts 6 minutes before; a truck also leaves early when it is full by volume, weight or places. A departure more than 2 minutes after its cutoff counts as late.
+- **Country** (Settings): the Netherlands, Belgium, France, Germany, Finland, Sweden, Moldova, India or Australia; by default from the browser's language. Its 40 largest towns or municipalities (with their postcode ranges) are the 40 destinations; names, streets and address format follow the country.
 - **Destinations** are weighted by inhabitants (rounded, about 2024); within a city the postcodes are equally likely.
 - **Sorter:** a parcel longer than a tray takes two trays. The scan tunnel measures and weighs every parcel (and the volumetric weight, L×W×H/5000); too big or too heavy goes to manual sorting, as do labels that cannot be read (about 2%, of which the loop scanners still read some) and parcels whose chute stayed full for 3 rounds. Now and then a parcel lands in the next dock chute (a missort): the worker puts it in the return tote and it goes back to the infeed.
 - **Fill by volume:** roll cages, boxes and trailers are full by volume (or weight, or places), not by count. Dock belts are full when the parcels reach back about 4 m.
@@ -100,9 +101,9 @@ Sort sim is a progressive web app: install it from the browser (the **Install ap
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |
 | Sound on/off | `M` |
 | Hide the controls | `H` |
-| Quality: Low / Normal / High / Ultra | buttons (`?quality=`) |
+| Settings…: graphics quality (Low / Normal / High / Ultra) and country | button (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
 
-Click or tap a parcel to see its shipping label (a made-up recipient, with a common Dutch surname and random initials, at a real street in the parcel's city; postcode letters and house number are random) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
+Click or tap a parcel to see its shipping label (a made-up recipient: a common surname of the country with a first name, or initials in the Netherlands, at a street in the parcel's town, real ones in the Netherlands; written the way that country writes addresses) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
 
 The music follows the parcels per minute: its tempo moves (3 BPM per bar) between 60 BPM at the lowest rate and 160 BPM at the highest, and its style with it, four of them: ambient with warm pads below 82 BPM, deep (thin pads, soft beat) up to 112, pounding house (claps, open hats, off-beat bass, chord stabs, no pads) up to 136, and acid techno above. The whole hall runs on the beat, so it speeds up and slows down with the music.
 

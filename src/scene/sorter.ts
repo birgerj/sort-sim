@@ -15,6 +15,7 @@
 // a purple workstation, magenta GPU racks, people and hanging signs, and
 // a blue outline on the followed parcel.
 import * as THREE from 'three';
+import { pcDigits } from '../sim/countries';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -1441,7 +1442,7 @@ export class Sorter implements Scene3D {
     if (p) {
       g.textBaseline = 'top';
       g.font = '700 17px system-ui, sans-serif';
-      g.fillText(String(p.pc), x + 5, y + 4);
+      g.fillText(pcDigits(p.pc), x + 5, y + 4);
       g.font = '600 10px system-ui, sans-serif';
       const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
       g.fillText(city.slice(0, 15), x + 5, y + 22);
@@ -1540,7 +1541,7 @@ export class Sorter implements Scene3D {
       if (!p) return;
       p.mode = 'robot';
       p.bot = e.bot;
-      this.floor.stationCode(e.station, p.pos, String(p.pc), p.h + 0.01, this.chutes[p.dest]!.col);
+      this.floor.stationCode(e.station, p.pos, pcDigits(p.pc), p.h + 0.01, this.chutes[p.dest]!.col);
       p.rideAt = Math.floor(this.bt);
       p.dropAt = undefined;
       this.botParcel.set(e.bot, p);
@@ -2000,7 +2001,7 @@ export class Sorter implements Scene3D {
     t.col.copy(p.glow);
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     for (const side of [0, 1]) {
-      if (t.read) this.scanLabels.set(t.screen * 2 + side, `${p.pc} ${city}`, `${String(p.id).padStart(8, '0')} · chute ${p.dest >= 0 ? p.dest + 1 : p.buffered !== undefined ? `${p.buffered + 1} → buffer` : 'store'}`, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+      if (t.read) this.scanLabels.set(t.screen * 2 + side, `${pcDigits(p.pc)} ${city}`, `${String(p.id).padStart(8, '0')} · chute ${p.dest >= 0 ? p.dest + 1 : p.buffered !== undefined ? `${p.buffered + 1} → buffer` : 'store'}`, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
       else this.scanLabels.set(t.screen * 2 + side, 'NO READ', String(p.id).padStart(8, '0'), { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
     }
     this.scanDirty = true;
