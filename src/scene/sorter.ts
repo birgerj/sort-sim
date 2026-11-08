@@ -26,6 +26,8 @@ import { RobotFloor } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
 import { BoxYard } from './boxYard';
 import { buildForklift } from './forklift';
+import { buildHuman } from './people';
+import { dayFloor, dayWall } from './textures';
 import type { FleetEvent } from '../sim/robotFleet';
 
 type V3 = THREE.Vector3;
@@ -1806,6 +1808,26 @@ export class Sorter implements Scene3D {
   }
 
   /** Black outline for a mesh, shown by day. */
+  /**
+   * Day outline for rounded shapes (where edge lines would miss the silhouette):
+   * a copy of the mesh drawn inside out and pushed out along its normals.
+   */
+  outline(m: THREE.Mesh, width = 0.02): void {
+    let mat = this.outlineMats.get(width);
+    if (!mat) {
+      mat = new THREE.MeshBasicMaterial({ color: DAY.ink, side: THREE.BackSide });
+      mat.onBeforeCompile = (sh) => {
+        sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed += normalize(normal) * ${width.toFixed(4)};`);
+      };
+      this.outlineMats.set(width, mat);
+    }
+    const h = new THREE.Mesh(m.geometry, mat);
+    m.add(h);
+    this.dayOnly.push(h);
+  }
+
+  private outlineMats = new Map<number, THREE.MeshBasicMaterial>();
+
   inkify(m: THREE.Mesh, angle = 25): void {
     const l = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, angle), this.ink);
     m.add(l);
@@ -2417,15 +2439,26 @@ export class Sorter implements Scene3D {
       g.lineWidth = 2;
       g.strokeRect(0, 0, 64, 64);
     });
-    grid.repeat.set(HW / 4, HZ / 2);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW, HZ * 2), new THREE.MeshStandardMaterial({ color: DAY.floor, map: grid, roughness: 0.95, metalness: 0 }));
+    void grid;
+    const slabs = dayFloor().clone();
+    slabs.repeat.set(HW / 6, (HZ * 2) / 6);
+    slabs.needsUpdate = true;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW, HZ * 2), new THREE.MeshStandardMaterial({ color: DAY.floor, map: slabs, roughness: 0.95, metalness: 0 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.x = HCX;
     this.put(floor);
     // Flat walls and ceiling, as in a drawing.
-    const wall = new THREE.MeshBasicMaterial({ color: DAY.wall, side: THREE.DoubleSide });
+    // Cladding with a band of high windows.
+    const cladding = (len: number) => {
+      const t = dayWall().clone();
+      t.repeat.set(len / 8, 1);
+      t.needsUpdate = true;
+      return new THREE.MeshBasicMaterial({ color: DAY.wall, map: t, side: THREE.DoubleSide });
+    };
+    const wall = cladding(HZ * 2);
+    const longWall = cladding(HW);
     for (const z of [-HZ, HZ]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HW, HH), wall);
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(HW, HH), longWall);
       w.position.set(HCX, HH / 2, z);
       this.put(w);
     }
@@ -2540,27 +2573,20 @@ export class Sorter implements Scene3D {
 
   /** A person in the illustration style: white shirt, blue trousers, cap. */
   person(x: number, z: number, ry: number): void {
-    const c = Math.cos(ry);
-    const sn = Math.sin(ry);
-    const at = (lx: number, lz: number): [number, number] => [x + lx * c + lz * sn, z - lx * sn + lz * c];
-    const shirt = this.std(0xffffff, 0.9, 0);
-    const trousers = this.std(0x3d4b8f, 0.9, 0);
-    for (const lx of [-0.14, 0.14]) {
-      const [px, pz] = at(lx, 0);
-      this.box('legs', trousers, px, 0.45, pz, 0.2, 0.9, 0.22, undefined, ry);
-    }
-    this.box('shirt', shirt, x, 1.3, z, 0.6, 0.8, 0.32, undefined, ry);
-    for (const lx of [-0.38, 0.38]) {
-      const [px, pz] = at(lx, 0.08);
-      this.box('shirt', shirt, px, 1.3, pz, 0.14, 0.7, 0.16, undefined, ry);
-    }
-    const head = this.mesh(new THREE.SphereGeometry(0.2, 14, 10), this.std(0xf3d3b5, 0.9, 0), x, 1.95, z);
-    this.dayOnly.push(head);
-    this.inkify(head, 60);
-    const cap = this.mesh(new THREE.CylinderGeometry(0.2, 0.21, 0.12, 14), this.std(0x2f3b6b, 0.9, 0), x, 2.1, z);
-    this.dayOnly.push(cap);
-    this.inkify(cap, 60);
+    const n = this.people++;
+    const h = buildHuman(this, {
+      shirt: [0xffffff, 0x2fa58f, 0xf3f4f6, 0x6b3fd1][n % 4]!,
+      trousers: [0x3d4b8f, 0x2a2c31][n % 2]!,
+      cap: [0x2f3b6b, 0x2fa58f, 0x1755fe][n % 3]!,
+      skin: [0xf3d3b5, 0xc68e64, 0x8d5a3b][n % 3]!,
+    }, { x, z, ry });
+    // A little life: arms at different angles.
+    h.armL.rotation.x = -0.15 - (n % 3) * 0.2;
+    h.armR.rotation.x = -0.4 + (n % 2) * 0.3;
   }
+
+  private people = 0;
+
 
   /** A white parcel trolley with a few boxes on it. */
   private trolley(x: number, z: number): void {
