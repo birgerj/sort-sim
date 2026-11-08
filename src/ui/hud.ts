@@ -164,6 +164,7 @@ export class Hud {
       ['low', 'Low', 'Fastest: pixel ratio 1'],
       ['normal', 'Normal', 'Outlines, flat shading, contact shadows'],
       ['high', 'High', 'Also ambient occlusion, sun shadows, glossy night floor, depth of field'],
+      ['ultra', 'Ultra', 'For laptops and desktops: 2× supersampling, finer and wider shadows, more ambient occlusion'],
     ] as const) {
       const b = el('button', '', label);
       b.title = title;

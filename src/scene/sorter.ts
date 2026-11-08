@@ -103,7 +103,7 @@ const FIRST_STATION_S = 147;
  * contact shadows (always on). high: also ambient occlusion, sun shadows around the
  * camera, a glossy floor at night and depth of field when following a parcel.
  */
-export type Quality = 'low' | 'normal' | 'high';
+export type Quality = 'low' | 'normal' | 'high' | 'ultra';
 /** x of the wall columns (south wall; the north ones stand 2.4 m further east). */
 const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }, (_, k) => WX + 19 + 24 * k);
 
@@ -1012,6 +1012,7 @@ export class Sorter implements Scene3D {
   resize(w: number, h: number, ratio: number): void {
     const r = Math.max(0.3, ratio);
     if (this.renderer.getPixelRatio() !== r) {
+      this.ink.pixelRatio = r;
       this.renderer.setPixelRatio(r);
       this.composer.setPixelRatio(r);
     }
@@ -1178,7 +1179,7 @@ export class Sorter implements Scene3D {
     });
     this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown });
     this.updateCamera(dt, bar, i.travelSpeed);
-    if (this.quality === 'high') {
+    if (this.quality === 'high' || this.quality === 'ultra') {
       // The sun stands high in the south-east; its shadow box is centred where the camera looks.
       this.keyLight.position.copy(this.look).add(this.t.set(25, 45, 30));
       this.keyLight.target.position.copy(this.look);
@@ -1213,7 +1214,8 @@ export class Sorter implements Scene3D {
 
   setQuality(q: Quality): void {
     if (q === this.quality) return;
-    const shadows = q === 'high';
+    const hq = q === 'high' || q === 'ultra';
+    const shadows = hq;
     if (shadows !== this.renderer.shadowMap.enabled) {
       this.renderer.shadowMap.enabled = shadows;
       // Shadow maps change the shader programs.
@@ -1223,7 +1225,17 @@ export class Sorter implements Scene3D {
       });
     }
     this.keyLight.castShadow = shadows;
-    this.gtao.enabled = q === 'high';
+    this.gtao.enabled = hq;
+    // Ultra (laptops and desktops): finer shadows over a larger area and more AO samples.
+    const ultra = q === 'ultra';
+    this.keyLight.shadow.mapSize.setScalar(ultra ? 4096 : 2048);
+    const sc = this.keyLight.shadow.camera;
+    sc.left = sc.bottom = ultra ? -55 : -36;
+    sc.right = sc.top = ultra ? 55 : 36;
+    sc.updateProjectionMatrix();
+    this.keyLight.shadow.map?.dispose();
+    this.keyLight.shadow.map = null as unknown as THREE.WebGLRenderTarget;
+    this.gtao.updateGtaoMaterial({ samples: ultra ? 24 : 12, radius: ultra ? 0.5 : 0.35 });
     this.quality = q;
     this.dayShown = null; // re-apply the look (mirror floor)
     this.applyTheme(this.day);
@@ -2142,8 +2154,9 @@ export class Sorter implements Scene3D {
     for (const o of this.nightOnly) o.visible = !show;
     this.scene.environment = show ? null : this.nightEnv;
     // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
-    if (!show && this.quality === 'high' && !this.mirror) this.mirror = this.buildMirror();
-    if (this.mirror) this.mirror.visible = !show && this.quality === 'high';
+    const hq = this.quality === 'high' || this.quality === 'ultra';
+    if (!show && hq && !this.mirror) this.mirror = this.buildMirror();
+    if (this.mirror) this.mirror.visible = !show && hq;
     // Flat, bright colours by day, like the illustration; filmic tone mapping for the club.
     this.renderer.toneMapping = show ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
     drawBelt(this.beltTex, show);
@@ -2564,9 +2577,17 @@ export class Sorter implements Scene3D {
         end.x = RobotFloor.stationX(end.x);
         end.z = STATION_Z;
       }
-      const path = Path.fillet([E, at(0.2, 0.9, LOOP_Y), at(1.6, 3, LOOP_Y - 1.1), end], 2.5);
-      geo.chute!.push(extrude(path, [[-0.75, 0.45], [-0.68, 0], [0.68, 0], [0.75, 0.45]], 0.9, path.len));
-      geo.sChute!.push(extrude(path, [[-0.77, 0.4], [-0.77, 0.32]], 0.9, path.len), extrude(path, [[0.77, 0.4], [0.77, 0.32]], 0.9, path.len));
+      // From the tray, over the edge of the track (the mouth, just below tray height), down a
+      // smooth S-curve, and level for the last metre so parcels run straight onto the dock belt
+      // or the pickup table, square to it and at the same height.
+      const mouth = at(0.5, 0.85, LOOP_Y - 0.08);
+      const run = end.clone().addScaledVector(N, -1.1).setY(end.y + 0.06);
+      const path = Path.fillet([E, mouth, at(1.2, 1.9, LOOP_Y - 0.35), run, end], 1.4);
+      const s0 = E.distanceTo(mouth) - 0.02;
+      geo.chute!.push(extrude(path, [[-0.72, 0.42], [-0.62, 0], [0.62, 0], [0.72, 0.42]], s0, path.len));
+      geo.sChute!.push(extrude(path, [[-0.74, 0.38], [-0.74, 0.3]], s0, path.len), extrude(path, [[0.74, 0.38], [0.74, 0.3]], s0, path.len));
+      // A lip that bridges the gap between the tray edge and the chute.
+      this.box('chutelip', legMat, mouth.x - N.x * 0.08, LOOP_Y - 0.12, mouth.z - N.z * 0.08, Math.abs(N.x) * 0.2 + Math.abs(T.x) * 1.3, 0.04, Math.abs(N.z) * 0.2 + Math.abs(T.z) * 1.3);
       legs(path, 1.2, path.len - 0.6, 0.7);
       const col = new THREE.Color().setHSL(k / CHUTES.length, 0.85, 0.55);
       const lamp = new THREE.MeshBasicMaterial({ color: 0x000000 });
@@ -3083,7 +3104,7 @@ export class Sorter implements Scene3D {
 
     // People and parcel trolleys.
     this.person(-57, 14, Math.PI / 2);
-    this.person(40, 16.4, Math.PI);
+    this.person(38.2, 16.4, Math.PI);
     this.person(LIFT_X - 2, -6, -Math.PI / 2);
     this.person(-30, -8, 0.4);
     this.person(EX - 8, 18, Math.PI * 0.8);

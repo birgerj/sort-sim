@@ -8,7 +8,7 @@
  *   mute=1                 no start screen, no sound
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
  *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
- *   quality=low|normal|high  render quality (high: ambient occlusion, sun shadows,
+ *   quality=low|normal|high|ultra  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
 import './ui/style.css';
@@ -42,10 +42,12 @@ const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi
 document.body.append(hud.root);
 
 const ql = q.get('quality');
-if (ql === 'low' || ql === 'normal' || ql === 'high') settings.quality = ql;
+if (ql === 'low' || ql === 'normal' || ql === 'high' || ql === 'ultra') settings.quality = ql;
 const resize = () => {
-  const maxRatio = { low: 1, normal: 1.5, high: 2 }[settings.quality];
-  scene.resize(window.innerWidth, window.innerHeight, Math.min(window.devicePixelRatio || 1, maxRatio));
+  const dpr = window.devicePixelRatio || 1;
+  // Ultra renders at least at 2× (supersampling on ordinary screens) for crisp lines.
+  const ratio = settings.quality === 'ultra' ? Math.min(3, Math.max(2, dpr)) : Math.min(dpr, { low: 1, normal: 1.5, high: 2 }[settings.quality]);
+  scene.resize(window.innerWidth, window.innerHeight, ratio);
 };
 scene.setQuality(settings.quality);
 hudQuality = () => {
