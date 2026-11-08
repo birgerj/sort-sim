@@ -38,6 +38,7 @@ import { Batcher } from './batch';
 import { Trucks } from './trucks';
 import { Labels } from './labels';
 import { BPM } from '../audio/composer';
+import { addressFor, type Address } from '../sim/addresses';
 import { CITIES, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
@@ -575,7 +576,7 @@ function noise(g: CanvasRenderingContext2D, w: number, h: number, base: number, 
 /** 'dock': at a truck dock, moved by the Docks (worker or slide into a roll cage). */
 type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual' | 'held';
 
-interface Parcel {
+export interface Parcel {
   id: number;
   w: number;
   h: number;
@@ -2170,6 +2171,7 @@ export class Sorter implements Scene3D {
       const k = counts[p.shape]!;
       if (k >= MAX_PARCELS) continue;
       counts[p.shape]!++;
+      this.instParcels[p.shape]![k] = p;
       this.n.set(0, 1, 0).applyQuaternion(p.q);
       o.position.copy(p.pos).addScaledVector(this.n, p.h / 2);
       o.quaternion.copy(p.q);
@@ -3973,6 +3975,81 @@ export class Sorter implements Scene3D {
   humLevel(): number {
     return Math.min(1, 0.35 + 0.15 * this.speed) * (this.dayShown === false ? 0.5 : 1);
   }
+
+  /** Which parcel is under this screen point (null if none). */
+  pickParcel(clientX: number, clientY: number): Parcel | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    this.ray.setFromCamera(this.ndc, this.camera);
+    let best: Parcel | null = null;
+    let bd = Infinity;
+    this.shapes.forEach((set, k) => {
+      // (Instances move every frame: the bounds are worked out afresh.)
+      set.mesh.boundingSphere = null;
+      for (const hit of this.ray.intersectObject(set.mesh, false)) {
+        const p = hit.instanceId !== undefined ? this.instParcels[k]![hit.instanceId] : undefined;
+        if (p && !p.dead && hit.distance < bd) {
+          bd = hit.distance;
+          best = p;
+        }
+      }
+    });
+    return best;
+  }
+
+  /** Follow this parcel with the camera (after clicking it). */
+  followParcel(p: Parcel): void {
+    // (Not one resting in the store rack: the camera would only stand there.)
+    if (p.mode === 'fixed' || p.mode === 'held') return;
+    if (this.camMode !== 'follow' && this.camMode !== 'auto') this.camMode = 'follow';
+    this.follow = p;
+    this.autoFollow = true;
+  }
+
+  /** What its label says, and where it is now. */
+  parcelInfo(p: Parcel): { id: string; address: Address; route: string; where: string; kg: string; size: string; noread: boolean } {
+    const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
+    const north = NORTH_CITIES.findIndex((c) => c.name === city);
+    const south = SOUTH_CITIES.findIndex((c) => c.name === city);
+    const route = north >= 0 ? `Door ${north + 1} · chute ${p.dest + 1}` : south >= 0 ? `Door ${21 + south} · robots` : 'Store';
+    const kg = (p.w * p.h * p.d * (p.shape === 1 ? 30 : p.shape === 2 ? 45 : 38) + 0.15).toFixed(1);
+    const cm = (x: number) => Math.round(x * 100);
+    return {
+      id: String(p.id).padStart(8, '0'),
+      address: addressFor(p.id, p.pc, city),
+      route,
+      where: this.parcelWhere(p),
+      kg,
+      size: `${cm(p.d)} × ${cm(p.w)} × ${cm(p.h)} cm`,
+      noread: !!p.noread,
+    };
+  }
+
+  private parcelWhere(p: Parcel): string {
+    if (p.dead) return 'Gone with the truck';
+    switch (p.mode) {
+      case 'path':
+        return p.pathKind === 'lane' ? (p.scanned ? 'On the infeed, scanned' : 'On the infeed') : p.pathKind === 'chute' ? 'Down its chute' : p.pathKind === 'dock' ? 'On the belt to its dock' : p.pathKind === 'reject' ? 'To manual sorting' : 'To or from the store';
+      case 'loop':
+        return (p.laps ?? 0) > 0 ? `On the sorter (round ${(p.laps ?? 0) + 1}: its chute was full)` : 'On the sorter';
+      case 'table':
+        return 'Waiting for a robot';
+      case 'robot':
+        return `On robot ${this.floor.robotNumber(p.bot!)}`;
+      case 'dock':
+        return 'With the dock worker';
+      case 'held':
+        return p.holder && this.floor.bins.some((b) => b.g === p.holder) ? 'In a box, for the truck' : 'In a roll cage, for the truck';
+      case 'manual':
+        return 'At manual sorting';
+      default:
+        return 'In the store';
+    }
+  }
+
+  private readonly ray = new THREE.Raycaster();
+  private readonly ndc = new THREE.Vector2();
+  private readonly instParcels: Parcel[][] = [[], [], []];
 
   setRate(perMin: number): void {
     this.rate = clamp(perMin, 0, Sorter.MAX_RATE);

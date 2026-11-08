@@ -83,7 +83,7 @@ do one move per beat.
 | Hide the controls | `H` |
 | Quality: Low / Normal / High / Ultra | buttons (`?quality=`) |
 
-Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
+Click or tap a parcel to see its shipping label (a made-up recipient, with a common Dutch surname and random initials, at a real street in the parcel's city; postcode letters and house number are random) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
 
 The music follows the parcels per minute: its tempo moves (3 BPM per bar) between 60 BPM at the lowest rate and 160 BPM at the highest, and its style with it: ambient below 82 BPM, the steady song, driving techno from 112, and an acid bass line from 136. The whole hall runs on the beat, so it speeds up and slows down with the music.
 
