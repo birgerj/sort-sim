@@ -39,9 +39,11 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/types.ts` | `SceneInput` (what the scene gets every frame) and control types. |
 | `src/scene/sorter.ts` | The `Sorter` scene: renderer, post-processing, hall, infeed, loop, chutes, store and lift, parcels, club (night), day scenery, camera and tour. Owns the kit (`box`, `std`, `put`, `inkify`, `person`, `sign`) that the other scene modules use. |
 | `src/scene/floor.ts` | `RobotFloor`: pickup stations, boxes on pallets, robots, flow projectors (all of them, including over the dock belts), manual sort table, floor details. |
-| `src/scene/docks.ts` | `Docks`: north dock doors, roll cages and dock workers (work by day, dance by night). Also `buildDockDoor`, shared with the south wall. |
+| `src/scene/docks.ts` | `Docks`: north dock doors, five roll cages per dock (one postcode range each) and the dock workers. A worker plans jobs as steps of whole beats: sort a parcel, push a full cage into the trailer, at cleardown push all cages in, pull empty cages out of a new truck. Day and night alike; idle at night they dance. Also `buildDockDoor`. |
+| `src/sim/postcodes.ts` | The 40 destinations (largest Dutch municipalities) with their four-digit postcode ranges; `split` into cage/box ranges; `randomPostcode` (70% north, 30% south). |
+| `src/scene/labels.ts` | `Labels`: many signs with different text in one draw call (canvas atlas + instanced planes): cage boards, door screens, projected postcodes. Each atlas layout needs its own shader cache key. |
 | `src/scene/batch.ts` | `Batcher`: models are built from proxy objects; one `InstancedMesh` per geometry+material, matrices copied every frame (`kit.batch`). Robots, people, forklifts, cages and trailers use it. |
-| `src/scene/trucks.ts` | `Trucks`: a trailer behind every dock door. Full (4 loads) → cleardown (amber lamp flashes, nothing new goes in) → door down → truck leaves → new empty truck → door up. |
+| `src/scene/trucks.ts` | `Trucks`: a trailer behind every dock door, and a screen above it. Full (2 cages / 4 boxes) or by hand (`cleardown`) → cleardown (amber lamp flashes; waits while `hold()` says the workers are still loading) → door down → truck leaves → new empty truck → door up. |
 | `src/scene/manualSort.ts` | `ManualSort`: robots tip envelopes into a hopper west of row 2; a roller belt takes them to the table; a worker puts them in pigeonholes and empties full ones into the crates. Day only, few parcels. |
 | `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
 | `src/scene/forklift.ts` | Forklift with driver (forks point to local +z); parts merged per material. |
@@ -91,12 +93,14 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
 
 ## Layout constants (sorter.ts, top)
 
-- Loop: rounded rectangle, `LOOP_LEN` 294 m, `LOOP_R` corner radius,
+- Loop: rounded rectangle, `LOOP_LEN` 284 m (`LOOP_ZH` 8.5), `LOOP_R` corner radius,
   `LOOP_ZH` half depth, `LX` start x of the north straight. `loopAt(s)` gives
   position and direction; `s` runs east along the north side. Section
   starts are in the comment above `INDUCT`.
-- `CHUTES`: 20 dock chutes (s 4…118) and 20 station chutes (s 150…264), 6 m
-  apart. `DOCK_X` = dock positions (straight north of each chute end).
+- `CHUTES`: 20 dock chutes (s 4…118) and 20 station chutes (s 144…258), 6 m
+  apart. Infeeds: `INDUCT` (two merge points, s 270 and 276; lanes of a pair
+  share the end of their path), `HOLD_S` (queue point), `LANE_QUEUE`.
+  Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).
 - Hall: `WX`/`EX` west/east wall, `HZ` half depth, `HH` height; `HCX`/`HW`
   centre and width.
 - Store: `STORE_DX` shifts the whole store east of the loop.

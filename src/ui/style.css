@@ -190,7 +190,110 @@ input[type='range'] {
   margin: 0;
 }
 
+.rate {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 7em;
+}
+
+.panel {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(920px, calc(100% - 32px));
+  max-height: calc(100% - 160px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.panel .head p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.panel .doors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.panel .door {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 8px;
+  text-align: left;
+  white-space: normal;
+  padding: 6px 8px;
+}
+
+.panel .door b {
+  grid-row: span 3;
+  font-size: 18px;
+  align-self: center;
+  min-width: 1.6em;
+}
+
+.panel .door .city {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel .door .pc,
+.panel .door .st {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.panel .door.on .pc,
+.panel .door.on .st {
+  color: #e9fffa;
+}
+
+.panel .door.busy {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.panel .row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.panel .primary {
+  background: var(--teal);
+  border-color: var(--teal-l);
+}
+
+.panel .primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 @media (max-width: 640px) {
+  .panel {
+    top: 8px;
+    width: calc(100% - 16px);
+    max-height: calc(100% - 50vh - 24px);
+  }
   .bar {
     left: 8px;
     right: 8px;

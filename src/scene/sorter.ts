@@ -36,6 +36,8 @@ import { Party } from './party';
 import { Crowd } from './crowd';
 import { Batcher } from './batch';
 import { Trucks } from './trucks';
+import { BPM } from '../audio/composer';
+import { CITIES, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
 import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
@@ -57,9 +59,9 @@ const PITCH = 1;
 const LOOP_Y = 4;
 /** Corner radius and half depth (z) of the loop: a rounded rectangle, long in x. */
 const LOOP_R = 4;
-const LOOP_ZH = 11;
-/** One lap is 147 beats; every even metre mark on the loop is passed on a beat. */
-export const LOOP_LEN = 294;
+const LOOP_ZH = 8.5;
+/** One lap is 142 beats; every even metre mark on the loop is passed on a beat. */
+export const LOOP_LEN = 284;
 /** Length of the short (west and east) straights, and of a quarter bend. */
 const SIDE = 2 * LOOP_ZH - 2 * LOOP_R;
 const QUARTER = (Math.PI * LOOP_R) / 2;
@@ -77,21 +79,34 @@ const HCX = (WX + EX) / 2;
 const HW = EX - WX;
 const HZ = 34;
 const HH = 11;
-const MAX_PARCELS = 420;
+const MAX_PARCELS = 600;
 
 // Loop positions (metres from the start of the north straight; all even, so on a beat).
-// s 0–120: north straight, 20 dock chutes · 127–141: east side, to and from the store ·
-// 147–267: south straight, 20 robot station chutes · 274–288: west side, the four infeeds.
-const INDUCT = [274, 278, 282, 286];
+// s 0–120: north straight, 20 dock chutes · 127–136: east side, to and from the store ·
+// 142–262: south straight, 20 robot station chutes · 263–284: west end, the infeeds.
+/**
+ * Infeeds: four lanes from the west wall, two low and two high, each through
+ * its own scan tunnel. Each pair merges into one belt (a Y at 30°), and each of
+ * the two belts joins the west side of the loop at 30°, from the outside, the
+ * low one first. The lanes of a pair share the end of their path, so INDUCT is
+ * the same for both; parcels on them land on the beat, two metres apart.
+ */
+const INDUCT = [270, 270, 276, 276];
 const LANE_Y = [1.0, 1.0, 7.0, 7.0];
-/** z of the infeed lanes: each 3.2 m south of where it joins the loop. */
-const LANE_Z = INDUCT.map((s) => LOOP_ZH - LOOP_R - (s - (2 * STRAIGHT + 3 * QUARTER + SIDE)) + 3.2);
-const LANE_TUNNEL_X = -50;
+/** z of the lanes at the wall; lanes 1 and 2 run straight on, 0 and 3 join them. */
+const LANE_Z = [9.8, 7.2, 4.0, 1.4];
+const LANE_TUNNEL_X = -55;
+/** Where parcels queue on an infeed lane (metres along it, just before the scan tunnel). */
+const HOLD_S = 6.6;
+/** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
+const LANE_QUEUE = 7;
 const LOOP_TUNNELS = [2, 148];
 const STORE_OUT = 128;
-const STORE_BACK = 138;
+const STORE_BACK = 134;
 /** Where the station chutes end, at the back of the pickup roller tables. */
-const STATION_Z = LOOP_ZH + 6.5;
+const STATION_Z = 14.5;
+/** Parcels that fit on a pickup station's roller table. */
+const STATION_CAP = 7;
 /**
  * Chutes: loop position and side (1 outside the loop, −1 inside).
  * Off the north straight, 20 chutes run north to the truck docks; off the
@@ -99,9 +114,9 @@ const STATION_Z = LOOP_ZH + 6.5;
  */
 const CHUTES: [number, number][] = [
   ...Array.from({ length: 20 }, (_, k): [number, number] => [4 + 6 * k, 1]),
-  ...Array.from({ length: 20 }, (_, k): [number, number] => [150 + 6 * k, 1]),
+  ...Array.from({ length: 20 }, (_, k): [number, number] => [144 + 6 * k, 1]),
 ];
-const FIRST_STATION_S = 147;
+const FIRST_STATION_S = 142;
 /**
  * Render quality. low: pixel ratio 1, no extras. normal: outlines, toon shading and
  * contact shadows (always on). high: also ambient occlusion, sun shadows around the
@@ -557,6 +572,12 @@ interface Parcel {
   flash: number;
   /** Chute index, or −1 for the store. */
   dest: number;
+  /** Place in the queue at its infeed lane's hold point (0 = next to go). */
+  rank?: number;
+  /** Postcode (four digits): which city, and which cage or box there. */
+  pc: number;
+  /** An exception for the manual sort table (by robot, from a west station). */
+  manual?: boolean;
   mode: Mode;
   path?: Path;
   pathKind: 'lane' | 'chute' | 'intake' | 'back' | 'dock';
@@ -857,6 +878,10 @@ export class Sorter implements Scene3D {
   private yard!: BoxYard;
   /** Dock chutes: chute index → dock x. */
   private dockOf = new Map<number, number>();
+  /** Chute of each north city (the docks west to east). */
+  private get cityChute(): number[] {
+    return [...this.dockOf.keys()];
+  }
 
   // Day / night look.
   private day = 0;
@@ -936,18 +961,20 @@ export class Sorter implements Scene3D {
     this.manual = new ManualSort(this);
     this.floor = new RobotFloor(this, this.stationXs, this.cages, {
       waiting: (st) => (this.stationQueue[st]?.length ?? 0) > 0,
-      // Envelopes go to manual sorting by day, while there is room at the table.
-      manual: (k) => {
+      // Exceptions go to manual sorting, while there is room at the table.
+      load: (k) => {
         const p = this.botParcel.get(k);
+        if (!p) return null;
         const onRobots = this.floor.fleet.bots.filter((b) => b.bin === this.floor.tableBin).length;
-        return !!p && p.h < 0.13 && this.dayShown !== false && this.manual.room(onRobots);
+        return { pc: p.pc, manual: !!p.manual, tableRoom: this.manual.room(onRobots) };
       },
       event: (e) => this.onFleet(e),
       full: (b) => this.yard.request(b),
     });
+    const pcs = (c: (typeof CITIES)[number]) => rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]);
     this.trucks = new Trucks(this, [
-      ...NORTH_DOORS.map((x) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const })),
-      ...SOUTH_DOORS.map((x) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const })),
+      ...NORTH_DOORS.map((x, k) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[k]!.name, pc: pcs(NORTH_CITIES[k]!), hold: () => this.docks.pending(x) })),
+      ...SOUTH_DOORS.map((x, k) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const, number: 21 + k, city: SOUTH_CITIES[k]!.name, pc: pcs(SOUTH_CITIES[k]!) })),
     ]);
     this.yard = new BoxYard(this, this.floor, {
       open: (x) => this.trucks.isOpen(NORTH_DOORS.length + SOUTH_DOORS.indexOf(x)),
@@ -958,12 +985,16 @@ export class Sorter implements Scene3D {
       this,
       [...this.dockOf].map(([chute, x]) => ({ x, chute })),
       {
-        mark: (chute, target) => this.floor.flashCage(chute, this.chutes[chute]!.col, target),
+        mark: (chute, target, code) => {
+          const p = this.parcels.find((q) => q.pos === target);
+          this.floor.flashCage(chute, this.chutes[chute]!.col, target, code, (p?.h ?? 0.3) + 0.01);
+        },
         shipped: (chute) => (this.chutes[chute]!.flash = 1),
         truck: {
           open: (x) => this.trucks.isOpen(NORTH_DOORS.indexOf(x)),
           reserve: (x, n) => this.trucks.reserve(NORTH_DOORS.indexOf(x), n),
           load: (x) => this.trucks.load(NORTH_DOORS.indexOf(x)),
+          clearing: (x) => this.trucks.clearing(NORTH_DOORS.indexOf(x)),
         },
       },
     );
@@ -1163,6 +1194,7 @@ export class Sorter implements Scene3D {
     const bt = this.bt;
     const prevCt = this.ct;
     this.ct = Number.isNaN(this.lastCt) ? bt : this.ct + (bt - prev) * this.speed;
+    this.due = Math.min(this.due + ((bt - prev) * this.rate) / BPM, 4);
     this.lastCt = this.ct;
     const crossed = Math.floor(bt) !== Math.floor(prev);
 
@@ -1254,9 +1286,40 @@ export class Sorter implements Scene3D {
   /** Every beat of the conveyor clock: keep parcels flowing (more of them when the belts run faster). */
   private onConveyorBeat(c: number): void {
     void c;
-    // Fewer when a lead plays (the notes bring their own parcels).
-    const quiet = this.bt - this.lastLead > 2;
-    if (Math.random() < (quiet ? 0.8 : 0.25)) this.spawn(Math.floor(Math.random() * 4), null, false);
+    // Parcels arrive at the set rate (lead notes count towards it); each goes to the lane with
+    // the shortest queue. A lane takes one parcel every two belt beats, so above that a queue
+    // builds up at the infeed (shown on the lanes, the rest counted on the screens).
+    while (this.due >= 1) {
+      this.due--;
+      this.backlog++;
+    }
+    for (let tries = 0; this.backlog > 0 && tries < 4; tries++) {
+      const k = this.quietestLane();
+      if (k < 0 || !this.spawn(k, null, false)) break;
+      this.backlog--;
+    }
+  }
+
+  /** The lane with the fewest parcels waiting, if one has room for another (−1 if all are full). */
+  private quietestLane(): number {
+    let best = -1;
+    for (let k = 0; k < this.lanes.length; k++) if (this.waiting[k]! < LANE_QUEUE && (best < 0 || this.waiting[k]! < this.waiting[best]!)) best = k;
+    return best;
+  }
+
+  /** Parcels per minute coming into the hub (set from the controls). */
+  rate = 150;
+  /** Parcels due but not yet on a lane (the queue outside the infeed doors). */
+  backlog = 0;
+  private due = 0;
+  /** Parcels waiting at each lane's hold point. */
+  private waiting = [0, 0, 0, 0];
+
+  /** Most parcels per minute the infeed can take at the highest belt speed. */
+  static readonly MAX_RATE = 2 * BELT_SPEEDS[BELT_SPEEDS.length - 1]! * BPM;
+  /** At the current belt speed. */
+  infeedCapacity(): number {
+    return 2 * this.speed * BPM;
   }
 
   getQuality(): Quality {
@@ -1308,6 +1371,7 @@ export class Sorter implements Scene3D {
       if (!p) return;
       p.mode = 'robot';
       p.bot = e.bot;
+      this.floor.stationCode(e.station, p.pos, String(p.pc), p.h + 0.01, this.chutes[p.dest]!.col);
       p.rideAt = Math.floor(this.bt);
       p.dropAt = undefined;
       this.botParcel.set(e.bot, p);
@@ -1336,7 +1400,12 @@ export class Sorter implements Scene3D {
       const lane = this.lanes[k]!;
       lane.doorFlash = 0.6 + vel * 0.4;
       lane.doorCol.setRGB(...color);
-      if (this.ct - lane.lastSpawn >= 0.5 && this.spawn(k, color, true)) return;
+      // A lead parcel is one of the due ones (taken early), so the rate stays as set.
+      if (this.ct - lane.lastSpawn >= 0.5 && this.backlog + this.due >= 1 && this.waiting[k]! < 2 && this.spawn(k, color, true)) {
+        if (this.backlog > 0) this.backlog--;
+        else this.due--;
+        return;
+      }
     }
   }
 
@@ -1348,6 +1417,34 @@ export class Sorter implements Scene3D {
   }
 
   // ---------- parcels ----------
+  /**
+   * A postcode and the chute for it: 70% to the cities at the north docks (their
+   * chute), 30% to the cities served by the robots (any pickup station, the least
+   * busy of three tried); now and then an exception for manual sorting.
+   */
+  private assign(p: Parcel): void {
+    const r = randomPostcode();
+    p.pc = r.pc;
+    p.manual = false;
+    if (r.north) {
+      p.dest = this.cityChute[r.city]!;
+      return;
+    }
+    const stations = CHUTES.map((_, k) => k).filter((k) => this.stationOf.has(k));
+    if (Math.random() < 0.012) {
+      // Manual sorting: from one of the westmost stations (the last ones along the loop).
+      p.manual = true;
+      p.dest = stations[stations.length - 1 - Math.floor(Math.random() * 3)]!;
+      return;
+    }
+    let best = -1;
+    for (let n = 0; n < 3; n++) {
+      const k = stations[Math.floor(Math.random() * stations.length)]!;
+      if (best < 0 || this.stationQueue[this.stationOf.get(k)!]!.length < this.stationQueue[this.stationOf.get(best)!]!.length) best = k;
+    }
+    p.dest = best;
+  }
+
   private newParcel(): Parcel | null {
     if (this.parcels.length >= MAX_PARCELS) return null;
     const r = Math.random();
@@ -1369,7 +1466,8 @@ export class Sorter implements Scene3D {
       shape: bag ? 1 : tube ? 2 : 0,
       scanned: false,
       flash: 0,
-      dest: Math.floor(Math.random() * CHUTES.length),
+      dest: 0,
+      pc: 0,
       mode: 'fixed',
       pathKind: 'lane',
       lane: 0,
@@ -1391,6 +1489,7 @@ export class Sorter implements Scene3D {
       vel: new THREE.Vector3(),
       dead: false,
     };
+    this.assign(p);
     this.parcels.push(p);
     return p;
   }
@@ -1400,6 +1499,7 @@ export class Sorter implements Scene3D {
     const lane = this.lanes[k]!;
     const bt = this.ct;
     let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M), lane.lastArrive + 2);
+    if (this.waiting[k]! >= LANE_QUEUE) return false;
     let tries = 0;
     while (this.trayOwner[trayAt(INDUCT[k]!, arrive)] && tries++ < 6) arrive++;
     const tray = trayAt(INDUCT[k]!, arrive);
@@ -1457,6 +1557,16 @@ export class Sorter implements Scene3D {
   private updateParcels(dt: number): void {
     const bt = this.bt;
     const ct = this.ct;
+    // Queues at the infeed hold points: rank parcels by when they go.
+    const queued: Parcel[][] = this.lanes.map(() => []);
+    for (const p of this.parcels) {
+      if (p.mode === 'path' && p.pathKind === 'lane' && ct < p.t1 - (p.path!.len - HOLD_S) / BEAT_M) queued[p.lane]!.push(p);
+    }
+    queued.forEach((q, k) => {
+      q.sort((a, b) => a.t1 - b.t1).forEach((p, n) => (p.rank = n));
+      this.waiting[k] = q.length;
+    });
+    this.backlog = Math.min(this.backlog, 5000);
     for (const p of this.parcels) {
       const before = this.p.copy(p.pos);
       switch (p.mode) {
@@ -1464,7 +1574,14 @@ export class Sorter implements Scene3D {
           const path = p.path!;
           let f = clamp((ct - p.t0) / (p.t1 - p.t0), 0, 1);
           if (p.ease) f = f * f;
-          const s = f * path.len;
+          let s = f * path.len;
+          if (p.pathKind === 'lane') {
+            // Lanes run at belt speed into a hold point before the scan tunnel, queue there
+            // (an accumulating belt) and are let go so they land on their tray on the beat.
+            const go = p.t1 - (path.len - HOLD_S) / BEAT_M;
+            s = ct >= go ? HOLD_S + (ct - go) * BEAT_M : Math.min((ct - p.t0) * BEAT_M, HOLD_S - (p.rank ?? 0) * 0.85);
+            s = clamp(s, 0, path.len);
+          }
           path.at(s, p.pos, this.t);
           this.orient(p, this.t);
           if (p.pathKind === 'lane') {
@@ -1515,7 +1632,10 @@ export class Sorter implements Scene3D {
         case 'table': {
           const q = this.stationQueue[p.station!]!;
           this.floor.tableSlot(p.station!, Math.max(0, q.indexOf(p)), this.p);
-          p.pos.lerp(this.p, Math.min(1, dt * 8));
+          // Roll along the table to its place in the queue (rollers: about 3 m/s at most).
+          this.n.subVectors(this.p, p.pos);
+          const gap = this.n.length();
+          if (gap > 1e-4) p.pos.addScaledVector(this.n, Math.min(gap, dt * 3) / gap);
           this.orient(p, this.t.set(0, 0, 1));
           break;
         }
@@ -1580,7 +1700,7 @@ export class Sorter implements Scene3D {
         ch.flash = 1;
         const st = this.stationOf.get(p.dest);
         if (st !== undefined) this.inbound.set(p.dest, Math.max(0, (this.inbound.get(p.dest) ?? 0) - 1));
-        if (st !== undefined && this.stationQueue[st]!.length < 4) {
+        if (st !== undefined && this.stationQueue[st]!.length < STATION_CAP) {
           // Onto the roller table, to wait for a robot.
           p.mode = 'table';
           p.station = st;
@@ -1612,7 +1732,7 @@ export class Sorter implements Scene3D {
   /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
   private room(dest: number): number {
     const st = this.stationOf.get(dest);
-    const free = st !== undefined ? 4 - this.stationQueue[st]!.length : this.docks.space(dest);
+    const free = st !== undefined ? STATION_CAP - this.stationQueue[st]!.length : this.docks.space(dest);
     return free - (this.inbound.get(dest) ?? 0);
   }
 
@@ -1719,7 +1839,7 @@ export class Sorter implements Scene3D {
     slot.reserved = true;
     this.retrieving++;
     this.lastRetrieve = this.bt;
-    p.dest = Math.floor(Math.random() * CHUTES.length);
+    this.assign(p);
     p.glow.copy(this.chutes[p.dest]!.col);
     p.pathKind = 'back';
     sh.runner.steps.push(
@@ -2322,7 +2442,7 @@ export class Sorter implements Scene3D {
     this.put(floor, 'night');
     // Walkway lines.
     const yel = new THREE.MeshBasicMaterial({ color: 0x8a7420 });
-    for (const z of [-15, 15]) this.box('line', yel, HCX, 0.012, z, HW - 12, 0.01, 0.15);
+    for (const z of [-15, 12]) this.box('line', yel, HCX, 0.012, z, HW - 12, 0.01, 0.15);
     for (const x of [WX + 6, EX - 6]) this.box('line', yel, x, 0.012, 0, 0.15, 0.01, 60);
 
     const ribs = canvasTex(128, 128, (g) => {
@@ -2469,7 +2589,7 @@ export class Sorter implements Scene3D {
       if ((p.laps ?? 0) > 0 && p.mode === 'loop') recirculating++;
     }
     // (The plan shows the sorter, the docks and the robot floor: the infeed and store ends are cropped.)
-    return { hall: [LX - 12, LX + STRAIGHT + 12, -HZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating };
+    return { hall: [LX - 12, LX + STRAIGHT + 12, -HZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0) };
   }
 
   /** Big KPI boards and clocks on the walls, showing live numbers and the real time. */
@@ -2620,15 +2740,20 @@ export class Sorter implements Scene3D {
     for (let k = 0; k < 4; k++) {
       const y = LANE_Y[k]!;
       const z = LANE_Z[k]!;
-      // They come in from the west wall, side by side, and join the west side of the loop at 30°.
+      // In from the west wall; lanes 0 and 3 swing into lanes 1 and 2 at 30° (after their
+      // scan tunnels), then each pair's belt ramps to loop height, turns 60° and joins the
+      // loop at 30° from the outside.
+      const pair = k < 2 ? 1 : 2;
+      const zp = LANE_Z[pair]!;
       loopAt(INDUCT[k]!, this.p, this.t);
-      const xi = this.p.x;
-      const zi = this.p.z;
-      const path = Path.fillet(
-        [v(WX - 1, y, z), v(-46, y, z), v(xi - 9, LOOP_Y, z), v(xi - 1.85, LOOP_Y, z), v(xi, LOOP_Y, zi)],
-        3,
-      );
-      belt(path, 0.6, path.len - 1.0);
+      const end = this.p.clone();
+      const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
+      const corner = end.clone().addScaledVector(into, -(zp - end.z) / -into.z).setY(LOOP_Y);
+      const join = Math.tan(Math.PI / 6);
+      const head = k === pair ? [v(WX - 1, y, z)] : [v(WX - 1, y, z), v(-45 - Math.abs(z - zp) / join, y, z)];
+      const path = Path.fillet([...head, v(-45, y, zp), v(-42, y, zp), v(corner.x - 6, LOOP_Y, zp), corner, end], 3);
+      // The shared part of a pair is drawn once.
+      belt(path, 0.6, k === pair ? path.len - 1.0 : path.acc[path.pts.findIndex((q) => q.x > -44.5)]!);
       const tunnel = this.tunnel(path, LANE_TUNNEL_X - WX + 1, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
       // Lit opening in the wall where the lane comes in.
@@ -2752,7 +2877,7 @@ export class Sorter implements Scene3D {
       outward(this.t, this.n);
       const E = this.p.clone();
       const at = (f: number, o: number) => E.clone().addScaledVector(this.t, f).addScaledVector(this.n, o);
-      this.intake = Path.fillet([E, at(1.6, 0.9), at(4, 2.6), v(LIFT_X - 3.5, LOOP_Y, -0.9), v(LIFT_X - 0.9, LOOP_Y, -0.9)], 2);
+      this.intake = Path.fillet([E, at(1.2, 0.7), at(2.3, 2.6), v(LIFT_X - 3.5, LOOP_Y, -0.9), v(LIFT_X - 0.9, LOOP_Y, -0.9)], 1.5);
       belt(this.intake, 0.9, this.intake.len, stripLoop);
     }
     {
@@ -2760,7 +2885,7 @@ export class Sorter implements Scene3D {
       outward(this.t, this.n);
       const E = this.p.clone();
       const at = (f: number, o: number) => E.clone().addScaledVector(this.t, f).addScaledVector(this.n, o);
-      this.back = Path.fillet([v(LIFT_X - 0.9, LOOP_Y, 0.9), v(LIFT_X - 3.5, LOOP_Y, 0.9), at(-4, 2.6), at(-1.6, 0.9), E], 2);
+      this.back = Path.fillet([v(LIFT_X - 0.9, LOOP_Y, 0.9), v(LIFT_X - 3.5, LOOP_Y, 0.9), at(-1.9, 2.6), at(-0.9, 0.7), E], 1.5);
       belt(this.back, 0, this.back.len - 0.9, stripLoop);
     }
 
@@ -3230,7 +3355,7 @@ export class Sorter implements Scene3D {
 
     // People and parcel trolleys.
     this.person(-57, 14, Math.PI / 2);
-    this.person(38.2, 16.4, Math.PI);
+    this.person(38.2, 12.9, Math.PI);
     this.person(LIFT_X - 2, -6, -Math.PI / 2);
     this.person(-30, -8, 0.4);
     this.person(EX - 8, 18, Math.PI * 0.8);
@@ -3364,15 +3489,15 @@ export class Sorter implements Scene3D {
       fixed('infeeds', v(-56, 3, 15), v(-44, 1.2, 7), 'Infeed'),
       fixed('scan tunnels', v(-44, 4.5, 13), v(-50, 2.2, 4), 'Scanning'),
       fixed('high infeeds', v(-38, 8, -9), v(-50, 7.2, 0)),
-      fixed('merge', v(-36, 6, 9), v(-24, 3.8, 0)),
+      fixed('merge', v(-36, 7, 12), v(-25, 3.8, 2)),
       fixed('loop scanner', v(-25, 6, -17), v(-18, 4.3, -11)),
       fixed('loop', v(-14, 8, 3), v(LCX, 3, 0), 'Sorter loop'),
       fixed('chutes', v(30, 5, -25), v(22, 1.5, -14), 'Chutes'),
       fixed('docks', v(DOCK_X[2]! + 6, 3.6, -23), v(DOCK_X[2]!, 1.2, -31), 'Docks'),
       fixed('store', v(LIFT_X - 6, 5, -7), v(LIFT_X + 2, 4.5, 0), 'Storage'),
       fixed('lift', v(LIFT_X - 4.5, 3.5, 4), v(LIFT_X, 4, 0)),
-      fixed('pickup stations', v(41, 4, 14.5), v(41, 1.2, 19.5), 'Robot stations'),
-      fixed('projectors', v(36, 6.6, 15.5), v(41, 5.8, 19)),
+      fixed('pickup stations', v(44, 4.2, 11), v(41, 1.2, 17.5), 'Robot stations'),
+      fixed('projectors', v(36, 6.6, 13.5), v(41, 5.8, 19)),
       fixed('bins', v(60, 3.8, 21), v(44, 0.8, 28), 'Robot floor'),
       fixed('parking', v(-14, 3.2, 21), v(-22, 0.6, 25), 'Robot parking'),
       fixed('manual sorting', v(-27, 3.6, 17.5), v(-33, 1, 22), 'Manual sorting'),
@@ -3434,6 +3559,21 @@ export class Sorter implements Scene3D {
   private lastCt = NaN;
   private speed = 1;
   private visitPoi = 0;
+
+  /** Dock doors 1–40 for the cleardown panel: destination, postcodes and what the truck is doing. */
+  doors(): { number: number; city: string; pc: string; state: string; load: number; cap: number }[] {
+    return this.trucks.list();
+  }
+
+  /** Start a cleardown at these doors (numbers 1–40): the trucks leave with what they have. */
+  cleardown(numbers: number[]): void {
+    const list = this.trucks.list();
+    this.trucks.cleardown(numbers.map((n) => list.findIndex((d) => d.number === n)).filter((i) => i >= 0), this.bt);
+  }
+
+  setRate(perMin: number): void {
+    this.rate = clamp(perMin, 0, Sorter.MAX_RATE);
+  }
 
   /** Departments the camera can go to. */
   departments(): { id: string; label: string }[] {

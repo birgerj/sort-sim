@@ -14,6 +14,8 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { cardboardSide, palletWood } from './textures';
 
 import { Fleet, FLOOR, sorterFloor, type Bot, type FleetEvent } from '../sim/robotFleet';
+import { rangeOf, rangeText, SOUTH_CITIES, split } from '../sim/postcodes';
+import { Labels } from './labels';
 
 /** What the floor needs from the Sorter scene to build itself. */
 export interface FloorKit {
@@ -38,8 +40,8 @@ export interface FloorKit {
 export interface FloorHandlers {
   /** Station s has a parcel ready. */
   waiting(s: number): boolean;
-  /** Robot k just loaded a parcel for manual sorting (a small one, with room at the table). */
-  manual(k: number): boolean;
+  /** The parcel robot k just loaded: its postcode, and whether it goes to manual sorting (with room there). */
+  load(k: number): { pc: number; manual: boolean; tableRoom: boolean } | null;
   event(e: FleetEvent): void;
   /** A box is full: it waits for a forklift. */
   full(bin: number): void;
@@ -66,18 +68,26 @@ function tex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void):
   return t;
 }
 
-function codeTex(code: string): THREE.CanvasTexture {
-  return tex(96, 64, (g) => {
+function codeTex(code: string, city: string): THREE.CanvasTexture {
+  return tex(192, 128, (g) => {
     g.fillStyle = '#ffffff';
-    g.fillRect(0, 0, 96, 64);
+    g.fillRect(0, 0, 192, 128);
     g.strokeStyle = '#1d1d1f';
-    g.lineWidth = 4;
-    g.strokeRect(2, 2, 92, 60);
+    g.lineWidth = 6;
+    g.strokeRect(3, 3, 186, 122);
     g.fillStyle = '#1d1d1f';
-    g.font = '700 32px system-ui, sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText(code, 48, 34);
+    const fit = (t: string, px: number, w: number) => {
+      let size = px;
+      do g.font = `${w} ${size}px system-ui, sans-serif`;
+      while (g.measureText(t).width > 176 && --size > 8);
+    };
+    fit(code, 46, 800);
+    g.fillText(code, 96, 50);
+    g.fillStyle = '#d6339a';
+    fit(city, 28, 600);
+    g.fillText(city, 96, 96);
   });
 }
 
@@ -145,6 +155,10 @@ interface Projector {
   col: THREE.Color;
   /** Picture it throws (index in the icon atlas). */
   icon: number;
+  /** A postcode projected onto a parcel instead of a picture: it follows the parcel. */
+  code: string | null;
+  follow: THREE.Vector3 | null;
+  yOff: number;
 }
 
 /** Parcels in a box before it counts as full. */
@@ -152,6 +166,9 @@ export const BOX_FULL = 8;
 
 export interface BinView {
   code: string;
+  /** Postcodes it takes, and the city. */
+  range: [number, number];
+  city: number;
   /** Home position of the box (it moves when a forklift carries it). */
   x: number;
   z: number;
@@ -179,6 +196,8 @@ export class RobotFloor {
   private beamMat!: THREE.MeshBasicMaterial;
   private readonly pm = new THREE.Matrix4();
   private spots!: THREE.InstancedMesh;
+  /** Postcodes projected onto parcels (one label per projector). */
+  private codes!: Labels;
   private plates!: THREE.InstancedMesh;
   private plateCell!: THREE.InstancedBufferAttribute;
   private under!: THREE.InstancedMesh;
@@ -204,8 +223,17 @@ export class RobotFloor {
     this.fleet = new Fleet(layout.grid, layout.parks, layout.stations, layout.bins, 40);
     this.fleet.isOpen = (b) => this.bins[b]?.open ?? true;
     this.tableBin = layout.bins.findIndex((b) => b.manual);
-    // Only from the stations at the west end (near the table), so the trip stays short.
-    this.fleet.choose = (k) => (this.fleet.bots[k]!.i < 30 && this.handlers.manual(k) ? this.tableBin : null);
+    // Each box takes part of a city's postcodes: the robot takes the parcel to its box,
+    // or waits at the station while that box is full or away. Exceptions go to manual sorting.
+    this.fleet.choose = (k) => {
+      const p = this.handlers.load(k);
+      if (!p) return null;
+      if (p.manual) return p.tableRoom ? this.tableBin : -1;
+      const want = this.bins.map((b, i) => (rangeOf([b.range], p.pc) === 0 ? i : -1)).filter((i) => i >= 0);
+      if (!want.length) return null;
+      const open = want.filter((i) => this.bins[i]!.open).sort((a, b) => this.bins[a]!.n - this.bins[b]!.n);
+      return open[0] ?? -1;
+    };
     this.buildFloor(layout.parks);
     this.buildStations(cols);
     this.buildBins();
@@ -266,9 +294,30 @@ export class RobotFloor {
   }
 
   /** A parcel landed in a roll cage: its projector marks it (or marks `target`, e.g. one of several cages). */
-  flashCage(chute: number, col: THREE.Color, target?: THREE.Vector3): void {
+  /** Project a parcel's postcode onto it (it follows the parcel while it is carried). */
+  showCode(k: number, follow: THREE.Vector3, code: string, yOff: number, col: THREE.Color): void {
+    const pr = this.projectors[k]!;
+    pr.follow = follow;
+    pr.code = code;
+    pr.yOff = yOff;
+    pr.target = follow.clone();
+    pr.flash = 1;
+    pr.col.copy(col);
+    this.codes.set(k, code, null, { bg: 'rgba(23, 85, 254, 0.88)', fg: '#ffffff' });
+  }
+
+  /** The station projector shows the postcode of the parcel a robot takes. */
+  stationCode(station: number, follow: THREE.Vector3, code: string, yOff: number, col: THREE.Color): void {
+    this.showCode(this.stations[station]!.projector, follow, code, yOff, col);
+  }
+
+  flashCage(chute: number, col: THREE.Color, target?: THREE.Vector3, code?: string, yOff = 0.3): void {
     const k = this.cageProjector.get(chute);
     if (k === undefined) return;
+    if (target && code) {
+      this.showCode(k, target, code, yOff, col);
+      return;
+    }
     if (target) this.projectors[k]!.target = target.clone();
     this.flash(k, col);
   }
@@ -289,6 +338,8 @@ export class RobotFloor {
   private flash(k: number, col: THREE.Color | null): void {
     const pr = this.projectors[k]!;
     pr.flash = 1;
+    pr.code = null;
+    pr.follow = null;
     if (col) pr.col.copy(col);
     // By day: an arrow, a tick or a number frame for the operator; by night: a star.
     pr.icon = this.dayShown === false ? 3 + (k % 2) : [0, 1, 2][(k + Math.floor(Math.random() * 3)) % 3]!;
@@ -379,12 +430,22 @@ export class RobotFloor {
     const fig = Math.floor(s.bar) % 4;
     const o = this.o;
     this.projectors.forEach((pr, k) => {
-      pr.flash = Math.max(0, pr.flash - dt * 1.4);
+      // A projected postcode stays on longer: until the worker or robot has the parcel away.
+      pr.flash = Math.max(0, pr.flash - dt * (pr.code ? 0.55 : 1.4));
+      if (pr.follow && pr.target) pr.target.copy(pr.follow).setY(pr.follow.y + pr.yOff);
       const target = pr.target;
       const col = pr.col;
       const marking = !!target && pr.flash > 0.05;
       // Projected square.
-      if (marking) {
+      if (marking && pr.code) {
+        // The postcode, flat on the parcel, readable from the south.
+        o.position.set(target!.x, target!.y + 0.02, target!.z);
+        o.rotation.set(-Math.PI / 2, 0, 0);
+        o.scale.set(1, 1, 1);
+        o.updateMatrix();
+        this.codes.place(k, o.matrix);
+        o.scale.set(0, 0, 0);
+      } else if (marking) {
         o.position.set(target!.x, target!.y + 0.02, target!.z);
         o.rotation.set(-Math.PI / 2, 0, 0);
         const sc = 0.8 + 0.3 * pr.flash;
@@ -395,6 +456,7 @@ export class RobotFloor {
       } else o.scale.set(0, 0, 0);
       o.updateMatrix();
       this.spots.setMatrixAt(k, o.matrix);
+      if (!(marking && pr.code)) this.codes.place(k, o.matrix);
       this.spots.setColorAt(k, this.c.copy(col).multiplyScalar(s.dayShown ? 1 : 0.4 + pr.flash));
       // Beams: the working beam by day; a laser show by night.
       for (let n = 0; n < BEAMS; n++) {
@@ -444,6 +506,7 @@ export class RobotFloor {
     if (this.beams.instanceColor) this.beams.instanceColor.needsUpdate = true;
     this.spots.instanceMatrix.needsUpdate = true;
     this.iconAttr.needsUpdate = true;
+    this.codes.flush();
     if (this.spots.instanceColor) this.spots.instanceColor.needsUpdate = true;
   }
 
@@ -498,12 +561,15 @@ export class RobotFloor {
     const roller = k.std(0x9aa0a8, 0.35, 0.8, 0xe6e9ec);
     for (const i of cols) {
       const x = cellX(i);
-      const z = cellZ(0) - 0.75;
-      // A short roller table from the chute end to the pickup cell.
-      k.box('stable', alu, x, 0.98, z - 0.7, 1.1, 0.08, 1.7);
-      for (const sx of [-0.5, 0.5]) for (const sz of [-1.45, 0.05]) k.box('stable', alu, x + sx, 0.48, z + sz, 0.06, 0.96, 0.06);
-      for (let n = 0; n < 8; n++) k.box('sroll', roller, x, 1.04, z - 1.45 + n * 0.21, 1.0, 0.06, 0.06);
-      k.blob(x, z - 0.7, 1.6, 2.4);
+      // A roller table from the chute end to the pickup cell, long enough for a queue of parcels.
+      const z1 = cellZ(0) - 0.7;
+      const z0 = z1 - STATION_TABLE;
+      const zc = (z0 + z1) / 2;
+      k.box('stable', alu, x, 0.98, zc, 1.1, 0.08, STATION_TABLE);
+      for (const sx of [-0.5, 0.5]) for (let sz = z0 + 0.1; sz <= z1; sz += 1.5) k.box('stable', alu, x + sx, 0.48, sz, 0.06, 0.96, 0.06);
+      for (let zz = z0 + 0.1; zz < z1; zz += 0.21) k.box('sroll', roller, x, 1.04, zz, 1.0, 0.06, 0.06);
+      for (const sx of [-0.55, 0.55]) k.box('stable', alu, x + sx, 1.1, zc, 0.04, 0.12, STATION_TABLE);
+      k.blob(x, zc, 1.6, STATION_TABLE + 0.7);
       this.stations.push({ x, z: cellZ(0), projector: -1 });
     }
   }
@@ -547,10 +613,14 @@ export class RobotFloor {
       part(g, floorGeo, inner);
       const fill = new THREE.Mesh(new THREE.BoxGeometry(1.08, 1, 1.08), fillMat);
       g.add(fill);
-      const code = `B${10 + b.i}`;
+      // Two boxes per city (south side, west to east), each for half of its postcodes.
+      const n = this.bins.length;
+      const city = Math.floor(n / 2);
+      const range = split(SOUTH_CITIES[city]!, 2)[n % 2]!;
+      const code = rangeText(range);
       // The code board stays on its post when the box is away.
       k.box('bpost', post, x + 0.68, 1.0, z - 0.68, 0.05, 2.0, 0.05);
-      const bm = new THREE.MeshBasicMaterial({ map: codeTex(code) });
+      const bm = new THREE.MeshBasicMaterial({ map: codeTex(code, SOUTH_CITIES[city]!.name) });
       this.boardMats.push(bm);
       for (const flip of [0, Math.PI]) {
         const board = new THREE.Mesh(boardGeo, bm);
@@ -559,7 +629,7 @@ export class RobotFloor {
         k.put(board);
       }
       k.blobUnder(g, 1.6, 1.6);
-      this.bins.push({ code, x, z, n: 0, open: true, g, fill });
+      this.bins.push({ code, range, city, x, z, n: 0, open: true, g, fill });
       this.writeFill(this.bins.length - 1);
     }
   }
@@ -693,7 +763,7 @@ export class RobotFloor {
       const f = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.3), face);
       f.position.set(x, PROJ_Y + 0.35, z + 0.28);
       k.put(f);
-      this.projectors.push({ pos: v(x, PROJ_Y - 0.48, z), target, flash: 0, col: new THREE.Color(1, 1, 1), icon: 0 });
+      this.projectors.push({ pos: v(x, PROJ_Y - 0.48, z), target, flash: 0, col: new THREE.Color(1, 1, 1), icon: 0, code: null, follow: null, yOff: 0 });
       return this.projectors.length - 1;
     };
     const frame = (x: number, z: number, w: number, d: number) => {
@@ -714,6 +784,8 @@ export class RobotFloor {
     frame(TABLE.x, TABLE.z, 5, 2.4);
     for (const dx of [-1.2, 1.2]) this.tableProjectors.push(add(TABLE.x + dx, TABLE.z - 0.3, v(TABLE.x + dx, 1.08, TABLE.z + 0.2)));
     const n = this.projectors.length;
+    this.codes = new Labels(n, 0.56, 0.26, 128, 60, { transparent: true });
+    k.put(this.codes.mesh);
     this.beamMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     this.beams = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.014, 0.014, 1, 6, 1, true), this.beamMat, n * BEAMS);
     this.beams.setColorAt(0, new THREE.Color(1, 1, 1));
@@ -941,6 +1013,9 @@ function iconAtlas(): THREE.CanvasTexture {
     }
   });
 }
+
+/** Length of the pickup stations' roller tables (they start where the station chutes end). */
+export const STATION_TABLE = 4.8;
 
 /** Where the manual sort table stands. */
 export const TABLE = { x: -33, z: 22 };

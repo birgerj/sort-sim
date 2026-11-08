@@ -136,7 +136,10 @@ export class Fleet {
   private turn = 0;
   /** Bins robots may be sent to (a full bin waits for a forklift). */
   isOpen: (bin: number) => boolean = () => true;
-  /** Where robot k must take what it just loaded, if not to a random box (e.g. small parcels to manual sorting). */
+  /**
+   * Where robot k must take what it just loaded: a bin, null for any open box,
+   * or −1 to wait at the station (its box is full or away).
+   */
   choose: (bot: number) => number | null = () => null;
 
   constructor(
@@ -176,13 +179,16 @@ export class Fleet {
     for (const b of this.bots) {
       b.fi = b.i;
       b.fj = b.j;
-      if (b.state === 'loading' && beat - b.actAt >= 1) {
+      const want = b.state === 'loading' && beat - b.actAt >= 1 ? this.choose(b.k) : null;
+      if (b.state === 'loading' && beat - b.actAt >= 1 && want === -1) {
+        // Waits at the station with the parcel until its box is back.
+      } else if (b.state === 'loading' && beat - b.actAt >= 1) {
         this.stationBot[b.station] = null;
         b.station = -1;
         const boxes = this.bins.map((_, n) => n).filter((n) => !this.bins[n]!.manual);
         const open = boxes.filter((n) => this.isOpen(n));
         const pool = open.length ? open : boxes;
-        b.bin = this.choose(b.k) ?? pool[Math.floor(this.rnd() * pool.length)]!;
+        b.bin = want ?? pool[Math.floor(this.rnd() * pool.length)]!;
         const bin = this.bins[b.bin]!;
         const to = bin.access[Math.floor(this.rnd() * bin.access.length)]!;
         b.state = 'toDrop';

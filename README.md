@@ -18,7 +18,7 @@ sound is generated in code.
         │  │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │  workers         │
  west:  │  20 dock chutes + roller belts                            │ east:
  infeed │ ╭────────────────────────────────────────────────────╮   │ lift +
- lanes ═╪═╡           sorter loop (294 m, trays)               ╞═══╪ high-bay
+ lanes ═╪═╡           sorter loop (284 m, trays)               ╞═══╪ high-bay
  + scan │ ╰────────────────────────────────────────────────────╯   │ storage
  tunnels│  20 station chutes → pickup roller tables                 │ (buffer)
         │  robot floor: robots carry parcels to boxes on pallets    │
@@ -28,21 +28,35 @@ sound is generated in code.
 ```
 
 1. **Infeed (west).** Four lanes (two low, two on a mezzanine) come through
-   the wall, pass a scan tunnel and join the west side of the loop at 30°.
+   the wall and pass a scan tunnel; each pair merges at 30° into one belt,
+   and the two belts join the west side of the loop at 30°. Parcels come in
+   at a set rate; when that is more than the lanes take, they queue at the
+   hold points before the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
-   parcel has a destination: a dock chute, a robot station, or the store.
-3. **Docks (north).** 20 chutes drop onto roller belts that end at truck
-   docks. A worker takes each parcel off the belt and puts it in one of three
-   roll cages; the flow projector above marks which cage.
-4. **Robots (south).** 20 chutes end at pickup roller tables. Robots each
-   drive their own job: from parking to a station, load a parcel, drive to a
-   box, tip it in, then to a free parking spot.
-5. **Boxes and trucks (south wall).** When a box is full, a forklift lifts
-   it, drives it into a truck behind a dock door and brings it back empty.
+   parcel carries a Dutch postcode (four digits): 70% for the 20 largest
+   municipalities (north docks), 30% for the next 20 (robots), and now and
+   then an exception for manual sorting. When its chute is full, a parcel
+   goes round again.
+3. **Docks (north), doors 1–20.** Each dock serves one city. Its chute drops
+   onto a roller belt; five roll cages stand round the belt end, each for
+   part of the city's postcodes (on its board). The flow projector shows the
+   parcel's postcode on it and the worker walks it to the right cage. Full
+   cages are pushed into the trailer. At a cleardown the amber lamp flashes,
+   the worker pushes the remaining cages in, the truck leaves, and the worker
+   pulls empty cages out of the next truck.
+4. **Robots (south).** 20 chutes end at long pickup roller tables. A robot
+   takes a parcel (the projector shows its postcode), drives to the box for
+   that postcode (two boxes per city, doors 21–40), tips it in, and parks.
+5. **Boxes and trucks (south wall).** When a box is full, a forklift takes it
+   into the truck at its city's door and brings it back empty.
+   Above every door a screen shows the door number, city, postcodes and what
+   the truck is doing.
 6. **Storage (east).** Parcels go up a lift into a high-bay rack (a buffer)
    and come back out onto the loop later.
-7. Around it: manual sorting table, control room, monitoring desk, computing
-   racks, forklifts, signs.
+7. Around it: manual sorting (robots bring the exceptions to a drop; a belt
+   takes them to the table; a worker puts them in pigeonholes), the control
+   room with a video wall (live plan: chute fill, cleardowns, trucks, robots,
+   infeed queue), computing racks, forklifts, signs.
 
 8. Life: people walking their rounds, a ride-on scrubber, a reach truck at
    the rack, a forklift charging station, live screens with the hub's
@@ -63,6 +77,7 @@ do one move per beat.
 | Walk around on foot | `V`, then `W A S D` / arrows, drag to look, `Shift` run, `Esc` stop; touch: left thumb walks, right thumb looks |
 | Time: Day / Night / Day ↔ night cycle | `D` / `N` / `C` |
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
+| Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |
 | Sound on/off | `M` |
 | Hide the controls | `H` |
 | Quality: Low / Normal / High / Ultra | buttons (`?quality=`) |
@@ -70,7 +85,7 @@ do one move per beat.
 The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
 
 URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow|walk`,
-`?speed=0.5|1|2|4`, `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
+`?speed=0.5|1|2|4`, `?rate=<parcels per minute>`, `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
 (no controls: for recordings), `?quality=low|high`.
 
 ## Development
