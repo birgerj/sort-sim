@@ -32,9 +32,9 @@ let parts: Record<string, G> | null = null;
 function geometry(): Record<string, G> {
   if (parts) return parts;
   const body = [
-    new RoundedBoxGeometry(1.2, 0.55, 1.5, 3, 0.08).translate(0, 0.55, 0.15).toNonIndexed(),
+    new RoundedBoxGeometry(1.2, 0.55, 1.5, 3, 0.08).translate(0, 0.55, 0.15),
     // Counterweight at the back, rounded.
-    new RoundedBoxGeometry(1.24, 0.8, 0.55, 3, 0.18).translate(0, 0.72, -0.78).toNonIndexed(),
+    new RoundedBoxGeometry(1.24, 0.8, 0.55, 3, 0.18).translate(0, 0.72, -0.78),
     // Step and dashboard.
     box(1.1, 0.18, 0.45, 0, 0.92, 0.66),
   ];
@@ -44,8 +44,8 @@ function geometry(): Record<string, G> {
     box(1.12, 0.05, 1.2, 0, 2.2, 0.06),
     ...[-0.3, -0.1, 0.1, 0.3].map((z) => box(1.0, 0.04, 0.06, 0, 2.24, z)),
     // Seat.
-    new RoundedBoxGeometry(0.5, 0.12, 0.45, 2, 0.04).translate(0, 0.92, -0.2).toNonIndexed(),
-    new RoundedBoxGeometry(0.5, 0.5, 0.1, 2, 0.04).translate(0, 1.18, -0.42).toNonIndexed(),
+    new RoundedBoxGeometry(0.5, 0.12, 0.45, 2, 0.04).translate(0, 0.92, -0.2),
+    new RoundedBoxGeometry(0.5, 0.5, 0.1, 2, 0.04).translate(0, 1.18, -0.42),
     // Steering column and wheel.
     cyl(0.025, 0.4, 0, 1.15, 0.55),
     new THREE.TorusGeometry(0.13, 0.02, 6, 16).rotateX(Math.PI / 2.6).translate(0, 1.36, 0.5).toNonIndexed(),
@@ -96,6 +96,7 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
     else if (edge === 'hull') k.outline(m, 0.02);
     return m;
   };
+  k.blobUnder(g, 1.9, 3.6);
   add(p.body!, yellow);
   add(p.dark!, black);
   add(p.wheels!, black, g, null);
@@ -117,6 +118,8 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   d.legL.rotation.x = d.legR.rotation.x = -1.4;
   d.legL.position.y = d.legR.position.y = 0.82;
   d.armL.rotation.x = d.armR.rotation.x = -0.9;
+  // (No floor shadow for someone on a seat.)
+  for (const c of [...d.root.children]) if (c.userData.noInk) d.root.remove(c);
   g.add(d.root);
   const beacon = new THREE.MeshBasicMaterial({ color: 0x000000 });
   const b = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), beacon);

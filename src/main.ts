@@ -8,7 +8,8 @@
  *   mute=1                 no start screen, no sound
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
  *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
- *   quality=low|high       pixel ratio cap 1 or 2 (default 1.5)
+ *   quality=low|normal|high  render quality (high: ambient occlusion, sun shadows,
+ *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
 import './ui/style.css';
 
@@ -36,12 +37,21 @@ const mute = q.get('mute') === '1' || !showUi;
 music.setVolume(settings.volume);
 music.setMuted(settings.muted);
 
-const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi });
+let hudQuality = () => {};
+const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi, onQuality: () => hudQuality() });
 document.body.append(hud.root);
 
-const quality = q.get('quality');
-const maxRatio = quality === 'low' ? 1 : quality === 'high' ? 2 : 1.5;
-const resize = () => scene.resize(window.innerWidth, window.innerHeight, Math.min(window.devicePixelRatio || 1, maxRatio));
+const ql = q.get('quality');
+if (ql === 'low' || ql === 'normal' || ql === 'high') settings.quality = ql;
+const resize = () => {
+  const maxRatio = { low: 1, normal: 1.5, high: 2 }[settings.quality];
+  scene.resize(window.innerWidth, window.innerHeight, Math.min(window.devicePixelRatio || 1, maxRatio));
+};
+scene.setQuality(settings.quality);
+hudQuality = () => {
+  scene.setQuality(settings.quality);
+  resize();
+};
 window.addEventListener('resize', resize);
 resize();
 

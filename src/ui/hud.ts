@@ -4,7 +4,7 @@
  * remembered in localStorage; URL parameters override them for one visit.
  */
 import type { Music } from '../audio/music';
-import { BELT_SPEEDS, type Sorter } from '../scene/sorter';
+import { BELT_SPEEDS, type Quality, type Sorter } from '../scene/sorter';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
 
@@ -12,6 +12,7 @@ export interface Settings {
   time: TimeMode;
   /** Belt speed multiple (see BELT_SPEEDS). */
   speed: number;
+  quality: Quality;
   muted: boolean;
   volume: number;
 }
@@ -19,7 +20,7 @@ export interface Settings {
 const KEY = 'sortsim.settings';
 
 export function loadSettings(): Settings {
-  const s: Settings = { time: 'day', speed: 1, muted: false, volume: 0.8 };
+  const s: Settings = { time: 'day', speed: 1, quality: 'normal', muted: false, volume: 0.8 };
   try {
     Object.assign(s, JSON.parse(localStorage.getItem(KEY) ?? '{}'));
   } catch {
@@ -51,6 +52,7 @@ export class Hud {
   private camBtns = new Map<string, HTMLButtonElement>();
   private timeBtns = new Map<TimeMode, HTMLButtonElement>();
   private speedBtns = new Map<number, HTMLButtonElement>();
+  private qualityBtns = new Map<Quality, HTMLButtonElement>();
   private soundBtn!: HTMLButtonElement;
   private hideTimer = 0;
   private hidden = false;
@@ -59,7 +61,7 @@ export class Hud {
     private scene: Sorter,
     private music: Music,
     readonly settings: Settings,
-    opts: { showStart: boolean; showUi: boolean },
+    private opts: { showStart: boolean; showUi: boolean; onQuality: () => void },
   ) {
     this.root.append(this.caption, this.bar);
     if (!opts.showUi) this.root.classList.add('off');
@@ -83,6 +85,7 @@ export class Hud {
     for (const [id, b] of this.camBtns) b.classList.toggle('on', id === mode);
     for (const [id, b] of this.timeBtns) b.classList.toggle('on', id === this.settings.time);
     for (const [v, b] of this.speedBtns) b.classList.toggle('on', v === this.scene.beltSpeed());
+    for (const [v, b] of this.qualityBtns) b.classList.toggle('on', v === this.settings.quality);
     const on = this.music.audible;
     this.soundBtn.textContent = on ? 'Sound on' : 'Sound off';
     this.soundBtn.classList.toggle('on', on);
@@ -155,6 +158,22 @@ export class Hud {
       b.onclick = () => this.setTime(id);
       time.append(b);
       this.timeBtns.set(id, b);
+    }
+    const quality = this.group('Quality');
+    for (const [id, label, title] of [
+      ['low', 'Low', 'Fastest: pixel ratio 1'],
+      ['normal', 'Normal', 'Outlines, flat shading, contact shadows'],
+      ['high', 'High', 'Also ambient occlusion, sun shadows, glossy night floor, depth of field'],
+    ] as const) {
+      const b = el('button', '', label);
+      b.title = title;
+      b.onclick = () => {
+        this.settings.quality = id;
+        saveSettings(this.settings);
+        this.opts.onQuality();
+      };
+      quality.append(b);
+      this.qualityBtns.set(id, b);
     }
     const music = this.group('Music');
     this.soundBtn = el('button', '', 'Sound');

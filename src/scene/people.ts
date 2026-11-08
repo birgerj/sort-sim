@@ -97,6 +97,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(a, g.arm!, shirt);
     add(a, g.hand!, skin, false);
   }
+  k.blobUnder(root, 0.8, 0.6);
   if (at) {
     root.position.set(at.x, 0, at.z);
     root.rotation.y = at.ry;
