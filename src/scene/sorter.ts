@@ -37,6 +37,7 @@ import { Crowd } from './crowd';
 import { Batcher } from './batch';
 import { Trucks } from './trucks';
 import { Labels } from './labels';
+import { Clutter } from './clutter';
 import { BPM } from '../audio/composer';
 import { addressFor, type Address } from '../sim/addresses';
 import { Kpi } from '../sim/kpi';
@@ -1363,11 +1364,9 @@ export class Sorter implements Scene3D {
       // The sun stands high in the south-east; its shadow box is centred where the camera looks.
       this.keyLight.position.copy(this.look).add(this.t.set(25, 45, 30));
       this.keyLight.target.position.copy(this.look);
-      const f = this.follow;
-      const following = !!f && (this.camMode === 'follow' || (this.camMode === 'auto' && this.autoFollow));
-      this.bokeh.enabled = following;
-      if (following) (this.bokeh.uniforms as Record<string, { value: number }>).focus!.value = this.camera.position.distanceTo(f.pos);
-    } else this.bokeh.enabled = false;
+    }
+    // (No depth of field when following a parcel: the blurred background did not look right.)
+    this.bokeh.enabled = false;
     this.bloom.strength = (0.75 + this.kick * 0.35 + this.snare * 0.15) * (1 - this.day);
     this.bloom.enabled = this.day < 0.98;
     this.batcher.update();
@@ -3302,23 +3301,24 @@ export class Sorter implements Scene3D {
     });
     for (const bp of beltPaths) belt(bp, 0, bp.len, stripIn);
 
-    // A small display on the inside of the loop at every chute: where it goes.
+    // A small display at every chute, on the loop's support pillar there (inside face, eye height),
+    // and a small work table beside it with the odds and ends people leave on one.
     {
       const shows = new Labels(CHUTES.length, 0.8, 0.38, 216, 100);
       const dockXs = [...this.dockOf.entries()];
       const m = new THREE.Matrix4();
-      const r = new THREE.Matrix4();
+      const desk = new Clutter(this);
       CHUTES.forEach(([cs, side], k) => {
-        loopAt(cs + 0.9, this.p, this.t);
+        // The pillar nearest the chute (the loop's legs stand every 4 m, from s = 1).
+        const legS = 1 + 4 * Math.round((cs + 0.9 - 1) / 4);
+        loopAt(legS, this.p, this.t);
         outward(this.t, this.n).multiplyScalar(-side);
         const yaw = Math.atan2(this.n.x, this.n.z);
-        // At eye height on its own post, just inside the loop's legs.
-        void r;
-        const px = this.p.x + this.n.x * 1.35;
-        const pz = this.p.z + this.n.z * 1.35;
-        m.makeRotationY(yaw).setPosition(px + this.n.x * 0.06, 1.65, pz + this.n.z * 0.06);
+        const px = this.p.x + this.n.x * 0.12;
+        const pz = this.p.z + this.n.z * 0.12;
+        m.makeRotationY(yaw).setPosition(px + this.n.x * 0.05, 1.65, pz + this.n.z * 0.05);
         shows.place(k, m);
-        this.box('chutedisp', legMat, px, 1.0, pz, 0.08, 2.0, 0.08);
+        // A bracket and frame on the pillar.
         this.box('chutedisp', legMat, px + this.n.x * 0.02, 1.65, pz + this.n.z * 0.02, Math.abs(this.n.z) * 0.86 + 0.06, 0.48, Math.abs(this.n.x) * 0.86 + 0.06);
         const dock = dockXs.findIndex(([c]) => c === k);
         if (k === REJECT) shows.set(k, 'NO READ', 'to manual sorting', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
@@ -3326,7 +3326,12 @@ export class Sorter implements Scene3D {
           const c = NORTH_CITIES[dock]!;
           shows.set(k, `${dock + 1} · ${c.name}`, rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]), { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
         } else shows.set(k, 'Robots', `station ${(this.stationOf.get(k) ?? 0) + 1} · doors 21–40`, { bg: '#101114', fg: '#ffffff', sub: '#f6a6d6' });
+        // The table: beside the pillar, along the loop, its back to the track.
+        const tx = this.p.x + this.n.x * 0.75 + this.t.x * 1.3;
+        const tz = this.p.z + this.n.z * 0.75 + this.t.z * 1.3;
+        desk.table(tx, tz, Math.atan2(this.t.x, this.t.z), k * 7919 + 13);
       });
+      desk.build();
       shows.flush();
       this.put(shows.mesh);
     }

@@ -176,7 +176,7 @@ export class Docks {
     lines: { x: number; chute: number }[],
     private handlers: DockHandlers,
   ) {
-    this.boards = new Labels(lines.length * CAGES * 2, 0.34, 0.24, 170, 120);
+    this.boards = new Labels(lines.length * CAGES * 2, 0.68, 0.48, 200, 140);
     kit.put(this.boards.mesh);
     for (const [n, l] of lines.entries()) this.buildDock(l.x, l.chute, n + 1, n);
   }
@@ -409,7 +409,8 @@ export class Docks {
         c.g.updateMatrix();
         for (const side of [0, 1]) {
           if (c.state === 'gone') this.m.makeScale(0, 0, 0);
-          else this.m.makeRotationY(side * Math.PI).setPosition(0, 1.25, side ? -0.565 : 0.565).premultiply(c.g.matrix);
+          // On the cage's two closed sides (left and right of the loading side).
+          else this.m.makeRotationY(side ? -Math.PI / 2 : Math.PI / 2).setPosition(side ? -0.705 : 0.705, 1.15, 0).premultiply(c.g.matrix);
           this.boards.place((n * CAGES + i) * 2 + side, this.m);
         }
       }),
@@ -560,13 +561,15 @@ export class Docks {
 
   private readonly cageMeshGeo = (() => {
     const g = new THREE.BoxGeometry(1.36, 1.5, 1.04);
-    // Drop the top and bottom faces (groups 2 and 3), keep the four sides.
+    // Drop the top and bottom faces (groups 2 and 3) and the loading side (+z, group 4): that one
+    // is only half closed (below), so the worker can put parcels in from the top half.
     const idx = g.getIndex()!.array;
     const keep: number[] = [];
-    for (const grp of g.groups) if (grp.materialIndex !== 2 && grp.materialIndex !== 3) for (let i = grp.start; i < grp.start + grp.count; i++) keep.push(idx[i]!);
+    for (const grp of g.groups) if (grp.materialIndex !== 2 && grp.materialIndex !== 3 && grp.materialIndex !== 4) for (let i = grp.start; i < grp.start + grp.count; i++) keep.push(idx[i]!);
     g.setIndex(keep);
     g.clearGroups();
-    return g;
+    const half = new THREE.PlaneGeometry(1.36, 0.75).translate(0, -0.375, 0.52);
+    return mergeGeometries([g.toNonIndexed(), half.toNonIndexed()])!;
   })();
   private meshMat: THREE.MeshStandardMaterial | null = null;
   private cageMeshMat(): THREE.MeshStandardMaterial {

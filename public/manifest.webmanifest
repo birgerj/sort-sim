@@ -1,0 +1,35 @@
+{
+  "id": "./",
+  "name": "Sort sim: a parcel hub to music",
+  "short_name": "Sort sim",
+  "description": "A parcel sorting hub in 3D that moves to its own music. By day clean production, by night a secret party. Real Dutch postcodes, trucks with departure times, robots, and the hub's figures.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0b0910",
+  "theme_color": "#0b0910",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["entertainment", "education", "music"],
+  "launch_handler": { "client_mode": "focus-existing" },
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "screenshots": [
+    { "src": "screens/wide-day.jpg", "sizes": "1280x720", "type": "image/jpeg", "form_factor": "wide", "label": "The docks by day" },
+    { "src": "screens/wide-night.jpg", "sizes": "1280x720", "type": "image/jpeg", "form_factor": "wide", "label": "The secret party at night" },
+    { "src": "screens/narrow-day.jpg", "sizes": "720x1280", "type": "image/jpeg", "form_factor": "narrow", "label": "Roll cages with postcode cards" },
+    { "src": "screens/narrow-night.jpg", "sizes": "720x1280", "type": "image/jpeg", "form_factor": "narrow", "label": "Dancing on the sorter floor" }
+  ],
+  "shortcuts": [
+    { "name": "Night party", "short_name": "Night", "url": "./?time=night&dept=dance%20floor", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Truck docks", "short_name": "Docks", "url": "./?dept=docks", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Control room", "short_name": "Control", "url": "./?dept=control%20room", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Walk around", "short_name": "Walk", "url": "./?camera=walk", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -190,6 +190,53 @@ input[type='range'] {
   margin: 0;
 }
 
+.toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translate(-50%, -140%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+  transition: transform 0.4s;
+  z-index: 5;
+}
+
+.toast.show {
+  transform: translate(-50%, 0);
+}
+
+.toast .primary {
+  background: var(--teal);
+  border-color: var(--teal-l);
+}
+
+/* Room for the notch and home bar when installed (viewport-fit=cover). */
+.hud .caption,
+.hud .label-card {
+  margin-top: env(safe-area-inset-top);
+  margin-left: env(safe-area-inset-left);
+}
+
+.hud .menu,
+.hud .toast,
+.hud .panel {
+  margin-top: env(safe-area-inset-top);
+}
+
+.hud .bar {
+  margin-bottom: env(safe-area-inset-bottom);
+  margin-left: env(safe-area-inset-left);
+  margin-right: env(safe-area-inset-right);
+}
+
 .menu {
   position: absolute;
   top: 12px;

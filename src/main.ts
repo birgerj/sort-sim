@@ -16,6 +16,7 @@ import './ui/style.css';
 import { Music } from './audio/music';
 import { Sorter } from './scene/sorter';
 import { Hud, loadSettings, type TimeMode } from './ui/hud';
+import { Pwa } from './ui/pwa';
 import { WalkControls } from './ui/walk';
 
 const q = new URLSearchParams(location.search);
@@ -44,6 +45,8 @@ music.setMuted(settings.muted);
 let hudQuality = () => {};
 const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi, onQuality: () => hudQuality() });
 document.body.append(hud.root);
+const pwa = new Pwa(hud.root, music);
+hud.appGroup.append(pwa.install, pwa.fullscreen);
 
 const ql = q.get('quality');
 if (ql === 'low' || ql === 'normal' || ql === 'high' || ql === 'ultra') settings.quality = ql;
