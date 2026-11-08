@@ -27,11 +27,11 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
 import { RobotFloor } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
-import { BoxYard } from './boxYard';
+import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
-import { brushed, cardboardSide, dayFloor, dayWall, wireMesh } from './textures';
+import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { FleetEvent } from '../sim/robotFleet';
 
@@ -105,6 +105,34 @@ export type Quality = 'low' | 'normal' | 'high';
 export const BELT_SPEEDS = [0.5, 1, 2, 4];
 /** x of the 20 truck docks on the north wall: straight north of each dock chute's end. */
 const DOCK_X = Array.from({ length: 20 }, (_, k) => LX + 4 + 6 * k + 2.4);
+/** Openings in the long walls, where trailers stand: x of each open door. */
+const NORTH_DOORS = DOCK_X;
+const SOUTH_DOORS = DOORS.filter((d) => d[2]).map((d) => d[0]);
+const DOOR_W = 3.2;
+const DOOR_H = 3.8;
+
+/** A long wall (HW × HH, centred on its origin) with door openings at the given x. */
+function wallWithDoors(xs: number[]): THREE.ShapeGeometry {
+  const sh = new THREE.Shape();
+  sh.moveTo(-HW / 2, -HH / 2);
+  sh.lineTo(HW / 2, -HH / 2);
+  sh.lineTo(HW / 2, HH / 2);
+  sh.lineTo(-HW / 2, HH / 2);
+  sh.closePath();
+  for (const x of xs) {
+    const h = new THREE.Path();
+    const lx = x - HCX;
+    // (A thin sill at the bottom keeps each opening a proper hole.)
+    h.moveTo(lx - DOOR_W / 2, -HH / 2 + 0.02);
+    h.lineTo(lx - DOOR_W / 2, -HH / 2 + DOOR_H);
+    h.lineTo(lx + DOOR_W / 2, -HH / 2 + DOOR_H);
+    h.lineTo(lx + DOOR_W / 2, -HH / 2 + 0.02);
+    h.closePath();
+    sh.holes.push(h);
+  }
+  return new THREE.ShapeGeometry(sh);
+}
+
 
 // Lift and high-bay store, east of the loop.
 const STORE_DX = LX + STRAIGHT + LOOP_R - 39;
@@ -571,6 +599,11 @@ interface Tunnel {
   curtain: THREE.MeshBasicMaterial;
   flash: number;
   col: THREE.Color;
+  /** Scan line sweeping through the tunnel on a read; red on a no-read. */
+  line: THREE.Mesh;
+  lineMat: THREE.MeshBasicMaterial;
+  depth: number;
+  read: boolean;
 }
 
 interface Chute {
@@ -1412,6 +1445,8 @@ export class Sorter implements Scene3D {
     p.scanned = true;
     p.flash = 1;
     t.flash = 1;
+    // Now and then a label cannot be read (a red line); the next scanner gets it.
+    t.read = Math.random() > 0.05;
     t.col.copy(p.glow);
   }
 
@@ -1797,6 +1832,17 @@ export class Sorter implements Scene3D {
 
   private tunnelGlow(t: Tunnel, dt: number): void {
     t.flash = Math.max(0, t.flash - dt * 3);
+    // The scan line sweeps once through the tunnel per read.
+    t.line.visible = t.flash > 0.02;
+    (t.line.userData.fan as THREE.Mesh).visible = t.line.visible;
+    if (t.line.visible) {
+      t.line.position.z = (0.5 - t.flash) * (t.depth - 0.4);
+      const fan = t.line.userData.fan as THREE.Mesh;
+      fan.position.z = t.line.position.z;
+      (fan.material as THREE.MeshBasicMaterial).color.copy(t.lineMat.color).multiplyScalar(0.25 * t.flash);
+      t.lineMat.color.setRGB(...((t.read ? [0.2, 1.6, 0.4] : [1.8, 0.15, 0.1]) as RGB));
+      t.lineMat.opacity = 0.35 + 0.6 * t.flash;
+    }
     t.ring.color.copy(t.col).multiplyScalar(0.25 + t.flash * 3).lerp(this.white, t.flash * 0.4);
     if (this.day > 0) t.ring.color.lerp(this.c.setHex(DAY.orangeL).lerp(this.white, t.flash * 0.8), this.day);
     t.curtain.opacity = (0.1 + t.flash * 0.45 + this.snare * 0.35) * (1 - this.day);
@@ -2088,11 +2134,18 @@ export class Sorter implements Scene3D {
     };
     const wx = wallMat(Math.round(HW / 4), 4);
     const wz = wallMat(16, 4);
+    void wx;
+    const ribsM = ribs.clone();
+    ribsM.repeat.set(1 / 4, 4 / HH);
+    ribsM.offset.set(0, 0.5 * (4 / HH));
+    ribsM.needsUpdate = true;
+    const longNight = new THREE.MeshStandardMaterial({ map: ribsM, roughness: 0.85, metalness: 0.3, side: THREE.DoubleSide });
     for (const z of [-HZ, HZ]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HW, HH), wx);
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longNight);
       w.position.set(HCX, HH / 2, z);
       this.put(w, 'night');
     }
+    this.buildTrailers();
     for (const x of [WX, EX]) {
       const w = new THREE.Mesh(new THREE.PlaneGeometry(HZ * 2, HH), wz);
       w.position.set(x, HH / 2, 0);
@@ -2180,6 +2233,47 @@ export class Sorter implements Scene3D {
     for (let x = -58; x < -18; x += 1.6) if (Math.random() < 0.65) stack(x, -32.6);
     for (let k = 0; k < 18; k++) stack(rnd(-58, -32), rnd(-28, -12));
     for (let x = -40; x < -25; x += 1.6) if (Math.random() < 0.5) stack(x, 32.6);
+  }
+
+  /**
+   * Trailers behind the open dock doors: an inside you can look into (and the box
+   * forklifts drive into), with cargo at the far end and a strip light.
+   */
+  private buildTrailers(): void {
+    const inside = this.std(0x1b1d22, 0.7, 0.3, 0xe6e9ed);
+    inside.side = THREE.BackSide;
+    inside.map = sectionalDoor();
+    const floorM = this.std(0x2a2c31, 0.8, 0.2, 0xb9c0c8);
+    floorM.map = checkerPlate();
+    const lamp = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.3, 1.25, 1.1) });
+    const cageM = this.std(0x5d6670, 0.5, 0.6, DAY.teal);
+    const card = this.std(0x8a7050, 0.95, 0, 0xe0b882);
+    card.map = cardboardSide();
+    const L = 12;
+    const geo = new THREE.BoxGeometry(DOOR_W - 0.1, DOOR_H - 0.1, L);
+    for (const [xs, dir] of [[NORTH_DOORS, -1], [SOUTH_DOORS, 1]] as const) {
+      xs.forEach((x, k) => {
+        const zc = dir * (HZ + L / 2 + 0.02);
+        const box = new THREE.Mesh(geo, inside);
+        box.position.set(x, DOOR_H / 2, zc);
+        this.put(box);
+        box.userData.noInk = true;
+        this.box('trfloor', floorM, x, 0.02, zc, DOOR_W - 0.2, 0.04, L);
+        this.box('trlamp', lamp, x, DOOR_H - 0.15, zc, 0.2, 0.04, L - 2);
+        // Cargo at the far end: roll cages in the north trailers, boxes on pallets in the south ones.
+        const fill = 2 + ((k * 7) % 4);
+        for (let r = 0; r < fill; r++) {
+          const z = dir * (HZ + L - 0.9 - r * 1.3);
+          for (const sx of [-0.75, 0.75]) {
+            if (dir < 0) this.box('trcage', cageM, x + sx, 0.95, z, 1.3, 1.7, 1.0);
+            else {
+              this.box('trpal', card, x + sx, 0.55, z, 1.2, 0.9, 1.2);
+              this.box('trpalw', this.std(0x6a5038, 0.9, 0, 0xd8b080), x + sx, 0.06, z, 1.2, 0.12, 1.2);
+            }
+          }
+        }
+      });
+    }
   }
 
   /** Control room: a cabin with a window band, door, roof plant and a stair to the roof. Front faces −z. */
@@ -2520,7 +2614,16 @@ export class Sorter implements Scene3D {
       const leg = this.std(0x6b7280, 0.5, 0.7, DAY.orange);
       for (const x of [-W / 2, W / 2]) add(new THREE.BoxGeometry(0.15, this.p.y - 0.3, 0.15), leg, x, -(this.p.y + 0.3) / 2, 0);
     }
-    return { ring, curtain, flash: 0, col: new THREE.Color(0.3, 1, 0.5) };
+    const lineMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.6, 0.4), transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+    const line = add(new THREE.PlaneGeometry(W - 0.4, 0.05), lineMat, 0, 0.35, 0);
+    line.rotation.x = -Math.PI / 2;
+    line.visible = false;
+    // A fan of light from the top scanner down to the line.
+    const fanMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+    const fan = add(new THREE.PlaneGeometry(W - 0.4, H - 0.9), fanMat, 0, 0.35 + (H - 0.9) / 2, 0);
+    fan.visible = false;
+    line.userData.fan = fan;
+    return { ring, curtain, flash: 0, col: new THREE.Color(0.3, 1, 0.5), line, lineMat, depth: D, read: true };
   }
 
   private buildStore(): void {
@@ -2777,8 +2880,15 @@ export class Sorter implements Scene3D {
     };
     const wall = cladding(HZ * 2);
     const longWall = cladding(HW);
+    void longWall;
+    const cl = dayWall().clone();
+    // Shape UVs are in metres from the wall's centre: one cladding tile per 8 m, windows at the top.
+    cl.repeat.set(1 / 8, 1 / HH);
+    cl.offset.set(0, 0.5);
+    cl.needsUpdate = true;
+    const longDay = new THREE.MeshBasicMaterial({ color: DAY.wall, map: cl, side: THREE.DoubleSide });
     for (const z of [-HZ, HZ]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HW, HH), longWall);
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longDay);
       w.position.set(HCX, HH / 2, z);
       this.put(w);
     }

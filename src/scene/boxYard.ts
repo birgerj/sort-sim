@@ -15,7 +15,7 @@ import { buildForklift, FORK_REACH, type ForkliftModel } from './forklift';
 export const AISLE_Z = 32.3;
 const WALL_Z = 34;
 /** 20 dock doors on the south wall: [x, number, in use]; every fourth is closed (no truck). */
-const DOORS: [number, number, boolean][] = Array.from({ length: 20 }, (_, k) => [-16 + 6 * k, 21 + k, k % 4 !== 3]);
+export const DOORS: [number, number, boolean][] = Array.from({ length: 20 }, (_, k) => [-16 + 6 * k, 21 + k, k % 4 !== 3]);
 /** Forklifts; each serves one stretch of the row of boxes, with the doors in it. */
 const LIFTS = 4;
 

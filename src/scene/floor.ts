@@ -128,6 +128,8 @@ interface Projector {
   target: THREE.Vector3 | null;
   flash: number;
   col: THREE.Color;
+  /** Picture it throws (index in the icon atlas). */
+  icon: number;
 }
 
 /** Parcels in a box before it counts as full. */
@@ -157,6 +159,7 @@ export class RobotFloor {
   private beams!: THREE.InstancedMesh;
   private beamMat!: THREE.MeshBasicMaterial;
   private spots!: THREE.InstancedMesh;
+  private iconAttr!: THREE.InstancedBufferAttribute;
   private gridMat!: THREE.MeshBasicMaterial;
   private parkMat!: THREE.MeshBasicMaterial;
   private dayShown: boolean | null = null;
@@ -256,6 +259,8 @@ export class RobotFloor {
     const pr = this.projectors[k]!;
     pr.flash = 1;
     if (col) pr.col.copy(col);
+    // By day: an arrow, a tick or a number frame for the operator; by night: a star.
+    pr.icon = this.dayShown === false ? 3 + (k % 2) : [0, 1, 2][(k + Math.floor(Math.random() * 3)) % 3]!;
   }
 
   update(dt: number, bt: number, s: { kick: number; snare: number; hat: number; day: number; dayShown: boolean; cols: THREE.Color[]; pad: THREE.Color | null; bar: number }): void {
@@ -326,8 +331,11 @@ export class RobotFloor {
       if (marking) {
         o.position.set(target!.x, target!.y + 0.02, target!.z);
         o.rotation.set(-Math.PI / 2, 0, 0);
-        const sc = 0.7 + 0.4 * pr.flash;
+        const sc = 0.8 + 0.3 * pr.flash;
         o.scale.set(sc, sc, 1);
+        // Point the picture away from the projector, so arrows show the way.
+        o.rotation.z = Math.atan2(target!.x - pr.pos.x, target!.z - pr.pos.z);
+        this.iconAttr.setX(k, pr.icon);
       } else o.scale.set(0, 0, 0);
       o.updateMatrix();
       this.spots.setMatrixAt(k, o.matrix);
@@ -379,6 +387,7 @@ export class RobotFloor {
     this.beams.instanceMatrix.needsUpdate = true;
     if (this.beams.instanceColor) this.beams.instanceColor.needsUpdate = true;
     this.spots.instanceMatrix.needsUpdate = true;
+    this.iconAttr.needsUpdate = true;
     if (this.spots.instanceColor) this.spots.instanceColor.needsUpdate = true;
   }
 
@@ -619,7 +628,7 @@ export class RobotFloor {
       const f = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.3), face);
       f.position.set(x, PROJ_Y + 0.35, z + 0.28);
       k.put(f);
-      this.projectors.push({ pos: v(x, PROJ_Y - 0.48, z), target, flash: 0, col: new THREE.Color(1, 1, 1) });
+      this.projectors.push({ pos: v(x, PROJ_Y - 0.48, z), target, flash: 0, col: new THREE.Color(1, 1, 1), icon: 0 });
       return this.projectors.length - 1;
     };
     const frame = (x: number, z: number, w: number, d: number) => {
@@ -645,7 +654,18 @@ export class RobotFloor {
     this.beams.setColorAt(0, new THREE.Color(1, 1, 1));
     this.beams.frustumCulled = false;
     k.put(this.beams);
-    this.spots = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false }), n);
+    // Projected pictures: an atlas of icons, one per instance (aIcon picks the cell).
+    const spotMat = new THREE.MeshBasicMaterial({ map: iconAtlas(), transparent: true, opacity: 0.95, depthWrite: false });
+    spotMat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aIcon;')
+        .replace('#include <uv_vertex>', '#include <uv_vertex>\nvMapUv.x = (vMapUv.x + aIcon) / ' + ICONS + '.0;');
+    };
+    const spotGeo = new THREE.PlaneGeometry(1, 1);
+    this.iconAttr = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
+    spotGeo.setAttribute('aIcon', this.iconAttr);
+    this.spots = new THREE.InstancedMesh(spotGeo, spotMat, n);
+    this.spots.userData.noInk = true;
     this.spots.setColorAt(0, new THREE.Color(1, 1, 1));
     this.spots.frustumCulled = false;
     k.put(this.spots);
@@ -772,6 +792,60 @@ export class RobotFloor {
     });
     k.only = was;
   }
+}
+
+const ICONS = 5;
+
+/** Icons the projectors throw, side by side: arrow, tick, number frame, star, ring. White on clear. */
+function iconAtlas(): THREE.CanvasTexture {
+  return tex(128 * ICONS, 128, (g) => {
+    g.clearRect(0, 0, 128 * ICONS, 128);
+    g.strokeStyle = g.fillStyle = '#ffffff';
+    g.lineCap = g.lineJoin = 'round';
+    const frame = (i: number) => {
+      g.lineWidth = 8;
+      g.strokeRect(i * 128 + 10, 10, 108, 108);
+    };
+    // 0 arrow
+    frame(0);
+    g.beginPath();
+    g.moveTo(64, 98);
+    g.lineTo(64, 34);
+    g.moveTo(40, 58);
+    g.lineTo(64, 32);
+    g.lineTo(88, 58);
+    g.lineWidth = 14;
+    g.stroke();
+    // 1 tick
+    frame(1);
+    g.beginPath();
+    g.moveTo(128 + 32, 66);
+    g.lineTo(128 + 56, 90);
+    g.lineTo(128 + 98, 40);
+    g.stroke();
+    // 2 number frame
+    frame(2);
+    g.font = '800 64px system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(String(1 + Math.floor(Math.random() * 9)), 256 + 64, 68);
+    // 3 star
+    g.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const a = (k * Math.PI) / 5 - Math.PI / 2;
+      const r = k % 2 ? 22 : 54;
+      g.lineTo(384 + 64 + Math.cos(a) * r, 64 + Math.sin(a) * r);
+    }
+    g.closePath();
+    g.fill();
+    // 4 rings
+    g.lineWidth = 8;
+    for (const r of [20, 38, 56]) {
+      g.beginPath();
+      g.arc(512 + 64, 64, r, 0, Math.PI * 2);
+      g.stroke();
+    }
+  });
 }
 
 /** Where the manual sort table stands. */
