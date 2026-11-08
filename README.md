@@ -38,14 +38,18 @@ sound is generated in code.
    at a set rate; when that is more than the lanes take, they queue at the
    buffers after the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
-   parcel carries a postcode of the chosen country: about 88% for the 16 largest
-   municipalities (north docks; the four largest have two docks each, with the
-   same postcodes, parcels split 50–50), about 12% for the next 20 (robots; fewer while
+   parcel carries a postcode of the chosen country: about 88% for the largest
+   municipalities (north docks), about 12% for the next 20 (robots; fewer while
    their pickup tables fill up), and now and
    then an exception for manual sorting. When its chute is full, a parcel
    goes round again.
-3. **Docks (north), doors 1–20.** Each dock serves one city (the four largest
-   two docks each). Its chute drops onto a roller belt; six roll cages stand
+3. **Docks (north), doors 1–20.** Each dock serves one city. The 20 doors are
+   shared out by volume (post in proportion to inhabitants): every city at the
+   docks gets at least one, the rest go one by one to the city with the most
+   post per door, and the number of cities at the docks is chosen so the post
+   per door is as even as possible (the Netherlands: 12 cities, Amsterdam 4
+   doors, Rotterdam and The Hague 3, Utrecht 2). A city's doors sit side by
+   side, with the same postcodes, and take turns. Its chute drops onto a roller belt; six roll cages stand
    round the belt end, each for part of the city's postcodes (on its cards).
    The flow projector shows the postcodes of the first three parcels and the
    picker walks each to the right cage. As soon as a cage is full, a loader

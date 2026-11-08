@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addressFor } from '../src/sim/addresses';
 import { COUNTRIES, countryFromLanguages, pcText } from '../src/sim/countries';
-import { areas } from '../src/sim/postcodes';
+import { areas, planDoors } from '../src/sim/postcodes';
 
 describe('countries', () => {
   it('has 40 towns each, largest first, with postcodes that do not overlap', () => {
@@ -48,5 +48,16 @@ describe('countries', () => {
     expect(countryFromLanguages(['ro-MD'])).toBe('md');
     expect(countryFromLanguages(['fi'])).toBe('fi');
     expect(countryFromLanguages(['en-US'])).toBe('nl');
+  });
+});
+
+describe('dock doors by volume', () => {
+  it('uses all 20 doors, at least one per city, more for bigger cities', () => {
+    for (const c of COUNTRIES) {
+      const n = planDoors(c.cities.map((t) => t.pop), 20);
+      expect(n.reduce((a, b) => a + b, 0)).toBe(20);
+      for (let i = 1; i < n.length; i++) expect(n[i]!).toBeLessThanOrEqual(n[i - 1]! + 1);
+      expect(Math.min(...n)).toBeGreaterThanOrEqual(1);
+    }
   });
 });
