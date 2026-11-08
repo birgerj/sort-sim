@@ -657,7 +657,10 @@ interface Tour {
 }
 
 /** Height at which the camera travels between stops: above the high infeeds and frames, below ducts and signs. */
-const CRUISE_Y = 8;
+/** Fly height between stops: above the projectors (6.4–7.1 m), well below ducts, trays and lamps (8.8 m and up). */
+const CRUISE_Y = 7.2;
+/** Highest the flying camera may go. */
+const FLY_MAX_Y = 8.0;
 /** Things the tour must fly around at cruise height: x, z, radius. */
 const TOUR_OBSTACLES: [number, number, number][] = [
   [-50, 1.9, 2.4],
@@ -2037,7 +2040,8 @@ export class Sorter implements Scene3D {
         this.wantLook.copy(c).addScaledVector(this.fwd, 2.2);
       }
     } else this.flyTour(dt, travel);
-    // Stay inside the hall.
+    // Stay inside the hall, and under the ceiling's ducts, cable trays and lamps.
+    this.want.y = Math.min(this.want.y, FLY_MAX_Y);
     this.want.x = clamp(this.want.x, WX + 1.5, EX - 1.5);
     this.want.z = clamp(this.want.z, -HZ + 1.5, HZ - 1.5);
     const k = this.first ? 1 : 1 - Math.exp(-dt * (p ? 2.6 : 1.2));
@@ -3477,7 +3481,7 @@ export class Sorter implements Scene3D {
         }
       }
       pts.push(b);
-    } else pts.push(from.clone().lerp(pos, 0.5).setY(Math.max(from.y, pos.y) + 1.5));
+    } else pts.push(from.clone().lerp(pos, 0.5).setY(Math.min(FLY_MAX_Y, Math.max(from.y, pos.y) + 1.5)));
     pts.push(pos);
     // Drop points that coincide (a zero-length curve has no points to sample).
     const clean = pts.filter((p, n) => n === 0 || p.distanceTo(pts[n - 1]!) > 0.05);
