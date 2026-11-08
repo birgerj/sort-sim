@@ -100,6 +100,9 @@ const loadGeo = {
   box: new THREE.BoxGeometry(1.0, 0.8, 0.9).translate(0, 0.56, FORK_REACH),
 };
 
+/** Every forklift built, so a click can pick one to follow. */
+export const FORKLIFTS: THREE.Object3D[] = [];
+
 export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   const p = geometry();
   let M = mats.get(k);
@@ -160,6 +163,7 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   const b = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), beacon);
   b.position.set(0, 2.32, -0.4);
   g.add(b);
+  FORKLIFTS.push(g);
   k.put(g);
   return { g, forks, beacon };
 }

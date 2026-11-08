@@ -122,6 +122,9 @@ const HAIR = [0x2a1d14, 0x4a3221, 0x7a5a3a, 0xc9a26a, 0x1b1b1d, 0x8f8f8f];
 /** White materials shared by everyone (colour comes per instance); one set per kit. */
 const sharedMats = new WeakMap<FloorKit, Record<'cloth' | 'skin' | 'boots' | 'hard' | 'vest' | 'dark' | 'reflect', THREE.Material>>();
 
+/** Every person built (their root), so a click can pick one to follow. */
+export const HUMANS: THREE.Object3D[] = [];
+
 export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: number; ry: number }): Human {
   const g = shapes();
   let M = sharedMats.get(k);
@@ -201,6 +204,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(a, g.hand!, look.vest !== undefined ? M.cloth : M.skin, look.vest !== undefined ? 0x3a3d44 : skin);
   }
   k.blobUnder(root, 0.8, 0.6);
+  HUMANS.push(root);
   if (at) {
     root.position.set(at.x, 0, at.z);
     root.rotation.y = at.ry;

@@ -570,6 +570,11 @@ export class Hud {
       if (!still) return;
       const p = this.scene.pickParcel(e.clientX, e.clientY);
       if (p) this.showLabel(p);
+      else {
+        // Not a parcel: a robot, forklift or person under the pointer is followed.
+        const t = this.scene.pickThing(e.clientX, e.clientY);
+        if (t) this.scene.followObject(t);
+      }
     });
     window.addEventListener('pointermove', (e) => {
       if (!drag || drag.id !== e.pointerId) return;
