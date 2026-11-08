@@ -3175,7 +3175,7 @@ export class Sorter implements Scene3D {
 
     // A small display on the inside of the loop at every chute: where it goes.
     {
-      const shows = new Labels(CHUTES.length, 0.9, 0.42, 216, 100);
+      const shows = new Labels(CHUTES.length, 0.8, 0.38, 216, 100);
       const dockXs = [...this.dockOf.entries()];
       const m = new THREE.Matrix4();
       const r = new THREE.Matrix4();
@@ -3183,9 +3183,14 @@ export class Sorter implements Scene3D {
         loopAt(cs + 0.9, this.p, this.t);
         outward(this.t, this.n).multiplyScalar(-side);
         const yaw = Math.atan2(this.n.x, this.n.z);
-        m.makeRotationY(yaw).multiply(r.makeRotationX(-0.35)).setPosition(this.p.x + this.n.x * 1.0, LOOP_Y + 0.12, this.p.z + this.n.z * 1.0);
+        // At eye height on its own post, just inside the loop's legs.
+        void r;
+        const px = this.p.x + this.n.x * 1.35;
+        const pz = this.p.z + this.n.z * 1.35;
+        m.makeRotationY(yaw).setPosition(px + this.n.x * 0.06, 1.65, pz + this.n.z * 0.06);
         shows.place(k, m);
-        this.box('chutedisp', legMat, this.p.x + this.n.x * 1.0, LOOP_Y - 0.25, this.p.z + this.n.z * 1.0, 0.1, 0.22, 0.1);
+        this.box('chutedisp', legMat, px, 1.0, pz, 0.08, 2.0, 0.08);
+        this.box('chutedisp', legMat, px + this.n.x * 0.02, 1.65, pz + this.n.z * 0.02, Math.abs(this.n.z) * 0.86 + 0.06, 0.48, Math.abs(this.n.x) * 0.86 + 0.06);
         const dock = dockXs.findIndex(([c]) => c === k);
         if (k === REJECT) shows.set(k, 'NO READ', 'to manual sorting', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
         else if (dock >= 0) {
