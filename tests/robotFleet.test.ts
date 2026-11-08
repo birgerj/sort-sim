@@ -15,7 +15,7 @@ describe('robot fleet', () => {
   it('keeps delivering without collisions or robots stuck for long', () => {
     const { grid, parks, stations, bins } = sorterFloor(cols);
     const rng = new Rng(7);
-    const fleet = new Fleet(grid, parks, stations, bins, 20, () => rng.next());
+    const fleet = new Fleet(grid, parks, stations, bins, 40, () => rng.next());
     const queue = stations.map(() => 0);
     const since = fleet.bots.map(() => 0);
     let delivered = 0;
@@ -36,6 +36,25 @@ describe('robot fleet', () => {
         expect(since[b.k]).toBeLessThan(60);
       }
     }
-    expect(delivered).toBeGreaterThan(600);
+    expect(delivered).toBeGreaterThan(900);
+  });
+
+  it('takes small parcels to the manual sort drop and drives on', () => {
+    const { grid, parks, stations, bins } = sorterFloor(cols);
+    const rng = new Rng(3);
+    const fleet = new Fleet(grid, parks, stations, bins, 40, () => rng.next());
+    const table = bins.findIndex((b) => b.manual);
+    fleet.choose = (k) => (k % 5 === 0 ? table : null);
+    const queue = stations.map(() => 0);
+    let toTable = 0;
+    for (let beat = 0; beat < 3000; beat++) {
+      if (beat % 2 === 0) queue[beat % queue.length]! < 3 && queue[beat % queue.length]!++;
+      for (const e of fleet.step(beat, (s) => queue[s]! > 0, beat % 4 === 1 || beat % 4 === 3)) {
+        if (e.t === 'load') queue[e.station]!--;
+        if (e.t === 'dropped' && e.bin === table) toTable++;
+      }
+      for (const b of fleet.bots) if (b.state !== 'idle') expect(b.blocked).toBeLessThan(40);
+    }
+    expect(toTable).toBeGreaterThan(20);
   });
 });

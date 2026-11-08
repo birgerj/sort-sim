@@ -28,9 +28,21 @@ export interface DockParcel {
 }
 
 interface Cage {
+  /** Home position by the belt. */
   at: V3;
   n: number;
-  pile: THREE.InstancedMesh;
+  g: THREE.Group;
+  pile: THREE.Object3D[];
+  /** Filling by the belt; rolling into the trailer when full; coming back empty. */
+  state: 'fill' | 'out' | 'back';
+  t0: number;
+}
+
+/** What a dock needs from its truck (by dock x). */
+export interface TruckLink {
+  open(x: number): boolean;
+  reserve(x: number, n: 1 | -1): void;
+  load(x: number): void;
 }
 
 interface Worker {
@@ -64,6 +76,26 @@ export interface DockHandlers {
   mark(chute: number, target: V3): void;
   /** A parcel left in a cage (for the dock lamp). */
   shipped(chute: number): void;
+  truck: TruckLink;
+}
+
+/** Parcels in a full roll cage. */
+const CAGE_FULL = 6;
+
+let cageGeo: Record<'frame' | 'wheels' | 'parcel', THREE.BufferGeometry> | null = null;
+/** Roll cage geometry, built once: frame and wheels merged, and a parcel for the pile. */
+function cageGeometry(): Record<'frame' | 'wheels' | 'parcel', THREE.BufferGeometry> {
+  if (cageGeo) return cageGeo;
+  const parts: THREE.BufferGeometry[] = [];
+  const part = (w: number, h: number, d: number, x: number, y: number, z: number) => parts.push(new THREE.BoxGeometry(w, h, d).translate(x, y, z));
+  part(1.4, 0.08, 1.1, 0, 0.3, 0);
+  for (const sx of [-0.68, 0.68]) for (const sz of [-0.52, 0.52]) part(0.06, 1.7, 0.06, sx, 1.1, sz);
+  for (const sz of [-0.52, 0.52]) part(1.4, 0.06, 0.06, 0, 1.92, sz);
+  for (const sx of [-0.68, 0.68]) part(0.06, 0.06, 1.1, sx, 1.92, 0);
+  const wheels: THREE.BufferGeometry[] = [];
+  for (const sx of [-0.55, 0.55]) for (const sz of [-0.42, 0.42]) wheels.push(new THREE.CylinderGeometry(0.11, 0.11, 0.08, 10).rotateX(Math.PI / 2).translate(sx, 0.12, sz));
+  cageGeo = { frame: mergeGeometries(parts)!, wheels: mergeGeometries(wheels)!, parcel: new THREE.BoxGeometry(0.5, 0.28, 0.42) };
+  return cageGeo;
 }
 
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
@@ -89,6 +121,12 @@ export class Docks {
     return v(x, 0, DOCK_BELT_END - 1.6);
   }
 
+  /** Room left on a dock's belt end (the sorter holds parcels back when it is full). */
+  space(chute: number): number {
+    const d = this.docks.find((x) => x.chute === chute);
+    return d ? 5 - d.queue.length : 0;
+  }
+
   arrive(chute: number, p: DockParcel): void {
     const d = this.docks.find((x) => x.chute === chute);
     if (!d) {
@@ -105,6 +143,21 @@ export class Docks {
   /** One beat: by day the worker takes the next step of the job; by night parcels slide into cages. */
   beat(b: number, day: boolean): void {
     for (const d of this.docks) {
+      // Full cages roll into the trailer when the truck is there; they come back empty.
+      for (const c of d.cages) {
+        if (c.state === 'fill' && c.n >= CAGE_FULL && this.handlers.truck.open(d.x) && d.worker.cage !== d.cages.indexOf(c)) {
+          c.state = 'out';
+          c.t0 = b;
+          this.handlers.truck.reserve(d.x, 1);
+        } else if (c.state === 'out' && b - c.t0 >= 3) {
+          this.handlers.truck.load(d.x);
+          this.handlers.truck.reserve(d.x, -1);
+          c.n = 0;
+          this.writePile(c);
+          c.state = 'back';
+          c.t0 = b;
+        } else if (c.state === 'back' && b - c.t0 >= 3) c.state = 'fill';
+      }
       const w = d.worker;
       if (!day) {
         // Night: no picking. Parcels at the belt end slide into a cage on the beat.
@@ -115,7 +168,11 @@ export class Docks {
         w.task = 'idle';
         const p = d.queue.shift();
         if (p) {
-          const cage = Math.floor(Math.random() * d.cages.length);
+          const cage = this.pickCage(d);
+          if (cage < 0) {
+            d.queue.unshift(p);
+            continue;
+          }
           d.sliding.push({ p, cage, at: b });
           this.handlers.mark(d.chute, this.cageTop(d.cages[cage]!));
         }
@@ -123,11 +180,11 @@ export class Docks {
       }
       switch (w.task) {
         case 'idle':
-          if (d.queue.length) {
+          if (d.queue.length && this.pickCage(d) >= 0) {
             w.task = 'pick';
             w.taskAt = b;
             w.parcel = d.queue.shift()!;
-            w.cage = Math.floor(Math.random() * d.cages.length);
+            w.cage = this.pickCage(d);
             this.handlers.mark(d.chute, this.cageTop(d.cages[w.cage]!));
           }
           break;
@@ -155,6 +212,19 @@ export class Docks {
 
   update(dt: number, bt: number, s: { kick: number; snare: number; dayShown: boolean }): void {
     const ph = bt - Math.floor(bt);
+    for (const d of this.docks) {
+      for (const c of d.cages) {
+        if (c.state === 'fill') {
+          c.g.position.copy(c.at);
+          continue;
+        }
+        // Through the door into the trailer, and back.
+        const door = this.t.set(d.x, 0, WALL_Z - 1.6);
+        const f = ease(Math.min(1, (bt - c.t0) / 3));
+        if (c.state === 'out') c.g.position.lerpVectors(c.at, door, f);
+        else c.g.position.lerpVectors(door, c.at, f);
+      }
+    }
     if (s.dayShown !== this.boardsDay) {
       this.boardsDay = s.dayShown;
       for (const m of boardMats) m.color.setScalar(s.dayShown ? 1 : 0.22);
@@ -179,6 +249,16 @@ export class Docks {
     }
   }
 
+  /** A cage to put the next parcel in: filling and not full (−1 if none). */
+  private pickCage(d: Dock): number {
+    const ok = d.cages.map((c, i) => (c.state === 'fill' && c.n < CAGE_FULL ? i : -1)).filter((i) => i >= 0);
+    return ok.length ? ok[Math.floor(Math.random() * ok.length)]! : -1;
+  }
+
+  private writePile(c: Cage): void {
+    c.pile.forEach((p, k) => (p.visible = k < c.n));
+  }
+
   private cageTop(c: Cage): V3 {
     return v(c.at.x, 0.45 + Math.min(c.n, 6) * 0.22, c.at.z);
   }
@@ -186,17 +266,8 @@ export class Docks {
   private put(d: Dock, cage: number, p: DockParcel): void {
     const c = d.cages[cage]!;
     p.dead = true;
-    c.n = c.n >= 8 ? 1 : c.n + 1;
-    const o = this.o;
-    for (let k = 0; k < c.pile.count; k++) {
-      const shown = k < c.n;
-      o.position.set(((k % 2) - 0.5) * 0.5, 0.42 + Math.floor(k / 2) * 0.3, ((Math.floor(k / 2) % 2) - 0.5) * 0.3);
-      o.rotation.set(0, k * 0.7, 0);
-      o.scale.setScalar(shown ? 1 : 0);
-      o.updateMatrix();
-      c.pile.setMatrixAt(k, o.matrix);
-    }
-    c.pile.instanceMatrix.needsUpdate = true;
+    c.n = Math.min(CAGE_FULL, c.n + 1);
+    this.writePile(c);
     this.handlers.shipped(d.chute);
   }
 
@@ -317,38 +388,34 @@ export class Docks {
 
   private buildCage(at: V3, ry: number): Cage {
     const k = this.kit;
-    const teal = k.std(0x5d6670, 0.5, 0.6, 0x2fa58f);
+    const geo = cageGeometry();
+    const mats = this.cageMats ?? (this.cageMats = {
+      teal: k.std(0x5d6670, 0.5, 0.6, 0x2fa58f),
+      wheel: k.std(0x222222, 0.8, 0.1, 0x333333),
+      card: k.std(0x6f5a3f, 0.95, 0, 0xd9b07a),
+    });
     const g = new THREE.Group();
     g.position.copy(at);
     g.rotation.y = ry;
     k.put(g);
     k.blobUnder(g, 1.9, 1.6);
-    // Frame and wheels merged into one mesh each (20 docks × 3 cages adds up).
-    const parts: THREE.BufferGeometry[] = [];
-    const part = (w: number, h: number, d: number, x: number, y: number, z: number) => parts.push(new THREE.BoxGeometry(w, h, d).translate(x, y, z));
-    part(1.4, 0.08, 1.1, 0, 0.3, 0);
-    for (const sx of [-0.68, 0.68]) for (const sz of [-0.52, 0.52]) part(0.06, 1.7, 0.06, sx, 1.1, sz);
-    for (const sz of [-0.52, 0.52]) part(1.4, 0.06, 0.06, 0, 1.92, sz);
-    for (const sx of [-0.68, 0.68]) part(0.06, 0.06, 1.1, sx, 1.92, 0);
-    const frame = new THREE.Mesh(mergeGeometries(parts)!, teal);
-    g.add(frame);
-    k.inkify(frame);
-    // Wire mesh sides (open top), with a shelf halfway.
-    const mesh = new THREE.Mesh(this.cageMeshGeo, this.cageMeshMat());
-    mesh.position.y = 1.1;
-    g.add(mesh);
-    const wheels: THREE.BufferGeometry[] = [];
-    for (const sx of [-0.55, 0.55]) for (const sz of [-0.42, 0.42]) wheels.push(new THREE.CylinderGeometry(0.11, 0.11, 0.08, 10).rotateX(Math.PI / 2).translate(sx, 0.12, sz));
-    g.add(new THREE.Mesh(mergeGeometries(wheels)!, k.std(0x222222, 0.8, 0.1, 0x333333)));
-    const pile = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.28, 0.42), k.std(0x6f5a3f, 0.95, 0, 0xd9b07a), 8);
-    const o = this.o;
-    o.scale.setScalar(0);
-    o.updateMatrix();
-    for (let i = 0; i < 8; i++) pile.setMatrixAt(i, o.matrix);
-    o.scale.setScalar(1);
-    g.add(pile);
-    return { at, n: 0, pile };
+    // All parts instanced across the 60 cages.
+    k.batch(geo.frame, mats.teal, g);
+    k.batch(this.cageMeshGeo, this.cageMeshMat(), g).position.y = 1.1;
+    k.batch(geo.wheels, mats.wheel, g);
+    const pile: THREE.Object3D[] = [];
+    for (let i = 0; i < CAGE_FULL; i++) {
+      const p = k.batch(geo.parcel, mats.card, g);
+      p.position.set(((i % 2) - 0.5) * 0.5, 0.42 + Math.floor(i / 2) * 0.3, ((Math.floor(i / 2) % 2) - 0.5) * 0.3);
+      p.rotation.y = i * 0.7;
+      p.visible = false;
+      pile.push(p);
+    }
+    return { at, n: 0, g, pile, state: 'fill', t0: 0 };
   }
+
+  private cageMats: Record<'teal' | 'wheel' | 'card', THREE.MeshStandardMaterial> | null = null;
+
 
   /** A worker with jointed arms, legs and torso, so they can work and dance. */
   private buildWorker(home: V3): Worker {

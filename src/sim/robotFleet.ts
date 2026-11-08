@@ -117,6 +117,8 @@ export interface Bin {
   j: number;
   /** Free cells next to the bin a robot can unload from. */
   access: Cell[];
+  /** Not a box but the drop into the manual sort table (off the grid, west of it). */
+  manual?: boolean;
 }
 
 export type FleetEvent =
@@ -134,6 +136,8 @@ export class Fleet {
   private turn = 0;
   /** Bins robots may be sent to (a full bin waits for a forklift). */
   isOpen: (bin: number) => boolean = () => true;
+  /** Where robot k must take what it just loaded, if not to a random box (e.g. small parcels to manual sorting). */
+  choose: (bot: number) => number | null = () => null;
 
   constructor(
     readonly grid: Grid,
@@ -145,7 +149,7 @@ export class Fleet {
   ) {
     for (const [i, j] of parks) grid.set(i, j, PARK);
     for (const [i, j] of stations) grid.set(i, j, PICK);
-    for (const b of bins) grid.set(b.i, b.j, BLOCK);
+    for (const b of bins) if (grid.inside(b.i, b.j)) grid.set(b.i, b.j, BLOCK);
     this.stationBot = stations.map(() => null);
     this.parkBot = parks.map(() => null);
     for (let k = 0; k < Math.min(count, parks.length); k++) {
@@ -175,9 +179,10 @@ export class Fleet {
       if (b.state === 'loading' && beat - b.actAt >= 1) {
         this.stationBot[b.station] = null;
         b.station = -1;
-        const open = this.bins.map((_, n) => n).filter((n) => this.isOpen(n));
-        const pool = open.length ? open : this.bins.map((_, n) => n);
-        b.bin = pool[Math.floor(this.rnd() * pool.length)]!;
+        const boxes = this.bins.map((_, n) => n).filter((n) => !this.bins[n]!.manual);
+        const open = boxes.filter((n) => this.isOpen(n));
+        const pool = open.length ? open : boxes;
+        b.bin = this.choose(b.k) ?? pool[Math.floor(this.rnd() * pool.length)]!;
         const bin = this.bins[b.bin]!;
         const to = bin.access[Math.floor(this.rnd() * bin.access.length)]!;
         b.state = 'toDrop';
@@ -298,15 +303,18 @@ export const FLOOR = { x0: -22, z0: 20, cs: 1.5, ni: 84, nj: 7 };
 export function sorterFloor(stationColumns: number[]): { grid: Grid; parks: Cell[]; stations: Cell[]; bins: Bin[] } {
   const grid = new Grid(FLOOR.ni, FLOOR.nj);
   const parks: Cell[] = [];
-  for (let j = 2; j < FLOOR.nj; j++) parks.push([0, j], [FLOOR.ni - 1, j]);
-  // Parking islands in row 3 (a westbound lane; rows 1 and 5 also go west), on odd
-  // columns so they never block a bin: eastbound rows 2 and 4 stay open end to end.
-  for (let i = 15; i < FLOOR.ni - 8; i += 14) parks.push([i, 3], [i + 2, 3]);
+  // (Cell (0, 2) is not a parking spot: robots unload small parcels there, into the drop to the manual sort table.)
+  for (let j = 2; j < FLOOR.nj; j++) parks.push(...(j === 2 ? [] : [[0, j] as Cell]), [FLOOR.ni - 1, j]);
+  // Parking bays between the boxes in the last row (odd columns), entered from row 5,
+  // so robots wait close to where they unload and all lanes stay open end to end.
+  for (let i = 3; i <= FLOOR.ni - 4; i += 2) parks.push([i, FLOOR.nj - 1]);
   const stations: Cell[] = stationColumns.map((i) => [i, 0]);
   const bins: Bin[] = [];
   const j = FLOOR.nj - 1;
   for (let i = 2; i <= FLOOR.ni - 3; i += 2) bins.push({ i, j, access: [] });
   for (const b of bins) grid.set(b.i, b.j, BLOCK);
   for (const b of bins) b.access = ([[b.i, b.j - 1]] as Cell[]).filter(([i, jj]) => grid.inside(i, jj) && grid.get(i, jj) === FREE);
+  // Last: the drop to the manual sort table, just off the west end of row 2 (an eastbound lane, so robots drive on from it).
+  bins.push({ i: -1, j: 2, access: [[0, 2]], manual: true });
   return { grid, parks, stations, bins };
 }

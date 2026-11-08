@@ -15,6 +15,22 @@ export interface HubStats {
   speed: number;
 }
 
+/** What the control room's video wall shows: a live plan of the hall. Coordinates in metres. */
+export interface HubMap {
+  /** Hall bounds: x0, x1, z0, z1. */
+  hall: [number, number, number, number];
+  loop: [number, number][];
+  /** Chute ends with how full they are (0…1) and where they go. */
+  chutes: { x: number; z: number; fill: number; dock: boolean }[];
+  /** Dock doors: state of the truck and its load (0…1). */
+  doors: { x: number; z: number; state: string; load: number }[];
+  robots: { x: number; z: number; busy: boolean }[];
+  boxes: { x: number; z: number; fill: number; away: boolean }[];
+  /** Parcels on the loop (positions), and how many go round again. */
+  parcels: [number, number][];
+  recirculating: number;
+}
+
 const PURPLE = '#6b3fd1';
 const MAGENTA = '#d6339a';
 const TEAL = '#2fa58f';
@@ -24,6 +40,9 @@ export class Screens {
   readonly dash: THREE.CanvasTexture;
   readonly board: THREE.CanvasTexture;
   readonly clock: THREE.CanvasTexture;
+  readonly map: THREE.CanvasTexture;
+  private mapG: CanvasRenderingContext2D | null;
+  private lastMap = -99;
   private dashG: CanvasRenderingContext2D | null;
   private boardG: CanvasRenderingContext2D | null;
   private clockG: CanvasRenderingContext2D | null;
@@ -46,6 +65,7 @@ export class Screens {
     [this.dash, this.dashG] = make(512, 288);
     [this.board, this.boardG] = make(1024, 384);
     [this.clock, this.clockG] = make(128, 128);
+    [this.map, this.mapG] = make(1600, 576);
   }
 
   /** Call every frame; redraws when due. `now` in seconds. */
@@ -64,6 +84,97 @@ export class Screens {
     this.last = now;
     this.drawDash(s);
     this.drawBoard(s);
+  }
+
+  /** The video wall: redrawn 4× a second when the camera is near, otherwise every few seconds. */
+  updateMap(now: number, m: HubMap, near: boolean): void {
+    if (now - this.lastMap < (near ? 0.25 : 3)) return;
+    this.lastMap = now;
+    const g = this.mapG;
+    if (!g) return;
+    const W = 1600;
+    const H = 576;
+    const [x0, x1, z0, z1] = m.hall;
+    const pad = 24;
+    const top = 70;
+    const sx = (W - 2 * pad) / (x1 - x0);
+    const sz = (H - top - pad) / (z1 - z0);
+    const X = (x: number) => pad + (x - x0) * sx;
+    const Z = (z: number) => top + (z - z0) * sz;
+    g.fillStyle = '#12131a';
+    g.fillRect(0, 0, W, H);
+    // Title bar with the main numbers.
+    g.fillStyle = PURPLE;
+    g.fillRect(0, 0, W, 52);
+    g.fillStyle = '#ffffff';
+    g.font = '700 30px system-ui, sans-serif';
+    g.textBaseline = 'middle';
+    g.fillText('Hub plan · live', 20, 27);
+    g.font = '600 24px system-ui, sans-serif';
+    const clear = m.doors.filter((d) => d.state === 'cleardown' || d.state === 'closing').length;
+    const away = m.doors.filter((d) => d.state !== 'open' && d.state !== 'cleardown' && d.state !== 'closing').length;
+    const full = m.chutes.filter((c) => c.fill >= 1).length;
+    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}`, 330, 27);
+    // Hall outline.
+    g.strokeStyle = '#3a3d44';
+    g.lineWidth = 2;
+    g.strokeRect(X(x0), Z(z0), (x1 - x0) * sx, (z1 - z0) * sz);
+    // The loop, and the parcels on it.
+    g.strokeStyle = '#2fa58f';
+    g.lineWidth = 7;
+    g.beginPath();
+    m.loop.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))));
+    g.closePath();
+    g.stroke();
+    g.fillStyle = '#e0b882';
+    for (const [x, z] of m.parcels) g.fillRect(X(x) - 3, Z(z) - 3, 6, 6);
+    // Chutes: a bar each, green → amber → red as they fill.
+    for (const c of m.chutes) {
+      const col = c.fill >= 1 ? '#e2231a' : c.fill > 0.6 ? '#f2a51a' : '#22cc66';
+      const h = 40;
+      const y = c.dock ? Z(c.z) - h : Z(c.z);
+      g.fillStyle = '#2a2c31';
+      g.fillRect(X(c.x) - 7, y, 14, h);
+      g.fillStyle = col;
+      const fh = h * Math.min(1, c.fill);
+      g.fillRect(X(c.x) - 7, c.dock ? y + h - fh : y, 14, fh);
+    }
+    // Dock doors: truck state; cleardown flashes amber.
+    const blink = Math.floor(now * 2) % 2 === 0;
+    for (const d of m.doors) {
+      const y = Z(d.z);
+      const w = 30;
+      let col = '#2fa58f';
+      if (d.state === 'cleardown' || d.state === 'closing') col = blink ? '#f2a51a' : '#5a4310';
+      else if (d.state !== 'open') col = '#4a4d55';
+      g.fillStyle = col;
+      g.fillRect(X(d.x) - w / 2, d.z < 0 ? y : y - 16, w, 16);
+      if (d.state === 'open' || d.state === 'cleardown') {
+        g.fillStyle = '#ffffff';
+        g.fillRect(X(d.x) - w / 2, d.z < 0 ? y + 18 : y - 22, w * d.load, 4);
+      }
+    }
+    // Boxes on the robot floor (fill), and the robots.
+    for (const b of m.boxes) {
+      g.fillStyle = b.away ? '#2a2c31' : b.fill >= 1 ? '#e2231a' : '#8a7050';
+      g.fillRect(X(b.x) - 6, Z(b.z) - 6, 12, 12);
+    }
+    for (const r of m.robots) {
+      g.fillStyle = r.busy ? '#4d8bff' : '#3a4a70';
+      g.beginPath();
+      g.arc(X(r.x), Z(r.z), 6, 0, Math.PI * 2);
+      g.fill();
+    }
+    // Legend.
+    g.font = '600 18px system-ui, sans-serif';
+    const legend: [string, string][] = [['#22cc66', 'chute ok'], ['#f2a51a', 'filling / cleardown'], ['#e2231a', 'full'], ['#4a4d55', 'truck away'], ['#4d8bff', 'robot busy']];
+    legend.forEach(([c, t], i) => {
+      g.fillStyle = c;
+      g.fillRect(24 + i * 230, H - 26, 16, 16);
+      g.fillStyle = '#c3c8ce';
+      g.fillText(t, 48 + i * 230, H - 17);
+    });
+    this.map.needsUpdate = true;
   }
 
   private rate(): number {

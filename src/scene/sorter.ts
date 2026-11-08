@@ -25,7 +25,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
-import { RobotFloor } from './floor';
+import { BOX_FULL, RobotFloor } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -34,7 +34,10 @@ import { blobTexture, InkPass, TOON, toonify } from './post';
 import { Life } from './life';
 import { Party } from './party';
 import { Crowd } from './crowd';
-import { Screens } from './screens';
+import { Batcher } from './batch';
+import { Trucks } from './trucks';
+import { ManualSort } from './manualSort';
+import { Screens, type HubMap } from './screens';
 import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { FleetEvent } from '../sim/robotFleet';
@@ -537,7 +540,7 @@ function noise(g: CanvasRenderingContext2D, w: number, h: number, base: number, 
 }
 
 /** 'dock': at a truck dock, moved by the Docks (worker or slide into a roll cage). */
-type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock';
+type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual';
 
 interface Parcel {
   id: number;
@@ -583,6 +586,8 @@ interface Parcel {
   rideAt?: number;
   bin?: number;
   dropAt?: number;
+  /** Times it went round the loop again because its chute was full. */
+  laps?: number;
 }
 
 interface Slot {
@@ -641,6 +646,8 @@ interface Poi {
   /** Shown as a department to go to (the others are tour stops only). */
   dept?: string;
   at: (pos: V3, look: V3) => boolean;
+  /** Hold still when hovering here (e.g. to read a screen), instead of turning slowly round. */
+  still?: boolean;
 }
 
 interface Tour {
@@ -839,6 +846,11 @@ export class Sorter implements Scene3D {
   private life!: Life;
   private party!: Party;
   private crowd!: Crowd;
+  /** Instanced parts of repeated models (robots, people, forklifts, cages, contact shadows). */
+  private batcher!: Batcher;
+  /** Trailers behind the dock doors: north 0–19 (roll cages), then the open south doors (boxes). */
+  private trucks!: Trucks;
+  private manual!: ManualSort;
   private screens = new Screens();
   /** Counters for the screens. */
   private stats = { inducted: 0, toDocks: 0, toRobots: 0 };
@@ -886,6 +898,7 @@ export class Sorter implements Scene3D {
   private readonly white = new THREE.Color(1, 1, 1);
 
   constructor() {
+    this.batcher = new Batcher(this.scene);
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'vis-canvas';
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
@@ -920,18 +933,38 @@ export class Sorter implements Scene3D {
     this.buildParcels();
     this.buildClub();
     this.buildForklifts();
+    this.manual = new ManualSort(this);
     this.floor = new RobotFloor(this, this.stationXs, this.cages, {
       waiting: (st) => (this.stationQueue[st]?.length ?? 0) > 0,
+      // Envelopes go to manual sorting by day, while there is room at the table.
+      manual: (k) => {
+        const p = this.botParcel.get(k);
+        const onRobots = this.floor.fleet.bots.filter((b) => b.bin === this.floor.tableBin).length;
+        return !!p && p.h < 0.13 && this.dayShown !== false && this.manual.room(onRobots);
+      },
       event: (e) => this.onFleet(e),
       full: (b) => this.yard.request(b),
     });
-    this.yard = new BoxYard(this, this.floor);
+    this.trucks = new Trucks(this, [
+      ...NORTH_DOORS.map((x) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const })),
+      ...SOUTH_DOORS.map((x) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const })),
+    ]);
+    this.yard = new BoxYard(this, this.floor, {
+      open: (x) => this.trucks.isOpen(NORTH_DOORS.length + SOUTH_DOORS.indexOf(x)),
+      reserve: (x, n) => this.trucks.reserve(NORTH_DOORS.length + SOUTH_DOORS.indexOf(x), n),
+      load: (x) => this.trucks.load(NORTH_DOORS.length + SOUTH_DOORS.indexOf(x)),
+    });
     this.docks = new Docks(
       this,
       [...this.dockOf].map(([chute, x]) => ({ x, chute })),
       {
         mark: (chute, target) => this.floor.flashCage(chute, this.chutes[chute]!.col, target),
         shipped: (chute) => (this.chutes[chute]!.flash = 1),
+        truck: {
+          open: (x) => this.trucks.isOpen(NORTH_DOORS.indexOf(x)),
+          reserve: (x, n) => this.trucks.reserve(NORTH_DOORS.indexOf(x), n),
+          load: (x) => this.trucks.load(NORTH_DOORS.indexOf(x)),
+        },
       },
     );
     this.life = new Life(this, {
@@ -952,6 +985,7 @@ export class Sorter implements Scene3D {
     this.buildDay();
     this.buildCamera();
     this.prefill();
+    this.batcher.build();
     this.setupShadows();
     this.applyTheme(0);
   }
@@ -1177,11 +1211,14 @@ export class Sorter implements Scene3D {
     this.updateStore();
     this.updateClub(dt, bar);
     this.updateForklifts(dt, prev);
+    this.trucks.update(bt);
+    this.manual.update(bt, this.dayShown !== false);
     this.yard.update(bt);
     this.life.update(dt, bt);
     this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown });
     this.party.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
     const bots = this.floor.fleet.bots;
+    this.screens.updateMap(this.time, this.mapData(), this.camera.position.distanceTo(this.t.set(-48, 2.7, 21.5)) < 14);
     this.screens.update(this.time, {
       ...this.stats,
       boxesShipped: this.floor.shippedBoxes,
@@ -1203,6 +1240,7 @@ export class Sorter implements Scene3D {
     } else this.bokeh.enabled = false;
     this.bloom.strength = (0.75 + this.kick * 0.35 + this.snare * 0.15) * (1 - this.day);
     this.bloom.enabled = this.day < 0.98;
+    this.batcher.update();
     this.composer.render(dt);
   }
 
@@ -1282,7 +1320,11 @@ export class Sorter implements Scene3D {
     } else if (e.t === 'dropped') {
       this.stats.toRobots++;
       const p = this.botParcel.get(e.bot);
-      if (p) p.dead = true;
+      // Into a box (it leaves with the box, in a truck), or into the drop to the manual sort table.
+      if (p && e.bin === this.floor.tableBin) {
+        p.mode = 'manual';
+        this.manual.arrive(p, this.bt);
+      } else if (p) p.dead = true;
       this.botParcel.delete(e.bot);
     }
   }
@@ -1494,6 +1536,9 @@ export class Sorter implements Scene3D {
         case 'fixed':
         case 'dock':
           break;
+        case 'manual':
+          this.manual.place(p, bt);
+          break;
       }
       if (dt > 0) p.vel.subVectors(p.pos, before).divideScalar(dt);
       p.flash = Math.max(0, p.flash - dt * 2.5);
@@ -1534,6 +1579,7 @@ export class Sorter implements Scene3D {
         const ch = this.chutes[p.dest]!;
         ch.flash = 1;
         const st = this.stationOf.get(p.dest);
+        if (st !== undefined) this.inbound.set(p.dest, Math.max(0, (this.inbound.get(p.dest) ?? 0) - 1));
         if (st !== undefined && this.stationQueue[st]!.length < 4) {
           // Onto the roller table, to wait for a robot.
           p.mode = 'table';
@@ -1546,6 +1592,7 @@ export class Sorter implements Scene3D {
         break;
       }
       case 'dock':
+        this.inbound.set(p.dest, Math.max(0, (this.inbound.get(p.dest) ?? 0) - 1));
         this.stats.toDocks++;
         p.mode = 'dock';
         this.docks.arrive(p.dest, p);
@@ -1559,7 +1606,24 @@ export class Sorter implements Scene3D {
     }
   }
 
+  /** Parcels on their way down a chute (diverted, not yet at the table or the dock). */
+  private inbound = new Map<number, number>();
+
+  /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
+  private room(dest: number): number {
+    const st = this.stationOf.get(dest);
+    const free = st !== undefined ? 4 - this.stationQueue[st]!.length : this.docks.space(dest);
+    return free - (this.inbound.get(dest) ?? 0);
+  }
+
   private divert(p: Parcel): void {
+    if (p.dest >= 0 && this.room(p.dest) <= 0) {
+      // Destination full: the parcel stays on its tray and goes round again (recirculation).
+      p.divertAt += LOOP_LEN / BEAT_M;
+      p.laps = (p.laps ?? 0) + 1;
+      return;
+    }
+    if (p.dest >= 0) this.inbound.set(p.dest, (this.inbound.get(p.dest) ?? 0) + 1);
     if (p.tray >= 0) {
       if (this.trayOwner[p.tray] === p) this.trayOwner[p.tray] = null;
       this.trayTilt[p.tray] = p.dest >= 0 ? this.chutes[p.dest]!.side : 1;
@@ -2152,12 +2216,14 @@ export class Sorter implements Scene3D {
 
   /** A soft contact shadow that moves with an object (a child at floor level). */
   blobUnder(obj: THREE.Object3D, w: number, d: number): void {
-    const m = new THREE.Mesh(this.blobGeo, this.blobMaterial());
-    m.scale.set(w, 1, d);
-    m.position.y = 0.03;
-    m.renderOrder = -1;
-    m.userData.noInk = true;
-    obj.add(m);
+    const p = this.batcher.add(this.blobGeo, this.blobMaterial(), obj, undefined, true);
+    p.scale.set(w, 1, d);
+    p.position.y = 0.03;
+  }
+
+  /** An instanced part of a repeated model (see Batcher). */
+  batch(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, color?: THREE.ColorRepresentation): THREE.Object3D {
+    return this.batcher.add(geo, mat, parent, color);
   }
 
   private flushBlobs(): void {
@@ -2284,7 +2350,7 @@ export class Sorter implements Scene3D {
       w.position.set(HCX, HH / 2, z);
       this.put(w, 'night');
     }
-    this.buildTrailers();
+    // (The trailers behind the openings are the Trucks'.)
     for (const x of [WX, EX]) {
       const w = new THREE.Mesh(new THREE.PlaneGeometry(HZ * 2, HH), wz);
       w.position.set(x, HH / 2, 0);
@@ -2374,45 +2440,36 @@ export class Sorter implements Scene3D {
     // (South wall west of the box doors: the break area.)
   }
 
-  /**
-   * Trailers behind the open dock doors: an inside you can look into (and the box
-   * forklifts drive into), with cargo at the far end and a strip light.
-   */
-  private buildTrailers(): void {
-    const inside = this.std(0x1b1d22, 0.7, 0.3, 0xe6e9ed);
-    inside.side = THREE.BackSide;
-    inside.map = sectionalDoor();
-    const floorM = this.std(0x2a2c31, 0.8, 0.2, 0xb9c0c8);
-    floorM.map = checkerPlate();
-    const lamp = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.3, 1.25, 1.1) });
-    const cageM = this.std(0x5d6670, 0.5, 0.6, DAY.teal);
-    const card = this.std(0x8a7050, 0.95, 0, 0xe0b882);
-    card.map = cardboardSide();
-    const L = 12;
-    const geo = new THREE.BoxGeometry(DOOR_W - 0.1, DOOR_H - 0.1, L);
-    for (const [xs, dir] of [[NORTH_DOORS, -1], [SOUTH_DOORS, 1]] as const) {
-      xs.forEach((x, k) => {
-        const zc = dir * (HZ + L / 2 + 0.02);
-        const box = new THREE.Mesh(geo, inside);
-        box.position.set(x, DOOR_H / 2, zc);
-        this.put(box);
-        box.userData.noInk = true;
-        this.box('trfloor', floorM, x, 0.02, zc, DOOR_W - 0.2, 0.04, L);
-        this.box('trlamp', lamp, x, DOOR_H - 0.15, zc, 0.2, 0.04, L - 2);
-        // Cargo at the far end: roll cages in the north trailers, boxes on pallets in the south ones.
-        const fill = 2 + ((k * 7) % 4);
-        for (let r = 0; r < fill; r++) {
-          const z = dir * (HZ + L - 0.9 - r * 1.3);
-          for (const sx of [-0.75, 0.75]) {
-            if (dir < 0) this.box('trcage', cageM, x + sx, 0.95, z, 1.3, 1.7, 1.0);
-            else {
-              this.box('trpal', card, x + sx, 0.55, z, 1.2, 0.9, 1.2);
-              this.box('trpalw', this.std(0x6a5038, 0.9, 0, 0xd8b080), x + sx, 0.06, z, 1.2, 0.12, 1.2);
-            }
-          }
-        }
-      });
+
+
+  private mapLoop: [number, number][] | null = null;
+
+  /** Everything the video wall shows, gathered from the hall. */
+  private mapData(): HubMap {
+    if (!this.mapLoop) {
+      this.mapLoop = [];
+      for (let s = 0; s < LOOP_LEN; s += 3) {
+        loopAt(s, this.p, this.t);
+        this.mapLoop.push([this.p.x, this.p.z]);
+      }
     }
+    const chutes = this.chutes.map((ch, k) => {
+      const end = ch.path.pts[ch.path.pts.length - 1]!;
+      const st = this.stationOf.get(k);
+      const cap = st !== undefined ? 4 : 5;
+      return { x: end.x, z: end.z, fill: 1 - this.room(k) / cap, dock: st === undefined };
+    });
+    const doors = this.trucks.docks.map((d) => ({ x: d.x, z: d.wallZ, state: d.state, load: d.load / 4 }));
+    const robots = this.floor.robots.map((r, k) => ({ x: r.g.position.x, z: r.g.position.z, busy: this.floor.fleet.bots[k]!.state !== 'idle' }));
+    const boxes = this.floor.bins.map((b) => ({ x: b.x, z: b.z, fill: b.n / BOX_FULL, away: b.g.position.distanceToSquared(this.t.set(b.x, 0, b.z)) > 0.5 }));
+    const parcels: [number, number][] = [];
+    let recirculating = 0;
+    for (const p of this.parcels) {
+      if (p.mode === 'loop') parcels.push([p.pos.x, p.pos.z]);
+      if ((p.laps ?? 0) > 0 && p.mode === 'loop') recirculating++;
+    }
+    // (The plan shows the sorter, the docks and the robot floor: the infeed and store ends are cropped.)
+    return { hall: [LX - 12, LX + STRAIGHT + 12, -HZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating };
   }
 
   /** Big KPI boards and clocks on the walls, showing live numbers and the real time. */
@@ -3122,23 +3179,22 @@ export class Sorter implements Scene3D {
     this.box('desk', purple, dx, 1.2, dz, 3.2, 0.12, 1.6);
     this.blob(dx, dz - 0.3, 4, 3);
     for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('desk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
-    // Three screens on arms, curved slightly around the operator.
-    const dash = new THREE.MeshBasicMaterial({ map: this.screens.dash });
+    // One big video wall over the desk: a live plan of the hall (chutes, trucks, cleardowns, robots).
     const ink = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
-    for (const [ox, a] of [[-1.05, 0.35], [0, 0], [1.05, -0.35]] as const) {
-      const g = new THREE.Group();
-      g.position.set(dx + ox, 1.85, dz + 0.45 - Math.abs(ox) * 0.15);
-      g.rotation.y = Math.PI + a;
-      this.put(g);
-      const bezel = new THREE.Mesh(new RoundedBoxGeometry(1.0, 0.62, 0.05, 2, 0.02), ink);
-      g.add(bezel);
-      this.outline(bezel, 0.012);
-      const sc = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.54), dash);
-      sc.position.z = 0.03;
-      g.add(sc);
-    }
-    this.box('arm', ink, dx, 1.5, dz + 0.55, 0.06, 0.6, 0.06);
-    this.box('arm', ink, dx, 1.8, dz + 0.55, 2.1, 0.05, 0.05);
+    const vw = new THREE.Group();
+    vw.position.set(dx, 2.75, dz + 0.95);
+    vw.rotation.y = Math.PI;
+    this.put(vw);
+    vw.add(new THREE.Mesh(new RoundedBoxGeometry(5.3, 2.0, 0.12, 2, 0.04), ink));
+    const sc = new THREE.Mesh(new THREE.PlaneGeometry(5.1, 1.84), new THREE.MeshBasicMaterial({ map: this.screens.map }));
+    sc.position.z = 0.065;
+    vw.add(sc);
+    for (const ox of [-2.2, 2.2]) this.box('wallpost', ink, dx + ox, 0.9, dz + 1.0, 0.1, 1.8, 0.1);
+    // A small screen on the desk with the numbers.
+    const small = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.35), new THREE.MeshBasicMaterial({ map: this.screens.dash }));
+    small.position.set(dx + 1.1, 1.5, dz + 0.2);
+    small.rotation.set(-0.2, Math.PI - 0.3, 0);
+    this.put(small);
     this.box('kbd', ink, dx, 1.27, dz - 0.25, 0.7, 0.03, 0.22);
     this.box('kbd', ink, dx + 0.55, 1.27, dz - 0.25, 0.1, 0.03, 0.14);
     this.box('mug', this.std(0xffffff, 0.5, 0, 0xffffff), dx - 1.1, 1.32, dz - 0.3, 0.1, 0.12, 0.1);
@@ -3320,7 +3376,7 @@ export class Sorter implements Scene3D {
       fixed('bins', v(60, 3.8, 21), v(44, 0.8, 28), 'Robot floor'),
       fixed('parking', v(-14, 3.2, 21), v(-22, 0.6, 25), 'Robot parking'),
       fixed('manual sorting', v(-27, 3.6, 17.5), v(-33, 1, 22), 'Manual sorting'),
-      fixed('control room', v(-42, 4, 16.5), v(-54, 2, 26), 'Control room'),
+      { ...fixed('control room', v(-48, 2.85, 17.2), v(-48, 2.75, 21.6), 'Control room'), still: true },
       fixed('boxes', v(28, 4.2, 25.5), v(32, 0.8, 32), 'Boxes & trucks'),
       fixed('dj', v(-40, 7.5, 2), v(-50, 7, -4.5)),
       fixed('dance floor', v(LCX - 30, 6.5, -5), v(LCX - 10, 1.2, 1), 'Dance floor'),
@@ -3442,7 +3498,7 @@ export class Sorter implements Scene3D {
       }
     } else {
       // Hover: turn slowly around what we look at, following it if it moves.
-      const a = (this.bt - t.arrivedAt) * 0.04;
+      const a = this.pois[t.poi]?.still ? 0 : (this.bt - t.arrivedAt) * 0.04;
       this.want.copy(t.offset).applyAxisAngle(UP, a).add(look);
       this.wantLook.copy(look);
     }

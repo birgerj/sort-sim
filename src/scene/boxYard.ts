@@ -7,7 +7,7 @@
 // They work day and night (the robots never stop filling boxes).
 import * as THREE from 'three';
 
-import { buildDockDoor } from './docks';
+import { buildDockDoor, type TruckLink } from './docks';
 import type { FloorKit, RobotFloor } from './floor';
 import { buildForklift, FORK_REACH, type ForkliftModel } from './forklift';
 
@@ -59,6 +59,8 @@ export class BoxYard {
   constructor(
     kit: FloorKit,
     private floor: RobotFloor,
+    /** The trucks behind the south doors (by door x). */
+    private truck: TruckLink,
   ) {
     for (const [x, n, used] of DOORS) buildDockDoor(kit, x, WALL_Z, -1, n, !used);
     // Aisle markings: yellow lines on both sides.
@@ -165,9 +167,15 @@ export class BoxYard {
   private plan(l: Lift, b: number): void {
     const bin = this.floor.bins[b]!;
     const keys: Key[] = [];
-    // The nearest open door.
+    // The nearest door with a truck at it (none: try again later).
     let door = Infinity;
-    for (const [x, , open] of DOORS) if (open && Math.abs(x - bin.x) < Math.abs(door - bin.x)) door = x;
+    for (const [x, , open] of DOORS) if (open && this.truck.open(x) && Math.abs(x - bin.x) < Math.abs(door - bin.x)) door = x;
+    if (!Number.isFinite(door)) {
+      this.jobs.push(b);
+      return;
+    }
+    // Keep the truck here until the forklift is out again.
+    this.truck.reserve(door, 1);
     const nose = bin.z + FORK_REACH;
     l.job = b;
     keys.push({ z: AISLE_Z, beats: 1 });
@@ -182,9 +190,17 @@ export class BoxYard {
     keys.push({ yaw: SOUTH, beats: 1 });
     // Into the truck; the box is emptied there.
     keys.push({ z: WALL_Z + 1.2, beats: 2 });
-    keys.push({ fork: 0.3, beats: 2, done: () => this.floor.emptied(b) });
+    keys.push({
+      fork: 0.3,
+      beats: 2,
+      done: () => {
+        // The parcels stay in the truck (a box on a pallet in its load).
+        this.floor.emptied(b);
+        this.truck.load(door);
+      },
+    });
     keys.push({ fork: 0.45, beats: 1 });
-    keys.push({ z: AISLE_Z, beats: 2 });
+    keys.push({ z: AISLE_Z, beats: 2, done: () => this.truck.reserve(door, -1) });
     this.drive(keys, door, bin.x);
     keys.push({ yaw: NORTH, beats: 1 });
     keys.push({ z: nose, beats: 1 });
