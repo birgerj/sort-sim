@@ -32,6 +32,7 @@ import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
 import { Life } from './life';
+import { Party } from './party';
 import { Screens } from './screens';
 import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -546,6 +547,8 @@ interface Parcel {
   /** Glow colour once scanned: destination colour, or the track colour for lead parcels. */
   glow: THREE.Color;
   lead: boolean;
+  /** 0 box, 1 polybag, 2 tube. */
+  shape: 0 | 1 | 2;
   scanned: boolean;
   flash: number;
   /** Chute index, or −1 for the store. */
@@ -786,9 +789,9 @@ export class Sorter implements Scene3D {
 
   // Parcels.
   private parcels: Parcel[] = [];
-  private parcelMesh!: THREE.InstancedMesh;
+  /** Parcels by shape (0 box, 1 polybag, 2 tube): one instanced mesh and glow buffer each. */
+  private shapes: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute }[] = [];
   private labelMesh!: THREE.InstancedMesh;
-  private glowAttr!: THREE.InstancedBufferAttribute;
   private nextId = 400000 + Math.floor(Math.random() * 500000);
   private queue: Parcel[] = [];
 
@@ -828,6 +831,7 @@ export class Sorter implements Scene3D {
   private forklifts: Forklift[] = [];
   private docks!: Docks;
   private life!: Life;
+  private party!: Party;
   private screens = new Screens();
   /** Counters for the screens. */
   private stats = { inducted: 0, toDocks: 0, toRobots: 0 };
@@ -934,6 +938,7 @@ export class Sorter implements Scene3D {
       columnsNorth: COLUMNS.map((x) => x + 2.4),
       columnsSouth: COLUMNS,
     });
+    this.party = new Party(this, v(-50.2, 6.21, LANE_Z[3]! - 2.4), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
     this.buildBoards();
     this.buildDay();
     this.buildCamera();
@@ -1161,6 +1166,7 @@ export class Sorter implements Scene3D {
     this.updateForklifts(dt, prev);
     this.yard.update(bt);
     this.life.update(dt, bt);
+    this.party.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
     const bots = this.floor.fleet.bots;
     this.screens.update(this.time, {
       ...this.stats,
@@ -1277,15 +1283,23 @@ export class Sorter implements Scene3D {
   // ---------- parcels ----------
   private newParcel(): Parcel | null {
     if (this.parcels.length >= MAX_PARCELS) return null;
-    const env = Math.random() < 0.18;
+    const r = Math.random();
+    // Flat envelopes, soft polybags, tubes and boxes.
+    const env = r < 0.12;
+    const bag = !env && r < 0.3;
+    const tube = !env && !bag && r < 0.37;
+    const w = env ? rnd(0.7, 0.9) : bag ? rnd(0.45, 0.8) : tube ? rnd(0.16, 0.26) : rnd(0.35, 0.95);
     const p: Parcel = {
       id: this.nextId++,
-      w: env ? rnd(0.7, 0.9) : rnd(0.35, 0.95),
-      h: env ? rnd(0.06, 0.12) : rnd(0.22, 0.7),
-      d: env ? rnd(0.5, 0.7) : rnd(0.35, 0.85),
-      col: new THREE.Color(env ? pick([0xe8e6e0, 0xd6d3cc, 0xbfc4cc]) : pick(PARCEL_COLS)),
+      w,
+      h: env ? rnd(0.06, 0.12) : bag ? rnd(0.12, 0.25) : tube ? w : rnd(0.22, 0.7),
+      d: env ? rnd(0.5, 0.7) : bag ? rnd(0.4, 0.65) : tube ? rnd(0.7, 1.1) : rnd(0.35, 0.85),
+      col: new THREE.Color(
+        env ? pick([0xe8e6e0, 0xd6d3cc, 0xbfc4cc]) : bag ? pick([0xf3f4f6, 0x9aa0a8, 0x1d1d1f, 0x2c62c8, 0xd6339a, 0x6b3fd1]) : tube ? pick([0xb08a5e, 0xc4a070, 0xe6e4de]) : pick(PARCEL_COLS),
+      ),
       glow: new THREE.Color(),
       lead: false,
+      shape: bag ? 1 : tube ? 2 : 0,
       scanned: false,
       flash: 0,
       dest: Math.floor(Math.random() * CHUTES.length),
@@ -1695,20 +1709,23 @@ export class Sorter implements Scene3D {
 
   // ---------- per-frame drawing ----------
   private writeParcels(): void {
-    const glow = this.glowAttr.array as Float32Array;
     const kick = 0.55 + this.kick * 0.8;
     const o = this.o;
-    let k = 0;
+    const counts = [0, 0, 0];
+    let labels = 0;
     let hull = 0;
     for (const p of this.parcels) {
-      if (k >= MAX_PARCELS) break;
+      const set = this.shapes[p.shape]!;
+      const k = counts[p.shape]!;
+      if (k >= MAX_PARCELS) continue;
+      counts[p.shape]!++;
       this.n.set(0, 1, 0).applyQuaternion(p.q);
       o.position.copy(p.pos).addScaledVector(this.n, p.h / 2);
       o.quaternion.copy(p.q);
       o.scale.set(p.w, p.h, p.d);
       o.updateMatrix();
-      this.parcelMesh.setMatrixAt(k, o.matrix);
-      this.parcelMesh.setColorAt(k, p.col);
+      set.mesh.setMatrixAt(k, o.matrix);
+      set.mesh.setColorAt(k, p.col);
       if (p === this.follow) {
         // The followed parcel gets a blue outline (a slightly larger box drawn inside out).
         o.scale.set(p.w + 0.12, p.h + 0.12, p.d + 0.12);
@@ -1719,26 +1736,31 @@ export class Sorter implements Scene3D {
       }
       const g = (p.scanned ? (p.lead ? 0.38 : 0.16) * kick + (p === this.follow ? 0.25 : 0) : p.lead ? 0.25 : 0) * (1 - this.day * 0.85);
       this.c.copy(p.glow).multiplyScalar(g).lerp(this.white, p.flash * 0.8);
+      const glow = set.glow.array as Float32Array;
       glow[k * 3] = this.c.r + p.flash * 0.6;
       glow[k * 3 + 1] = this.c.g + p.flash * 0.6;
       glow[k * 3 + 2] = this.c.b + p.flash * 0.6;
+      // Shipping label on top (tubes have theirs wrapped round, not drawn).
+      if (p.shape === 2) continue;
       o.position.copy(p.pos).addScaledVector(this.n, p.h + 0.004);
       o.quaternion.copy(p.q).multiply(this.qLabel);
       o.scale.set(Math.min(p.w * 0.6, 0.34), Math.min(p.d * 0.6, 0.24), 1);
       o.updateMatrix();
-      this.labelMesh.setMatrixAt(k, o.matrix);
-      k++;
+      this.labelMesh.setMatrixAt(labels++, o.matrix);
     }
-    this.parcelMesh.count = k;
-    this.labelMesh.count = k;
+    this.shapes.forEach((set, k) => {
+      set.mesh.count = counts[k]!;
+      set.mesh.instanceMatrix.needsUpdate = true;
+      if (set.mesh.instanceColor) set.mesh.instanceColor.needsUpdate = true;
+      set.glow.needsUpdate = true;
+    });
+    this.labelMesh.count = labels;
     this.hull.count = hull;
     this.hull.instanceMatrix.needsUpdate = true;
     if (this.hull.instanceColor) this.hull.instanceColor.needsUpdate = true;
-    this.parcelMesh.instanceMatrix.needsUpdate = true;
     this.labelMesh.instanceMatrix.needsUpdate = true;
-    if (this.parcelMesh.instanceColor) this.parcelMesh.instanceColor.needsUpdate = true;
-    this.glowAttr.needsUpdate = true;
   }
+
 
   private updateTrays(dt: number): void {
     const o = this.o;
@@ -2799,17 +2821,33 @@ export class Sorter implements Scene3D {
         .replace('#include <common>', '#include <common>\nvarying vec3 vGlow;')
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow;');
     };
-    // Slightly rounded boxes: a softer, more real silhouette than sharp cubes.
-    const geo = new RoundedBoxGeometry(1, 1, 1, 2, 0.06);
-    this.glowAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS * 3), 3);
-    this.glowAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('aGlow', this.glowAttr);
-    this.parcelMesh = new THREE.InstancedMesh(geo, mat, MAX_PARCELS);
-    this.parcelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.parcelMesh.setColorAt(0, this.white);
-    this.parcelMesh.frustumCulled = false;
-    this.parcelMesh.count = 0;
-    this.put(this.parcelMesh);
+    toonify(mat);
+    // Plastic for the polybags: shiny, no cardboard print.
+    const plastic = mat.clone();
+    plastic.map = null;
+    plastic.roughness = 0.35;
+    plastic.onBeforeCompile = mat.onBeforeCompile;
+    plastic.customProgramCacheKey = () => 'parcel-plastic';
+    const geos = [
+      // Slightly rounded boxes: a softer, more real silhouette than sharp cubes.
+      new RoundedBoxGeometry(1, 1, 1, 2, 0.06),
+      // Polybags: a soft pillow.
+      new RoundedBoxGeometry(1, 1, 1, 5, 0.42),
+      // Tubes, lying along their length.
+      new THREE.CylinderGeometry(0.5, 0.5, 1, 18).rotateX(Math.PI / 2),
+    ];
+    geos.forEach((geo, k) => {
+      const glow = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS * 3), 3);
+      glow.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('aGlow', glow);
+      const mesh = new THREE.InstancedMesh(geo, k === 1 ? plastic : mat, MAX_PARCELS);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.setColorAt(0, this.white);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      this.put(mesh);
+      this.shapes.push({ mesh, glow });
+    });
     this.hull = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }), MAX_PARCELS);
     this.hull.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.hull.setColorAt(0, this.white);
@@ -3191,6 +3229,22 @@ export class Sorter implements Scene3D {
       fixed('manual sorting', v(-27, 3.6, 17.5), v(-33, 1, 22), 'Manual sorting'),
       fixed('control room', v(-42, 4, 16.5), v(-54, 2, 26), 'Control room'),
       fixed('boxes', v(28, 4.2, 25.5), v(32, 0.8, 32), 'Boxes & trucks'),
+      fixed('dj', v(-40, 7.5, 2), v(-50, 7, -4.5)),
+      fixed('break', v(-30, 3.6, 22), v(-37, 0.8, 29.5)),
+      {
+        name: 'loop ride',
+        dept: 'Ride the loop',
+        // Alongside the trays, at tray speed, looking ahead.
+        at: (p, l) => {
+          const s = this.ct * BEAT_M + 6;
+          loopAt(s + 8, l, this.t);
+          loopAt(s, p, this.t);
+          outward(this.t, this.n);
+          p.addScaledVector(this.n, 2.6).setY(LOOP_Y + 1.6);
+          l.setY(LOOP_Y);
+          return true;
+        },
+      },
       {
         name: 'forklift',
         dept: 'Forklifts',
