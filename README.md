@@ -47,9 +47,14 @@ sound is generated in code.
    shared out by volume (post in proportion to inhabitants): every city at the
    docks gets at least one, the rest go one by one to the city with the most
    post per door, and the number of cities at the docks is chosen so the post
-   per door is as even as possible (the Netherlands: 12 cities, Amsterdam 4
+   per door is as even as possible, with at most four doors per city (the
+   Netherlands: 12 cities, Amsterdam 4
    doors, Rotterdam and The Hague 3, Utrecht 2). A city's doors sit side by
-   side, with the same postcodes, and take turns. Its chute drops onto a roller belt; six roll cages stand
+   side, with the same postcodes, and take turns, also at cleardown: a city
+   with four doors has a truck leaving every 15 minutes, door after door.
+   Inhabitants come from the national statistics offices (via the Wikipedia
+   lists; NL 2024, BE 2025, FR 2023, DE 2021, FI 2025, SE 2025, MD 2024 census,
+   IN 2011 census, AU 2025 urban areas). Its chute drops onto a roller belt; six roll cages stand
    round the belt end, each for part of the city's postcodes (on its cards).
    The flow projector shows the postcodes of the first three parcels and the
    picker walks each to the right cage. As soon as a cage is full, a loader

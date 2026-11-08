@@ -18,17 +18,19 @@ export const CITIES: City[] = COUNTRY.cities;
  * inhabitants): every city served at the north side gets at least one door, and the
  * remaining doors go one by one to the city with the most post per door (the D'Hondt
  * rule). How many cities are served at the north side is chosen so the post per door is
- * as even as possible over all doors (the busiest door against the quietest).
+ * as even as possible over all doors (the busiest door against the quietest). No city
+ * gets more than four doors.
  * Returns the door count per city, largest city first.
  */
-export function planDoors(pops: number[], doors: number): number[] {
+export function planDoors(pops: number[], doors: number, most = 4): number[] {
   let best: number[] = [];
   let bestScore = Infinity;
-  for (let k = Math.ceil(doors / 3); k <= Math.min(doors, pops.length); k++) {
+  for (let k = Math.max(1, Math.ceil(doors / most)); k <= Math.min(doors, pops.length); k++) {
     const n = pops.slice(0, k).map(() => 1);
     for (let left = doors - k; left > 0; left--) {
-      let i = 0;
-      for (let j = 1; j < k; j++) if (pops[j]! / n[j]! > pops[i]! / n[i]!) i = j;
+      // (No city gets more than `most` doors.)
+      let i = -1;
+      for (let j = 0; j < k; j++) if (n[j]! < most && (i < 0 || pops[j]! / n[j]! > pops[i]! / n[i]!)) i = j;
       n[i]!++;
     }
     const per = n.map((c, i) => pops[i]! / c);
