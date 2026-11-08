@@ -1244,7 +1244,8 @@ export class Sorter implements Scene3D {
     const prevCt = this.ct;
     this.ct = Number.isNaN(this.lastCt) ? bt : this.ct + (bt - prev) * this.speed;
     this.dct = this.ct - prevCt;
-    this.due = Math.min(this.due + ((bt - prev) * this.rate) / BPM, 4);
+    this.bpmNow = i.bpm ?? BPM;
+    this.due = Math.min(this.due + ((bt - prev) * this.rate) / this.bpmNow, 4);
     this.lastCt = this.ct;
     const crossed = Math.floor(bt) !== Math.floor(prev);
 
@@ -1417,8 +1418,11 @@ export class Sorter implements Scene3D {
   static readonly MAX_RATE = 2 * BELT_SPEEDS[BELT_SPEEDS.length - 1]! * BPM;
   /** At the current belt speed. */
   infeedCapacity(): number {
-    return 2 * this.speed * BPM;
+    return Math.round(2 * this.speed * this.bpmNow);
   }
+
+  /** The music's tempo now: everything in the hall runs on its beat. */
+  bpmNow = BPM;
 
   getQuality(): Quality {
     return this.quality;

@@ -10,10 +10,13 @@
 import { BPM, chordOf, Composer, energyOf, STEPS_PER_BAR, type Mood, type NoteEvent } from './composer';
 import type { NoteRole, RGB } from '../scene/types';
 
-const SPB = 60 / BPM; // seconds per beat
-const STEP = SPB / 4; // one 16th
-const BAR = STEP * STEPS_PER_BAR;
+const SPB = 60 / BPM; // seconds per beat at the starting tempo
+const STEP = SPB / 4; // one 16th at the starting tempo
 const LOOKAHEAD = 0.35;
+/** Tempo range, and how far it may move per bar (so changes are gradual). */
+export const MIN_BPM = 60;
+export const MAX_BPM = 160;
+const BPM_PER_BAR = 3;
 
 export interface MusicNote {
   color: RGB;
@@ -50,11 +53,38 @@ export function noteColor(midi: number, light = 0.58): RGB {
 const now = () => performance.now() / 1000;
 
 export class Music {
-  readonly bpm = BPM;
   private composer = new Composer(Math.floor(Math.random() * 1e6));
   private t0 = now();
   private nextBar = 0;
-  private queue: { at: number; ev: NoteEvent; bar: number }[] = [];
+  /** Start time and tempo of each scheduled bar (recent ones kept): the tempo can change bar by bar. */
+  private bars = new Map<number, { at: number; bpm: number }>();
+  private target = BPM;
+  private queue: { at: number; ev: NoteEvent; bar: number; step: number }[] = [];
+
+  /** The tempo now (of the bar playing). */
+  get bpm(): number {
+    const t = now();
+    let best = BPM;
+    for (const [, b] of this.bars) if (b.at <= t) best = b.bpm;
+    return best;
+  }
+
+  /** Where the tempo should go (60–160 BPM); it moves there a few BPM per bar. */
+  setTempo(bpm: number): void {
+    this.target = Math.max(MIN_BPM, Math.min(MAX_BPM, bpm));
+  }
+
+  /** Beats since the start at time t, through the bars' own tempos. */
+  private beatsAt(t: number): number {
+    let bar = -1;
+    let b: { at: number; bpm: number } | undefined;
+    for (const [n, x] of this.bars) if (x.at <= t && n > bar) {
+      bar = n;
+      b = x;
+    }
+    if (!b) return (t - this.t0) / SPB;
+    return bar * 4 + (t - b.at) / (60 / b.bpm);
+  }
   private last = { kick: -99, snare: -99, hat: -99, bass: -99, pad: -99 };
   private timer: ReturnType<typeof setInterval>;
   private ctx: AudioContext | null = null;
@@ -192,12 +222,12 @@ export class Music {
           color: noteColor(midi),
           pitch: Math.max(0, Math.min(1, (midi - 36) / 52)),
           vel: ev.vel,
-          dur: ev.len * STEP,
+          dur: ev.len * this.stepOf(at),
           role: ev.voice,
         });
       }
     }
-    const beats = (t - this.t0) / SPB;
+    const beats = this.beatsAt(t);
     const bar = beats / 4;
     const env = (at: number, rate: number) => Math.exp(-Math.max(0, t - at) * rate);
     const chord = chordOf(Math.floor(bar));
@@ -217,21 +247,48 @@ export class Music {
 
   // ---------- scheduling ----------
 
+  /** A 16th note's length at time t. */
+  private stepOf(t: number): number {
+    let s = STEP;
+    for (const [, b] of this.bars) if (b.at <= t) s = 60 / b.bpm / 4;
+    return s;
+  }
+
+  /** When bar n starts and its tempo (each bar starts where the last one ended). */
+  private barStart(n: number): { at: number; bpm: number } {
+    const known = this.bars.get(n);
+    if (known) return known;
+    const prev = this.bars.get(n - 1);
+    const at = prev ? prev.at + (4 * 60) / prev.bpm : this.t0 + n * 4 * SPB;
+    const from = prev?.bpm ?? BPM;
+    const bpm = from + Math.max(-BPM_PER_BAR, Math.min(BPM_PER_BAR, this.target - from));
+    const b = { at, bpm };
+    this.bars.set(n, b);
+    // Keep only the last few bars.
+    for (const k of this.bars.keys()) if (k < n - 8) this.bars.delete(k);
+    return b;
+  }
+
   private schedule(): void {
     const t = now();
-    // After a long pause (hidden tab), skip ahead instead of catching up.
-    const current = Math.floor((t - this.t0) / BAR);
-    if (this.nextBar < current) {
-      this.nextBar = current;
+    // After a long pause (hidden tab), skip ahead instead of catching up: the next bar starts now.
+    const nb = this.barStart(this.nextBar);
+    if (nb.at + (4 * 60) / nb.bpm < t - 0.5) {
+      this.bars.set(this.nextBar, { at: t, bpm: nb.bpm });
       this.queue = this.queue.filter((q) => q.at > t - 0.5);
     }
-    while (this.t0 + this.nextBar * BAR < t + LOOKAHEAD) {
+    while (this.barStart(this.nextBar).at < t + LOOKAHEAD) {
       const bar = this.nextBar++;
+      const { at: start, bpm } = this.barStart(bar);
+      const step = 60 / bpm / 4;
+      // The mood follows the tempo: ambient when slow, techno and then acid when fast.
+      this.composer.mood = bpm < 82 ? 0 : bpm < 112 ? 1 : bpm < 136 ? 2 : 3;
+      if (this.ctx && this.delayLine) this.delayLine.delayTime.setTargetAtTime(step * 3, this.ctx.currentTime + Math.max(0, start - t), 0.2);
       for (const ev of this.composer.bar(bar)) {
-        const at = this.t0 + bar * BAR + ev.step * STEP;
+        const at = start + ev.step * step;
         if (at < t - 0.02) continue;
-        this.queue.push({ at, ev, bar });
-        if (this.audible) this.play(ev, this.ctx!.currentTime + (at - t) + 0.02);
+        this.queue.push({ at, ev, bar, step });
+        if (this.audible) this.play(ev, this.ctx!.currentTime + (at - t) + 0.02, step);
       }
       this.queue.sort((a, b) => a.at - b.at);
     }
@@ -266,6 +323,7 @@ export class Music {
     this.delay = ctx.createGain();
     const dl = ctx.createDelay(2);
     dl.delayTime.value = SPB * 0.75;
+    this.delayLine = dl;
     const fb = ctx.createGain();
     fb.gain.value = 0.38;
     const lp = ctx.createBiquadFilter();
@@ -286,9 +344,12 @@ export class Music {
     for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
   }
 
-  private play(ev: NoteEvent, at: number): void {
+  private delayLine: DelayNode | null = null;
+
+  private play(ev: NoteEvent, at: number, step = STEP): void {
     const ctx = this.ctx!;
     if (at < ctx.currentTime) return;
+    const STEP = step;
     const dur = ev.len * STEP;
     switch (ev.voice) {
       case 'kick': {

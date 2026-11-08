@@ -35,7 +35,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/main.ts` | Wires scene + music + HUD; URL parameters; frame loop; time of day (`tod` 0 day … 1 night). Exposes `window.sortsim` for the console and the screenshot script. |
 | `src/ui/hud.ts`, `src/ui/style.css` | Start screen, caption, control bar (departments, camera, time, sound), keys, auto-hide, settings in localStorage (`sortsim.settings`). |
 | `src/audio/composer.ts` | The song as data: seeded, pure, testable. D minor, 100 BPM, 32-bar form (intro / groove / breakdown). |
-| `src/audio/music.ts` | WebAudio synths and the clock. The clock runs without sound too. `frame()` returns beats, drum envelopes, chord colours and the notes that just sounded (latency-compensated). |
+| `src/audio/music.ts` | WebAudio synths and the clock; the tempo can change bar by bar (`setTempo`, 60–160 BPM, `bars` map), and the composer's mood follows it. The clock runs without sound too. `frame()` returns beats, drum envelopes, chord colours and the notes that just sounded (latency-compensated). |
 | `src/scene/types.ts` | `SceneInput` (what the scene gets every frame) and control types. |
 | `src/scene/sorter.ts` | The `Sorter` scene: renderer, post-processing, hall, infeed, loop, chutes, store and lift, parcels, club (night), day scenery, camera and tour. Owns the kit (`box`, `std`, `put`, `inkify`, `person`, `sign`) that the other scene modules use. |
 | `src/scene/floor.ts` | `RobotFloor`: pickup stations, boxes on pallets, robots, flow projectors (all of them, including over the dock belts), manual sort table, floor details. |

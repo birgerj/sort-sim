@@ -102,11 +102,16 @@ export class Hud {
     const mode = this.scene.cameraMode();
     for (const [id, b] of this.camBtns) b.classList.toggle('on', id === mode);
     for (const [id, b] of this.timeBtns) b.classList.toggle('on', id === this.settings.time);
-    for (const [v, b] of this.speedBtns) b.classList.toggle('on', v === this.scene.beltSpeed());
+    for (const [v, b] of this.speedBtns) {
+      b.classList.toggle('on', v === this.scene.beltSpeed());
+      // 2 m per beat at the music's tempo now.
+      const ms = `${((v * 2 * this.music.bpm) / 60).toFixed(1)} m/s`;
+      if (b.textContent !== ms) b.textContent = ms;
+    }
     for (const [v, b] of this.qualityBtns) b.classList.toggle('on', v === this.settings.quality);
     const most = this.scene.infeedCapacity();
     const q = this.scene.backlog;
-    const txt = `${this.settings.rate}/min · ${MOODS[this.music.mood]}${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
+    const txt = `${this.settings.rate}/min · ${Math.round(this.music.bpm)} BPM ${MOODS[this.music.mood]}${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
     if (this.rateOut.textContent !== txt) this.rateOut.textContent = txt;
     if (this.panel) {
       this.refreshPanel();
