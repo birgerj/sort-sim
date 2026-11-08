@@ -206,8 +206,8 @@ export class BoxYard {
       beats: 2,
       done: () => {
         // The parcels stay in the truck (a box on a pallet in its load).
+        this.truck.load(door, this.floor.bins[b]!.vol, this.floor.bins[b]!.kg);
         this.floor.emptied(b);
-        this.truck.load(door);
       },
     });
     keys.push({ fork: 0.45, beats: 1 });

@@ -402,6 +402,80 @@ input[type='range'] {
   cursor: default;
 }
 
+.stats-body {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stats .tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 6px;
+}
+
+.stats .tile {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+}
+
+.stats .tile b {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats .tl,
+.stats .ts {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.stats .chart svg {
+  width: 100%;
+  height: 110px;
+  display: block;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+}
+
+.stats .legend {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.stats .legend .in {
+  color: #a9adb5;
+}
+
+.stats .legend .out {
+  color: var(--teal-l);
+}
+
+.stats .dep {
+  display: grid;
+  grid-template-columns: 3.4em 1fr 3em 4.6em;
+  gap: 6px;
+  font-size: 12px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats .dep .ok {
+  color: var(--teal-l);
+}
+
+.stats .dep .late {
+  color: #ff8a7a;
+}
+
 @media (max-width: 640px) {
   .panel {
     top: 8px;

@@ -31,6 +31,10 @@ export interface HubMap {
   recirculating: number;
   /** Parcels waiting at the infeed (on the lanes and outside). */
   queue: number;
+  /** Hub time, trucks on time (%), average dwell (minutes). */
+  clock: string;
+  onTime: number;
+  dwell: number;
 }
 
 const PURPLE = '#6b3fd1';
@@ -112,11 +116,11 @@ export class Screens {
     g.font = '700 30px system-ui, sans-serif';
     g.textBaseline = 'middle';
     g.fillText('Hub plan · live', 20, 27);
-    g.font = '600 24px system-ui, sans-serif';
+    g.font = '600 18px system-ui, sans-serif';
     const clear = m.doors.filter((d) => d.state === 'cleardown' || d.state === 'closing').length;
     const away = m.doors.filter((d) => d.state !== 'open' && d.state !== 'cleardown' && d.state !== 'closing').length;
     const full = m.chutes.filter((c) => c.fill >= 1).length;
-    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}   ·   infeed queue ${m.queue}`, 330, 27);
+    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}   ·   infeed queue ${m.queue}   ·   on time ${m.onTime}%   ·   dwell ${m.dwell} min   ·   ${m.clock}`, 330, 27);
     // Hall outline.
     g.strokeStyle = '#3a3d44';
     g.lineWidth = 2;

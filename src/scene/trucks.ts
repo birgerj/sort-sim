@@ -32,6 +32,12 @@ interface Dock extends TruckDoor {
   state: State;
   t0: number;
   load: number;
+  /** Volume (m³) and weight (kg) on board. */
+  vol: number;
+  kg: number;
+  /** Departure time of this truck (hub minutes), and whether cleardown came because it was full. */
+  cutoff: number;
+  full: boolean;
   /** Things on their way into this trailer (a forklift, a roll cage): keep the door open. */
   reserved: number;
   door: THREE.Object3D;
@@ -47,6 +53,12 @@ const H = 3.7;
 const DOOR_H = 3.8;
 /** Loads after which a truck leaves on its own: two full roll cages (the rest go in at cleardown), or four boxes. */
 const CAP: Record<Cargo, number> = { cage: 2, box: 4 };
+/** Places in a trailer for cages or boxes, and what it can carry (scaled to the hall). */
+const SLOTS = 8;
+const TRAILER_M3 = 4.5;
+const TRAILER_KG = 2400;
+/** Minutes of hub time before the departure that the cleardown starts. */
+const CLEARDOWN_LEAD = 6;
 const DUR: Record<Exclude<State, 'open'>, number> = { cleardown: 4, closing: 2, leaving: 4, away: 6, arriving: 4, opening: 2 };
 const NEXT: Record<Exclude<State, 'open'>, State> = { cleardown: 'closing', closing: 'leaving', leaving: 'away', away: 'arriving', arriving: 'opening', opening: 'open' };
 
@@ -60,6 +72,11 @@ export class Trucks {
   /** Cleardown warning lamps, one per door (flashing amber before the door closes). */
   private lamps: THREE.InstancedMesh;
   private readonly c = new THREE.Color();
+  /** Hub time (minutes since midnight); set by the scene. */
+  clock: () => number = () => 0;
+  /** A truck left (for the figures). */
+  onDepart: (d: { door: number; city: string; at: number; cutoff: number; load: number; room: number; onTime: boolean; full: boolean }) => void = () => {};
+  private scheduled = false;
   /** Sounds since the last frame (the cleardown buzzer), with where they come from. */
   readonly sounds: { kind: 'buzz'; at: THREE.Vector3 }[] = [];
   private lastBeat = -1;
@@ -144,7 +161,7 @@ export class Trucks {
       k.put(door);
       const panel = k.batch(doorG, doorM, door);
       panel.scale.y = 0.6;
-      this.docks.push({ ...d, state: 'open', t0: 0, load: 0, reserved: 0, door: panel, trailer, slots, shown: '' });
+      this.docks.push({ ...d, state: 'open', t0: 0, load: 0, vol: 0, kg: 0, cutoff: 0, full: false, reserved: 0, door: panel, trailer, slots, shown: '' });
     }
     this.screens = new Labels(doors.length, 3.4, 1.0, 340, 100);
     const sm = new THREE.Matrix4();
@@ -169,6 +186,11 @@ export class Trucks {
     k.put(this.lamps);
   }
 
+  /** How full a trailer is: by volume, weight, or places for cages and boxes, whichever is first. */
+  private fill(d: Dock): number {
+    return Math.max(d.vol / TRAILER_M3, d.kg / TRAILER_KG, d.load / SLOTS);
+  }
+
   /** In cleardown (warning, still loading the last things). */
   clearing(i: number): boolean {
     return this.docks[i]?.state === 'cleardown';
@@ -183,15 +205,23 @@ export class Trucks {
     if (d) d.reserved = Math.max(0, d.reserved + n);
   }
 
-  /** One more load in the trailer (a cage or a box). */
-  load(i: number): void {
+  /** One more load in the trailer (a cage or a box), with its volume and weight. */
+  load(i: number, vol = 0, kg = 0): void {
     const d = this.docks[i];
     if (!d) return;
     d.load = Math.min(8, d.load + 1);
+    d.vol += vol;
+    d.kg += kg;
     d.slots.forEach((s, n) => (s.visible = n < d.load));
   }
 
   update(bt: number): void {
+    const now = this.clock();
+    if (!this.scheduled) {
+      // Every door has a truck leaving every hour; the doors' departures are spread over the hour.
+      this.scheduled = true;
+      this.docks.forEach((d, i) => (d.cutoff = Math.ceil(now / 60) * 60 + 30 + i * (60 / this.docks.length)));
+    }
     // The cleardown buzzer sounds on every other beat at a door in cleardown.
     const beat = Math.floor(bt);
     if (beat !== this.lastBeat) {
@@ -200,10 +230,12 @@ export class Trucks {
     }
     for (const d of this.docks) {
       if (d.state === 'open') {
-        if (d.load >= CAP[d.cargo]) {
-          // Cleardown: warn first, take nothing new.
+        // Cleardown when full, or in time for the departure (the cutoff).
+        const due = now >= d.cutoff - CLEARDOWN_LEAD;
+        if (this.fill(d) >= 0.9 || due) {
           d.state = 'cleardown';
           d.t0 = Math.ceil(bt);
+          d.full = !due;
         }
       } else if (d.state === 'cleardown' && bt >= d.t0 + DUR.cleardown && (d.reserved > 0 || d.hold?.())) {
         // Still something on its way out of the trailer: keep warning.
@@ -211,8 +243,15 @@ export class Trucks {
         // (After a held cleardown, the next state starts now, not when it would have.)
         d.t0 = bt - (d.t0 + DUR[d.state]) > 1 ? Math.floor(bt) : d.t0 + DUR[d.state];
         d.state = NEXT[d.state];
+        if (d.state === 'leaving') {
+          this.onDepart({ door: d.number, city: d.city, at: now, cutoff: d.cutoff, load: +d.vol.toFixed(2), room: TRAILER_M3, onTime: now <= d.cutoff + 2, full: d.full });
+          // The next truck takes the next hour's departure (a full one that left early keeps this hour's).
+          if (!d.full || now >= d.cutoff - CLEARDOWN_LEAD) while (d.cutoff <= now + CLEARDOWN_LEAD + 10) d.cutoff += 60;
+        }
         if (d.state === 'arriving') {
           d.load = 0;
+          d.vol = 0;
+          d.kg = 0;
           d.slots.forEach((s) => (s.visible = false));
         }
       }
@@ -234,8 +273,8 @@ export class Trucks {
   }
 
   /** Doors for the cleardown panel: number, city, postcodes and state. */
-  list(): { number: number; city: string; pc: string; state: State; load: number; cap: number }[] {
-    return this.docks.map((d) => ({ number: d.number, city: d.city, pc: d.pc, state: d.state, load: d.load, cap: CAP[d.cargo] }));
+  list(): { number: number; city: string; pc: string; state: State; load: number; cap: number; cutoff: number; fill: number }[] {
+    return this.docks.map((d) => ({ number: d.number, city: d.city, pc: d.pc, state: d.state, load: d.load, cap: CAP[d.cargo], cutoff: d.cutoff, fill: this.fill(d) }));
   }
 
   /** Start a cleardown at these doors (by index): the truck leaves with what it has. */
@@ -251,8 +290,9 @@ export class Trucks {
 
   private drawScreens(): void {
     this.docks.forEach((d, i) => {
+      const hhmm = `${String(Math.floor(d.cutoff / 60) % 24).padStart(2, '0')}:${String(Math.floor(d.cutoff % 60)).padStart(2, '0')}`;
       const status =
-        d.state === 'open' ? `Loading ${d.load}/${CAP[d.cargo]}` : d.state === 'cleardown' || d.state === 'closing' ? 'CLEARDOWN' : d.state === 'opening' ? 'Opening' : 'Truck on its way';
+        d.state === 'open' ? `dep ${hhmm} · ${Math.round(this.fill(d) * 100)}% full` : d.state === 'cleardown' || d.state === 'closing' ? 'CLEARDOWN' : d.state === 'opening' ? `Opening · dep ${hhmm}` : 'Truck on its way';
       const key = status;
       if (d.shown === key) return;
       d.shown = key;

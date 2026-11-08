@@ -60,6 +60,7 @@ export class Hud {
   private soundBtn!: HTMLButtonElement;
   private rateOut!: HTMLElement;
   private panel: HTMLElement | null = null;
+  private stats: { el: HTMLElement; body: HTMLElement; last: number } | null = null;
   /** The shipping label of a clicked parcel. */
   private card: { el: HTMLElement; p: Parcel; where: HTMLElement } | null = null;
   private hideTimer = 0;
@@ -120,11 +121,15 @@ export class Hud {
       const w = this.scene.parcelInfo(this.card.p).where;
       if (this.card.where.textContent !== w) this.card.where.textContent = w;
     }
-    if (this.panel) {
-      this.refreshPanel();
+    if (this.stats && performance.now() - this.stats.last > 1000) this.drawStats();
+    for (const pn of [this.panel, this.stats?.el]) {
+      if (!pn) continue;
       // Stay clear of the control bar below.
       const h = `${Math.max(160, window.innerHeight - this.bar.offsetHeight - 48)}px`;
-      if (this.panel.style.maxHeight !== h) this.panel.style.maxHeight = h;
+      if (pn.style.maxHeight !== h) pn.style.maxHeight = h;
+    }
+    if (this.panel) {
+      this.refreshPanel();
     }
     const on = this.music.audible;
     this.soundBtn.textContent = on ? 'Sound on' : 'Sound off';
@@ -200,7 +205,10 @@ export class Hud {
       saveSettings(this.settings);
     };
     this.scene.setRate(this.settings.rate);
-    hub.append(clear, rate, this.rateOut);
+    const stats = el('button', '', 'Figures');
+    stats.title = 'Hub figures: throughput, dwell time, recirculation, departures (and a CSV download)';
+    stats.onclick = () => this.toggleStats();
+    hub.append(clear, stats, rate, this.rateOut);
     const belt = this.group('Belt speed');
     for (const v of BELT_SPEEDS) {
       // 2 m per beat at the music's tempo.
@@ -260,6 +268,7 @@ export class Hud {
       this.panel = null;
       return;
     }
+    if (this.stats) this.toggleStats();
     const p = el('div', 'panel');
     const head = el('div', 'head');
     head.append(el('h2', '', 'Cleardown'), el('p', '', 'Pick dock doors: their trucks leave with what they have, and new empty ones come. 1–20 roll cages, 21–40 robot boxes.'));
@@ -303,6 +312,87 @@ export class Hud {
     this.panelCount();
   }
 
+  /** The figures panel: KPI tiles, a throughput chart, recent departures, CSV download. */
+  private toggleStats(): void {
+    if (this.stats) {
+      this.stats.el.remove();
+      this.stats = null;
+      return;
+    }
+    if (this.panel) this.togglePanel();
+    const p = el('div', 'panel stats');
+    const head = el('div', 'head');
+    head.append(el('h2', '', 'Hub figures'));
+    const body = el('div', 'stats-body');
+    const row = el('div', 'row');
+    const csv = el('button', 'primary', 'Download CSV');
+    csv.onclick = () => {
+      const blob = new Blob([this.scene.kpi.csv()], { type: 'text/csv' });
+      const a = el('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'hub-figures.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    const close = el('button', '', 'Close');
+    close.onclick = () => this.toggleStats();
+    row.append(csv, close);
+    p.append(head, body, row);
+    this.root.append(p);
+    this.stats = { el: p, body, last: 0 };
+    this.drawStats();
+  }
+
+  private drawStats(): void {
+    if (!this.stats) return;
+    this.stats.last = performance.now();
+    const k = this.scene.kpi;
+    const t = k.totals();
+    const s = k.samples[k.samples.length - 1];
+    const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
+    const tiles: [string, string, string?][] = [
+      ['Hub time', hhmm(this.scene.hubTime())],
+      ['In / hour', s ? String(s.inPerHour) : '–'],
+      ['Out / hour', s ? String(s.outPerHour) : '–'],
+      ['Dwell time', `${s?.dwell ?? t.dwell} min`, `avg ${t.dwell}`],
+      ['Recirculation', `${s?.recircPct ?? 0}%`, `total ${t.recircPct}%`],
+      ['No-reads', `${s?.noreadPct ?? 0}%`, `total ${t.noreadPct}%`],
+      ['To manual', `${s?.manualPct ?? 0}%`, `total ${t.manualPct}%`],
+      ['Missorts', String(t.missorts)],
+      ['Chutes full', s ? `${s.chutesFull}` : '–'],
+      ['Robots busy', s ? `${s.robotsBusyPct}%` : '–'],
+      ['Infeed queue', s ? String(s.infeedQueue) : '–'],
+      ['Trucks on time', `${t.onTimePct}%`, `${t.departures} left`],
+      ['Load factor', `${t.loadFactorPct}%`, 'of trailer room'],
+    ];
+    const grid = el('div', 'tiles');
+    for (const [label, value, sub] of tiles) {
+      const tile = el('div', 'tile');
+      tile.append(el('span', 'tl', label), el('b', '', value));
+      if (sub) tile.append(el('span', 'ts', sub));
+      grid.append(tile);
+    }
+    // Throughput over the last three hours of hub time: in (grey) and out (teal), per hour.
+    const pts = k.samples.slice(-36);
+    const W = 520;
+    const H = 110;
+    const max = Math.max(60, ...pts.map((x) => Math.max(x.inPerHour, x.outPerHour)));
+    const line = (f: (x: (typeof pts)[number]) => number) =>
+      pts.map((x, i) => `${i ? 'L' : 'M'}${((i / Math.max(1, pts.length - 1)) * W).toFixed(1)},${(H - (f(x) / max) * (H - 10)).toFixed(1)}`).join('');
+    const chart = el('div', 'chart');
+    chart.innerHTML = pts.length > 1
+      ? `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Parcels per hour, in and out"><path d="${line((x) => x.inPerHour)}" fill="none" stroke="#a9adb5" stroke-width="2"/><path d="${line((x) => x.outPerHour)}" fill="none" stroke="#2fa58f" stroke-width="2.5"/></svg><div class="legend"><span class="in">in</span> <span class="out">out</span> per hour · max ${max} · every ${k.every} min of hub time</div>`
+      : '<div class="legend">The chart fills in after a few minutes of hub time.</div>';
+    const deps = el('div', 'deps');
+    deps.append(el('div', 'tl', 'Last departures'));
+    for (const d of k.departures.slice(-8).reverse()) {
+      const r = el('div', 'dep');
+      r.append(el('span', '', hhmm(d.at)), el('span', '', `${d.door} ${d.city}`), el('span', '', `${d.load}/${d.room}`), el('span', d.onTime ? 'ok' : 'late', d.onTime ? (d.full ? 'full' : 'on time') : 'late'));
+      deps.append(r);
+    }
+    this.stats.body.replaceChildren(grid, chart, deps);
+  }
+
   private panelCount(): void {
     const go = this.panel?.querySelector<HTMLButtonElement>('.go');
     if (!go) return;
@@ -318,7 +408,7 @@ export class Hud {
       const d = doors.find((x) => x.number === Number(b.dataset.n));
       if (!d) return;
       const busy = d.state !== 'open';
-      const st = busy ? (d.state === 'cleardown' || d.state === 'closing' ? 'Cleardown' : d.state === 'opening' ? 'Opening' : 'Truck away') : `Loading ${d.load}/${d.cap}`;
+      const st = busy ? (d.state === 'cleardown' || d.state === 'closing' ? 'Cleardown' : d.state === 'opening' ? 'Opening' : 'Truck away') : `${Math.round(d.fill * 100)}% full`;
       const span = b.querySelector('.st')!;
       if (span.textContent !== st) span.textContent = st;
       b.classList.toggle('busy', busy);
@@ -441,10 +531,10 @@ export class Hud {
       bars.append(b);
     }
     const meta = el_('div', 'lc-meta');
-    meta.append(el_('span', '', info.route), el_('span', '', `${info.kg} kg`), el_('span', '', info.size));
+    meta.append(el_('span', '', info.route), el_('span', '', info.kg), el_('span', '', info.size));
     const where = el_('div', 'lc-where', info.where);
     el.append(head, to, bars, el_('div', 'lc-id', info.id), meta, where);
-    if (info.noread) el.append(el_('div', 'lc-noread', 'Label could not be read: to manual sorting'));
+    if (info.note) el.append(el_('div', 'lc-noread', info.note));
     this.root.append(el);
     this.card = { el, p, where };
     this.scene.followParcel(p);
@@ -468,8 +558,8 @@ export class Hud {
     // Any movement, tap or key brings it back.
     this.hideTimer = window.setTimeout(() => {
       if (this.bar.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement) return this.wake();
-      // Keep the controls up while the cleardown panel is open.
-      if (this.panel) return this.wake();
+      // Keep the controls up while the cleardown or figures panel is open.
+      if (this.panel || this.stats) return this.wake();
       this.hidden = true;
       this.root.classList.add('idle');
       (document.activeElement as HTMLElement | null)?.blur?.();
