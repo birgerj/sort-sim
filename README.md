@@ -64,7 +64,7 @@ do one move per beat.
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Sound on/off | `M` |
 | Hide the controls | `H` |
-| Quality: Low / Normal / High | buttons (`?quality=`) |
+| Quality: Low / Normal / High / Ultra | buttons (`?quality=`) |
 
 The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
 

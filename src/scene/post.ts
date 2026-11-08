@@ -95,10 +95,13 @@ export class InkPass extends Pass {
     this.quad = new FullScreenQuad(this.mat);
   }
 
+  /** Device pixels per CSS pixel: lines keep about the same width on screen. */
+  pixelRatio = 1;
+
   override setSize(w: number, h: number): void {
     this.target.setSize(w, h);
-    // Lines about 1.3 CSS pixels wide whatever the pixel ratio.
-    (this.mat.uniforms.uTexel!.value as THREE.Vector2).set(1 / w, 1 / h);
+    const k = Math.max(1, this.pixelRatio * 0.75);
+    (this.mat.uniforms.uTexel!.value as THREE.Vector2).set(k / w, k / h);
   }
 
   /** Re-collect the objects that must not get outlines (call after adding objects). */

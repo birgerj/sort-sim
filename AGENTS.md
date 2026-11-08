@@ -112,7 +112,7 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
 - **Quality** (`setQuality`, HUD, `?quality=`): `low` (pixel ratio 1),
   `normal` (1.5), `high` (2, plus GTAO, sun shadows from `keyLight` with a
   shadow box that follows the camera, an additive mirror floor at night and
-  depth of field while following a parcel). Shadow casting is set once for
+  depth of field while following a parcel). `ultra` (laptops/desktops): at least 2× pixel ratio (supersampling), 4096 shadow map over a ±55 m box, more GTAO samples. The ink pass scales its line width with the pixel ratio. Shadow casting is set once for
   all standard-material meshes in `setupShadows()`.
 
 ## Theme (day / night)
