@@ -1432,6 +1432,8 @@ export class Sorter implements Scene3D {
       g.fillText(city.slice(0, 15), x + 5, y + 22);
       g.font = '500 8px system-ui, sans-serif';
       g.fillText(String(p.id).padStart(8, '0'), x + 6, y + 54);
+      // Measured size (L×B×H cm) and weight, as the scan tunnel will print them.
+      g.fillText(`${Math.round(p.d * 100)}×${Math.round(p.w * 100)}×${Math.round(p.h * 100)} ${p.kg.toFixed(1)}kg`, x + 46, y + 54);
       // A sorting code box in the corner: chute number.
       g.fillRect(x + LABEL_W - 26, y + 4, 22, 16);
       g.fillStyle = '#fff';
@@ -1607,7 +1609,9 @@ export class Sorter implements Scene3D {
     const h = env ? rnd(0.06, 0.12) : bag ? rnd(0.12, 0.25) : tube ? w : big ? rnd(0.6, 0.9) : rnd(0.22, 0.7);
     const d = env ? rnd(0.5, 0.7) : bag ? rnd(0.4, 0.65) : tube ? rnd(0.7, 1.1) : big ? rnd(1.25, 1.6) : rnd(0.35, 0.85);
     // Weight from the volume and a density (most parcels are largely air).
-    const kg = env ? rnd(0.1, 0.9) : Math.min(45, w * h * d * (bag ? rnd(60, 160) : tube ? rnd(80, 220) : rnd(40, 230)) + 0.15);
+    const vol = w * h * d;
+    // (Big boxes are mostly light goods: lower density; only a few end up over 31.5 kg.)
+    const kg = env ? rnd(0.1, 0.9) : Math.min(45, vol * (bag ? rnd(60, 160) : tube ? rnd(80, 220) : rnd(30, 120) / (vol > 0.15 ? 1.6 : 1)) + 0.15);
     const p: Parcel = {
       id: this.nextId++,
       w,
@@ -4117,7 +4121,7 @@ export class Sorter implements Scene3D {
       route,
       where: this.parcelWhere(p),
       kg,
-      size: `${cm(p.d)} × ${cm(p.w)} × ${cm(p.h)} cm`,
+      size: `L ${cm(p.d)} × B ${cm(p.w)} × H ${cm(p.h)} cm`,
       noread: !!p.noread,
       note,
     };
