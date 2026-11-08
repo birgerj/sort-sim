@@ -82,7 +82,7 @@ Read this before changing code. README.md describes the hall and the controls.
 - dock chute → `path` (`pathKind: 'dock'`, the roller belt) → `dock` (owned
   by `Docks`: queue, worker) → `held` in its cage (it keeps its shape and
   colour and rides along) → the cage goes into the trailer and the parcel
-  leaves with the truck. Dock belts bank parcels up nose to tail by length
+  leaves with the truck. Dock belts fill up over their whole length (`dockFree`: a parcel is only tipped when it fits; at the chute foot it waits until the belt start is clear) and bank parcels up nose to tail by length
   (`limit`, `Docks.depth`), as do pickup tables and the infeed hold points;
 - station chute → `table` (queue at a pickup station) → `robot` (rides a
   robot; `dropAt` tips it into the box) → `held` in the box → a forklift takes

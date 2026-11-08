@@ -198,13 +198,6 @@ export class Docks {
     return QUEUE_FRONT + (d ? d.queue.reduce((a, p) => a + p.d + 0.06, 0) : 0);
   }
 
-  /** Room left on a dock's belt end (the sorter holds parcels back when it is full). */
-  space(chute: number): number {
-    // The belt end counts as full when the parcels on it reach back about 4 m (a photo eye there).
-    const d = this.docks.find((x) => x.chute === chute);
-    return d ? Math.min(6 - d.queue.length, Math.floor((4.2 - this.depth(chute)) / 0.7)) : 0;
-  }
-
   /** Cages still to go into the trailer at this dock's cleardown (the truck waits for them). */
   pending(x: number): boolean {
     const d = this.docks.find((k) => k.x === x);

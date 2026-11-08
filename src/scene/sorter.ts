@@ -1809,6 +1809,11 @@ export class Sorter implements Scene3D {
       }
     }
     // Dock belts: each parcel may run up to the one ahead, the first up to the queue at the end.
+    this.dockLoad.clear();
+    for (const p of this.parcels) {
+      if (p.mode !== 'path' || (p.pathKind !== 'dock' && !(p.pathKind === 'chute' && !p.rejected && p.dest >= 0 && !this.stationOf.has(p.dest)))) continue;
+      this.dockLoad.set(p.dest, (this.dockLoad.get(p.dest) ?? 0) + p.d + GAP);
+    }
     const onBelt = new Map<Path, Parcel[]>();
     for (const p of this.parcels) {
       if (p.mode !== 'path' || p.pathKind !== 'dock') continue;
@@ -1816,8 +1821,11 @@ export class Sorter implements Scene3D {
       l.push(p);
       onBelt.set(p.path!, l);
     }
+    this.beltBack.clear();
     for (const [path, l] of onBelt) {
       l.sort((a, b) => b.sPrev - a.sPrev);
+      const last = l[l.length - 1]!;
+      this.beltBack.set(path, last.sPrev - last.d / 2);
       let limit = path.len - this.docks.depth(l[0]!.dest);
       let prev: Parcel | null = null;
       for (const p of l) {
@@ -1884,7 +1892,10 @@ export class Sorter implements Scene3D {
             }
           }
           p.sPrev = s;
-          if (ct >= p.t1 && p.pathKind !== 'dock') this.pathEnd(p);
+          // A parcel at the foot of a dock chute waits there until the belt start is clear.
+          const belt = p.pathKind === 'chute' && !p.rejected && p.dest >= 0 ? this.chutes[p.dest]!.belt : undefined;
+          const blocked = !!belt && !this.stationOf.has(p.dest) && (this.beltBack.get(belt) ?? 99) < p.d + GAP;
+          if (ct >= p.t1 && p.pathKind !== 'dock' && !blocked) this.pathEnd(p);
           break;
         }
         case 'loop': {
@@ -2067,7 +2078,7 @@ export class Sorter implements Scene3D {
   private inbound = new Map<number, number>();
 
   /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
-  private room(dest: number): number {
+  private room(dest: number, need = 0.9): number {
     if (dest === REJECT) {
       const onRobots = this.floor.fleet.bots.filter((b) => b.bin === this.floor.tableBin).length;
       return this.manual.room(onRobots + (this.inbound.get(REJECT) ?? 0), 6) ? 1 : 0;
@@ -2075,9 +2086,26 @@ export class Sorter implements Scene3D {
     const st = this.stationOf.get(dest);
     // A pickup table holds as many as fit by length (about 0.8 m kept per parcel on its way).
     const used = st !== undefined ? this.stationQueue[st]!.reduce((a, p) => a + p.d + GAP, 0) : 0;
-    const free = st !== undefined ? Math.min(STATION_CAP - this.stationQueue[st]!.length, Math.floor((TABLE_ROOM - used) / 0.8)) : this.docks.space(dest);
+    if (st === undefined) return Math.floor(this.dockFree(dest) / need);
+    const free = Math.min(STATION_CAP - this.stationQueue[st]!.length, Math.floor((TABLE_ROOM - used) / 0.8));
     return free - (this.inbound.get(dest) ?? 0);
   }
+
+  /**
+   * Belt length still free on a dock chute's roller belt: the whole belt, less the queue
+   * at its end and every parcel already on the belt or on its way down the chute (by
+   * length). The belt fills up nose to tail; a parcel is only tipped when it fits.
+   */
+  private dockFree(dest: number): number {
+    const belt = this.chutes[dest]!.belt;
+    if (!belt) return 0;
+    return belt.len - this.docks.depth(dest) - (this.dockLoad.get(dest) ?? 0) - 0.2;
+  }
+
+  /** Length (with gaps) of the parcels on each dock belt or chute, not yet in the end queue; recounted every frame. */
+  private dockLoad = new Map<number, number>();
+  /** Position of the back of the last parcel on each dock belt (recounted every frame). */
+  private beltBack = new Map<Path, number>();
 
   /** The parcel leaves its tray(s): they tilt and are free again. */
   private freeTrays(p: Parcel, side: number): void {
@@ -2105,7 +2133,7 @@ export class Sorter implements Scene3D {
       this.onPath(p, this.chutes[REJECT]!.path, 'chute', p.divertAt, p.divertAt + 1.5, 1);
       return;
     }
-    if (p.dest >= 0 && this.room(p.dest) <= 0) {
+    if (p.dest >= 0 && this.room(p.dest, p.d + GAP) <= 0) {
       // Destination full: into the buffer store if it has room (it comes back out when the
       // chute has room again); otherwise it stays on its tray and goes round again
       // (recirculation), and after MAX_LAPS rounds it is put aside to manual sorting (overflow).
@@ -2122,12 +2150,13 @@ export class Sorter implements Scene3D {
     // Now and then a tray tips a moment too early or late: the parcel lands in the next dock chute.
     if (p.dest >= 0 && p.dest < 20 && Math.random() < MISSORT) {
       const n = clamp(p.dest + (Math.random() < 0.5 ? -1 : 1), 0, 19);
-      if (n !== p.dest && this.room(n) > 0) {
+      if (n !== p.dest && this.room(n, p.d + GAP) > 0) {
         p.dest = n;
         p.missorted = true;
       }
     }
     if (p.dest >= 0) this.inbound.set(p.dest, (this.inbound.get(p.dest) ?? 0) + 1);
+    if (p.dest >= 0 && !this.stationOf.has(p.dest)) this.dockLoad.set(p.dest, (this.dockLoad.get(p.dest) ?? 0) + p.d + GAP);
     this.freeTrays(p, p.dest >= 0 ? this.chutes[p.dest]!.side : 1);
     if (p.dest >= 0) this.onPath(p, this.chutes[p.dest]!.path, 'chute', p.divertAt, p.divertAt + 1.5, 1);
     else this.onPath(p, this.intake, 'intake', p.divertAt, p.divertAt + Math.max(1, Math.round(this.intake.len / BEAT_M)), 0);
@@ -3005,8 +3034,8 @@ export class Sorter implements Scene3D {
     const chutes = this.chutes.map((ch, k) => {
       const end = ch.path.pts[ch.path.pts.length - 1]!;
       const st = this.stationOf.get(k);
-      const cap = st !== undefined ? 4 : 5;
-      return { x: end.x, z: end.z, fill: 1 - this.room(k) / cap, dock: st === undefined };
+      const fill = st !== undefined ? 1 - this.room(k) / 4 : ch.belt ? 1 - this.dockFree(k) / ch.belt.len : 0;
+      return { x: end.x, z: end.z, fill: clamp(fill, 0, 1), dock: st === undefined };
     });
     const fills = this.trucks.list();
     const doors = this.trucks.docks.map((d, i) => ({ x: d.x, z: d.wallZ, state: d.state, load: Math.min(1, fills[i]!.fill) }));
