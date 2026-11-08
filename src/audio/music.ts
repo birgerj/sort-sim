@@ -231,6 +231,7 @@ export class Music {
       const { ev, at } = this.queue.shift()!;
       if (t - at > 0.25) continue; // stale (tab was hidden)
       if (ev.voice === 'kick' || ev.voice === 'snare' || ev.voice === 'hat') this.last[ev.voice] = at;
+      else if (ev.voice === 'clap') this.last.snare = at;
       else if (ev.voice === 'acid') {
         // The acid line pulses the bass light on its accents (it brings no parcels of its own).
         if (ev.accent) this.last.bass = at;
@@ -242,7 +243,7 @@ export class Music {
           pitch: Math.max(0, Math.min(1, (midi - 36) / 52)),
           vel: ev.vel,
           dur: ev.len * this.stepOf(at),
-          role: ev.voice,
+          role: ev.voice === 'stab' ? 'lead' : ev.voice,
         });
       }
     }
@@ -384,6 +385,56 @@ export class Music {
         o.stop(at + 0.5);
         break;
       }
+      case 'clap': {
+        // Three quick noise bursts and a tail, band-passed: a hand clap.
+        const s = ctx.createBufferSource();
+        s.buffer = this.noise;
+        const f = ctx.createBiquadFilter();
+        f.type = 'bandpass';
+        f.frequency.value = 1300;
+        f.Q.value = 1.2;
+        const g = ctx.createGain();
+        const peak = 0.26 * ev.vel;
+        g.gain.setValueAtTime(0.0001, at);
+        for (const d of [0, 0.012, 0.024]) {
+          g.gain.setValueAtTime(peak, at + d);
+          g.gain.exponentialRampToValueAtTime(peak * 0.2, at + d + 0.01);
+        }
+        g.gain.setValueAtTime(peak * 0.8, at + 0.034);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+        s.connect(f).connect(g).connect(this.out!);
+        g.connect(this.reverb!);
+        s.start(at);
+        s.stop(at + 0.25);
+        break;
+      }
+      case 'stab': {
+        // A house chord stab: detuned saws, a filter that snaps shut, into the delay.
+        const f = ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.Q.value = 3;
+        f.frequency.setValueAtTime(3800, at);
+        f.frequency.exponentialRampToValueAtTime(500, at + 0.16);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(0.03 * ev.vel, at + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.2);
+        f.connect(g);
+        g.connect(this.out!);
+        g.connect(this.delay!);
+        for (const midi of ev.chord ?? []) {
+          for (const det of [-9, 9]) {
+            const o = ctx.createOscillator();
+            o.type = 'sawtooth';
+            o.frequency.value = mtof(midi);
+            o.detune.value = det;
+            o.connect(f);
+            o.start(at);
+            o.stop(at + 0.24);
+          }
+        }
+        break;
+      }
       case 'snare':
       case 'hat': {
         const s = ctx.createBufferSource();
@@ -392,10 +443,10 @@ export class Music {
         const g = ctx.createGain();
         const snare = ev.voice === 'snare';
         f.type = snare ? 'bandpass' : 'highpass';
-        f.frequency.value = snare ? 1900 : 7500;
+        f.frequency.value = snare ? 1900 : ev.open ? 6500 : 7500;
         f.Q.value = snare ? 0.9 : 0.7;
-        const peak = (snare ? 0.22 : 0.06) * ev.vel;
-        const len = snare ? 0.16 : 0.05;
+        const peak = (snare ? 0.22 : ev.open ? 0.07 : 0.06) * ev.vel;
+        const len = snare ? 0.16 : ev.open ? 0.24 : 0.05;
         g.gain.setValueAtTime(peak, at);
         g.gain.exponentialRampToValueAtTime(0.0001, at + len);
         s.connect(f).connect(g).connect(this.out!);
