@@ -679,6 +679,26 @@ export class RobotFloor {
     }
     const env = k.std(0x9b7d10, 0.5, 0, 0xf5c518);
     for (let i = 0; i < 16; i++) k.box('flyer', env, x - 1.7 + Math.random() * 3.4, 1.03 + Math.random() * 0.05, z - 0.7 + Math.random() * 1.4, 0.4, 0.04, 0.3, undefined, Math.random() * 3);
+    // Across from the camera side: a pigeonhole shelf with labelled cubbies; on it, a scale and a label printer;
+    // under it, a shelf; on the other side, an anti-fatigue mat.
+    const shelf = k.std(0x50545b, 0.6, 0.3, 0xdfe3e8);
+    const sx0 = x - 2.2;
+    const sz0 = z + 2.7;
+    for (let c = 0; c <= 6; c++) k.box('pigeon', shelf, sx0 + c * (4.4 / 6), 1.5, sz0, 0.04, 1.8, 0.5);
+    for (let r = 0; r <= 4; r++) k.box('pigeon', shelf, x, 0.6 + r * 0.45, sz0, 4.4, 0.04, 0.5);
+    const cubby = [0x2fa58f, 0xf2a51a, 0x6b3fd1, 0xd6339a, 0x1755fe, 0xe2231a];
+    for (let c = 0; c < 6; c++) for (let r = 0; r < 4; r++) {
+      k.box('cubtag', k.std(0x444444, 0.6, 0, cubby[(c + r) % cubby.length]!), sx0 + (c + 0.5) * (4.4 / 6), 0.6 + r * 0.45 + 0.03, sz0 - 0.26, 0.25, 0.04, 0.01);
+      if ((c * 7 + r * 3) % 4 === 0) k.box('cubenv', k.std(0x9b7d10, 0.5, 0, 0xf5e6b8), sx0 + (c + 0.5) * (4.4 / 6), 0.6 + r * 0.45 + 0.1, sz0, 0.5, 0.14, 0.36);
+    }
+    k.box('tshelf', yellow, x, 0.35, z, 4.2, 0.05, 1.8);
+    const grey = k.std(0x6b7280, 0.5, 0.5, 0xdfe3e8);
+    k.box('scale', grey, x + 1.5, 1.04, z - 0.5, 0.5, 0.06, 0.4);
+    k.box('scale', k.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f), x + 1.5, 1.12, z - 0.75, 0.2, 0.1, 0.05);
+    k.box('printer', grey, x - 1.6, 1.1, z - 0.6, 0.35, 0.22, 0.4);
+    k.box('printer', new THREE.MeshBasicMaterial({ color: 0xffffff }), x - 1.6, 1.12, z - 0.38, 0.2, 0.02, 0.1);
+    const mat = k.std(0x1d1d1f, 0.95, 0, 0x3a3d44);
+    k.box('mat', mat, x, 0.01, z - 1.6, 3.6, 0.02, 0.9);
     // People work here by day only: the night is for the robots.
     const was = k.only;
     k.only = 'day';
