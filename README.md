@@ -44,6 +44,12 @@ sound is generated in code.
 7. Around it: manual sorting table, control room, monitoring desk, computing
    racks, forklifts, signs.
 
+8. Life: people walking their rounds, a ride-on scrubber, a reach truck at
+   the rack, a forklift charging station, live screens with the hub's
+   numbers, wall clocks, exit signs, extinguishers, a break area.
+9. At night: a DJ on the mezzanine, laser fans, mirror-ball spots, dancing
+   dock workers and confetti when the groove drops in.
+
 Everything moves on the beat of the music: belts move 2 m per beat, parcels
 are diverted on beats, robots move one cell per beat, forklifts and workers
 do one move per beat.
@@ -58,6 +64,7 @@ do one move per beat.
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Sound on/off | `M` |
 | Hide the controls | `H` |
+| Quality: Low / Normal / High | buttons (`?quality=`) |
 
 The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
 

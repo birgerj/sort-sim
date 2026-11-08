@@ -43,6 +43,10 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
 | `src/scene/forklift.ts` | Forklift with driver (forks point to local +z); parts merged per material. |
 | `src/scene/people.ts` | `buildHuman`: jointed people (workers with hi-vis vest and helmet, staff with cap). |
+| `src/scene/post.ts` | `InkPass` (screen-space outlines), `toonify`/`TOON` (flat day shading), blob texture. |
+| `src/scene/screens.ts` | Live canvases: dashboard, wall KPI boards, clocks (real time). Fed by `HubStats` from the scene. |
+| `src/scene/life.ts` | Walkers (day), ride-on scrubber, reach truck at the rack, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |
+| `src/scene/party.ts` | Night party: DJ booth on the mezzanine, laser fans, mirror-ball floor spots, confetti on the drop. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
 | `src/sim/rng.ts` | Seeded random numbers. |
@@ -144,9 +148,14 @@ the simulation:
   manual sort table (pigeonhole shelf, scale, printer, mat), trolleys
   (mesh sides, casters, handle), rounded parcels, day ceiling (LED
   fixtures, cable trays).
-  Ideas for later: parcel variety (polybags, tubes) as a second instanced
-  mesh, pallets of wrapped goods, safety signs on columns, floor markings
-  per zone, night-only details (haze lasers through the loop).
+  Pass 4: screen-space ink, toon shading, contact shadows, quality levels
+  (AO, sun shadows, mirror floor, depth of field), projector pictures,
+  scan lines, wall openings with trailers, walkers and vehicles, live
+  screens, safety details, break area, parcel shapes (box, envelope,
+  polybag, tube), night party, loop-ride camera.
+  Ideas for later: merge robot and people meshes into instanced batches
+  (draw calls), animated trailer arrivals, staff shift change at dusk,
+  sound effects for the forklifts' horns on the beat.
 - **Where each thing is built:** loop/belts/chutes `buildConveyors`, scan
   tunnels `tunnel()`, store and lift `buildStore`, parcels `buildParcels`,
   hall `buildHall` (night) and `buildDay` (day), people `person()`, signs
@@ -162,9 +171,12 @@ the simulation:
 - **GLTF models:** load with `GLTFLoader` into the same groups; use
   `InstancedMesh` for anything repeated (20 docks × 3 cages, 40 boxes, 20
   robots). Watch draw calls: every `inkify` mesh adds a line object.
-- **Budget:** aim for 60 fps on a mid-range laptop at the default pixel
-  ratio cap (1.5); under ~2,500 draw calls; check with
-  `renderer.info.render.calls` in the console (`sortsim.scene`).
+- **Budget:** aim for 60 fps on a mid-range laptop at quality normal.
+  Measured per frame (headless): about 2,600 draw calls by day (scene plus
+  the ink pass's normal render), 1,300 by night, about 5,500 at high
+  (adds GTAO and the shadow map). Biggest cost: per-robot and per-person
+  meshes; instancing them is the next win. Check with
+  `sortsim.scene.renderer.info` (set `info.autoReset = false` around a frame).
 - Keep the day look's flat colours with black outlines; detail comes from
   shape (bevels, ribs, rollers, bolts, labels), not from noise.
 
@@ -175,3 +187,7 @@ the simulation:
 - Parcels' `pos` is the base of the parcel, not its centre.
 - `SceneInput.beats` can jump (tab hidden); the scene re-phases instead of
   replaying beats.
+- The long walls are `ShapeGeometry` with holes at open doors; their UVs are
+  in metres (textures use per-metre repeat and an offset).
+- Toggling shadows (quality high) recompiles all materials once.
+- `Reflector` renders the scene again: it exists only at night on high.

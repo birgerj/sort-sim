@@ -27,11 +27,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
 import { RobotFloor } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
-import { BoxYard } from './boxYard';
+import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
-import { brushed, cardboardSide, dayFloor, dayWall, wireMesh } from './textures';
+import { Life } from './life';
+import { Party } from './party';
+import { Screens } from './screens';
+import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { FleetEvent } from '../sim/robotFleet';
 
@@ -101,10 +104,41 @@ const FIRST_STATION_S = 147;
  * camera, a glossy floor at night and depth of field when following a parcel.
  */
 export type Quality = 'low' | 'normal' | 'high';
+/** x of the wall columns (south wall; the north ones stand 2.4 m further east). */
+const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }, (_, k) => WX + 19 + 24 * k);
+
 /** Belt speeds the conveyor clock can run at: multiples of the beat, so events stay on 8th and 16th notes. */
 export const BELT_SPEEDS = [0.5, 1, 2, 4];
 /** x of the 20 truck docks on the north wall: straight north of each dock chute's end. */
 const DOCK_X = Array.from({ length: 20 }, (_, k) => LX + 4 + 6 * k + 2.4);
+/** Openings in the long walls, where trailers stand: x of each open door. */
+const NORTH_DOORS = DOCK_X;
+const SOUTH_DOORS = DOORS.filter((d) => d[2]).map((d) => d[0]);
+const DOOR_W = 3.2;
+const DOOR_H = 3.8;
+
+/** A long wall (HW × HH, centred on its origin) with door openings at the given x. */
+function wallWithDoors(xs: number[]): THREE.ShapeGeometry {
+  const sh = new THREE.Shape();
+  sh.moveTo(-HW / 2, -HH / 2);
+  sh.lineTo(HW / 2, -HH / 2);
+  sh.lineTo(HW / 2, HH / 2);
+  sh.lineTo(-HW / 2, HH / 2);
+  sh.closePath();
+  for (const x of xs) {
+    const h = new THREE.Path();
+    const lx = x - HCX;
+    // (A thin sill at the bottom keeps each opening a proper hole.)
+    h.moveTo(lx - DOOR_W / 2, -HH / 2 + 0.02);
+    h.lineTo(lx - DOOR_W / 2, -HH / 2 + DOOR_H);
+    h.lineTo(lx + DOOR_W / 2, -HH / 2 + DOOR_H);
+    h.lineTo(lx + DOOR_W / 2, -HH / 2 + 0.02);
+    h.closePath();
+    sh.holes.push(h);
+  }
+  return new THREE.ShapeGeometry(sh);
+}
+
 
 // Lift and high-bay store, east of the loop.
 const STORE_DX = LX + STRAIGHT + LOOP_R - 39;
@@ -513,6 +547,8 @@ interface Parcel {
   /** Glow colour once scanned: destination colour, or the track colour for lead parcels. */
   glow: THREE.Color;
   lead: boolean;
+  /** 0 box, 1 polybag, 2 tube. */
+  shape: 0 | 1 | 2;
   scanned: boolean;
   flash: number;
   /** Chute index, or −1 for the store. */
@@ -571,6 +607,11 @@ interface Tunnel {
   curtain: THREE.MeshBasicMaterial;
   flash: number;
   col: THREE.Color;
+  /** Scan line sweeping through the tunnel on a read; red on a no-read. */
+  line: THREE.Mesh;
+  lineMat: THREE.MeshBasicMaterial;
+  depth: number;
+  read: boolean;
 }
 
 interface Chute {
@@ -748,9 +789,9 @@ export class Sorter implements Scene3D {
 
   // Parcels.
   private parcels: Parcel[] = [];
-  private parcelMesh!: THREE.InstancedMesh;
+  /** Parcels by shape (0 box, 1 polybag, 2 tube): one instanced mesh and glow buffer each. */
+  private shapes: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute }[] = [];
   private labelMesh!: THREE.InstancedMesh;
-  private glowAttr!: THREE.InstancedBufferAttribute;
   private nextId = 400000 + Math.floor(Math.random() * 500000);
   private queue: Parcel[] = [];
 
@@ -789,6 +830,11 @@ export class Sorter implements Scene3D {
   private hemi!: THREE.HemisphereLight;
   private forklifts: Forklift[] = [];
   private docks!: Docks;
+  private life!: Life;
+  private party!: Party;
+  private screens = new Screens();
+  /** Counters for the screens. */
+  private stats = { inducted: 0, toDocks: 0, toRobots: 0 };
   private yard!: BoxYard;
   /** Dock chutes: chute index → dock x. */
   private dockOf = new Map<number, number>();
@@ -881,6 +927,19 @@ export class Sorter implements Scene3D {
         shipped: (chute) => (this.chutes[chute]!.flash = 1),
       },
     );
+    this.life = new Life(this, {
+      wx: WX,
+      ex: EX,
+      hz: HZ,
+      rackEastX: RACK_X1,
+      rackHalf: BAYS * BAY,
+      levels: LEVELS,
+      controlRoom: [-48, 23.5],
+      columnsNorth: COLUMNS.map((x) => x + 2.4),
+      columnsSouth: COLUMNS,
+    });
+    this.party = new Party(this, v(-50.2, 6.21, LANE_Z[3]! - 2.4), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
+    this.buildBoards();
     this.buildDay();
     this.buildCamera();
     this.prefill();
@@ -1106,6 +1165,17 @@ export class Sorter implements Scene3D {
     this.updateClub(dt, bar);
     this.updateForklifts(dt, prev);
     this.yard.update(bt);
+    this.life.update(dt, bt);
+    this.party.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
+    const bots = this.floor.fleet.bots;
+    this.screens.update(this.time, {
+      ...this.stats,
+      boxesShipped: this.floor.shippedBoxes,
+      robotsBusy: bots.filter((b) => b.state !== 'idle').length,
+      robots: bots.length,
+      fullBoxes: this.floor.bins.filter((b) => !b.open).length,
+      speed: this.speed,
+    });
     this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown });
     this.updateCamera(dt, bar, i.travelSpeed);
     if (this.quality === 'high') {
@@ -1185,6 +1255,7 @@ export class Sorter implements Scene3D {
       const p = this.botParcel.get(e.bot);
       if (p) p.dropAt = this.bt;
     } else if (e.t === 'dropped') {
+      this.stats.toRobots++;
       const p = this.botParcel.get(e.bot);
       if (p) p.dead = true;
       this.botParcel.delete(e.bot);
@@ -1212,15 +1283,23 @@ export class Sorter implements Scene3D {
   // ---------- parcels ----------
   private newParcel(): Parcel | null {
     if (this.parcels.length >= MAX_PARCELS) return null;
-    const env = Math.random() < 0.18;
+    const r = Math.random();
+    // Flat envelopes, soft polybags, tubes and boxes.
+    const env = r < 0.12;
+    const bag = !env && r < 0.3;
+    const tube = !env && !bag && r < 0.37;
+    const w = env ? rnd(0.7, 0.9) : bag ? rnd(0.45, 0.8) : tube ? rnd(0.16, 0.26) : rnd(0.35, 0.95);
     const p: Parcel = {
       id: this.nextId++,
-      w: env ? rnd(0.7, 0.9) : rnd(0.35, 0.95),
-      h: env ? rnd(0.06, 0.12) : rnd(0.22, 0.7),
-      d: env ? rnd(0.5, 0.7) : rnd(0.35, 0.85),
-      col: new THREE.Color(env ? pick([0xe8e6e0, 0xd6d3cc, 0xbfc4cc]) : pick(PARCEL_COLS)),
+      w,
+      h: env ? rnd(0.06, 0.12) : bag ? rnd(0.12, 0.25) : tube ? w : rnd(0.22, 0.7),
+      d: env ? rnd(0.5, 0.7) : bag ? rnd(0.4, 0.65) : tube ? rnd(0.7, 1.1) : rnd(0.35, 0.85),
+      col: new THREE.Color(
+        env ? pick([0xe8e6e0, 0xd6d3cc, 0xbfc4cc]) : bag ? pick([0xf3f4f6, 0x9aa0a8, 0x1d1d1f, 0x2c62c8, 0xd6339a, 0x6b3fd1]) : tube ? pick([0xb08a5e, 0xc4a070, 0xe6e4de]) : pick(PARCEL_COLS),
+      ),
       glow: new THREE.Color(),
       lead: false,
+      shape: bag ? 1 : tube ? 2 : 0,
       scanned: false,
       flash: 0,
       dest: Math.floor(Math.random() * CHUTES.length),
@@ -1412,12 +1491,15 @@ export class Sorter implements Scene3D {
     p.scanned = true;
     p.flash = 1;
     t.flash = 1;
+    // Now and then a label cannot be read (a red line); the next scanner gets it.
+    t.read = Math.random() > 0.05;
     t.col.copy(p.glow);
   }
 
   private pathEnd(p: Parcel): void {
     switch (p.pathKind) {
       case 'lane':
+        this.stats.inducted++;
         this.induct(p, INDUCT[p.lane]!, p.t1);
         break;
       case 'back':
@@ -1439,6 +1521,7 @@ export class Sorter implements Scene3D {
         break;
       }
       case 'dock':
+        this.stats.toDocks++;
         p.mode = 'dock';
         this.docks.arrive(p.dest, p);
         break;
@@ -1626,20 +1709,23 @@ export class Sorter implements Scene3D {
 
   // ---------- per-frame drawing ----------
   private writeParcels(): void {
-    const glow = this.glowAttr.array as Float32Array;
     const kick = 0.55 + this.kick * 0.8;
     const o = this.o;
-    let k = 0;
+    const counts = [0, 0, 0];
+    let labels = 0;
     let hull = 0;
     for (const p of this.parcels) {
-      if (k >= MAX_PARCELS) break;
+      const set = this.shapes[p.shape]!;
+      const k = counts[p.shape]!;
+      if (k >= MAX_PARCELS) continue;
+      counts[p.shape]!++;
       this.n.set(0, 1, 0).applyQuaternion(p.q);
       o.position.copy(p.pos).addScaledVector(this.n, p.h / 2);
       o.quaternion.copy(p.q);
       o.scale.set(p.w, p.h, p.d);
       o.updateMatrix();
-      this.parcelMesh.setMatrixAt(k, o.matrix);
-      this.parcelMesh.setColorAt(k, p.col);
+      set.mesh.setMatrixAt(k, o.matrix);
+      set.mesh.setColorAt(k, p.col);
       if (p === this.follow) {
         // The followed parcel gets a blue outline (a slightly larger box drawn inside out).
         o.scale.set(p.w + 0.12, p.h + 0.12, p.d + 0.12);
@@ -1650,26 +1736,31 @@ export class Sorter implements Scene3D {
       }
       const g = (p.scanned ? (p.lead ? 0.38 : 0.16) * kick + (p === this.follow ? 0.25 : 0) : p.lead ? 0.25 : 0) * (1 - this.day * 0.85);
       this.c.copy(p.glow).multiplyScalar(g).lerp(this.white, p.flash * 0.8);
+      const glow = set.glow.array as Float32Array;
       glow[k * 3] = this.c.r + p.flash * 0.6;
       glow[k * 3 + 1] = this.c.g + p.flash * 0.6;
       glow[k * 3 + 2] = this.c.b + p.flash * 0.6;
+      // Shipping label on top (tubes have theirs wrapped round, not drawn).
+      if (p.shape === 2) continue;
       o.position.copy(p.pos).addScaledVector(this.n, p.h + 0.004);
       o.quaternion.copy(p.q).multiply(this.qLabel);
       o.scale.set(Math.min(p.w * 0.6, 0.34), Math.min(p.d * 0.6, 0.24), 1);
       o.updateMatrix();
-      this.labelMesh.setMatrixAt(k, o.matrix);
-      k++;
+      this.labelMesh.setMatrixAt(labels++, o.matrix);
     }
-    this.parcelMesh.count = k;
-    this.labelMesh.count = k;
+    this.shapes.forEach((set, k) => {
+      set.mesh.count = counts[k]!;
+      set.mesh.instanceMatrix.needsUpdate = true;
+      if (set.mesh.instanceColor) set.mesh.instanceColor.needsUpdate = true;
+      set.glow.needsUpdate = true;
+    });
+    this.labelMesh.count = labels;
     this.hull.count = hull;
     this.hull.instanceMatrix.needsUpdate = true;
     if (this.hull.instanceColor) this.hull.instanceColor.needsUpdate = true;
-    this.parcelMesh.instanceMatrix.needsUpdate = true;
     this.labelMesh.instanceMatrix.needsUpdate = true;
-    if (this.parcelMesh.instanceColor) this.parcelMesh.instanceColor.needsUpdate = true;
-    this.glowAttr.needsUpdate = true;
   }
+
 
   private updateTrays(dt: number): void {
     const o = this.o;
@@ -1797,6 +1888,17 @@ export class Sorter implements Scene3D {
 
   private tunnelGlow(t: Tunnel, dt: number): void {
     t.flash = Math.max(0, t.flash - dt * 3);
+    // The scan line sweeps once through the tunnel per read.
+    t.line.visible = t.flash > 0.02;
+    (t.line.userData.fan as THREE.Mesh).visible = t.line.visible;
+    if (t.line.visible) {
+      t.line.position.z = (0.5 - t.flash) * (t.depth - 0.4);
+      const fan = t.line.userData.fan as THREE.Mesh;
+      fan.position.z = t.line.position.z;
+      (fan.material as THREE.MeshBasicMaterial).color.copy(t.lineMat.color).multiplyScalar(0.25 * t.flash);
+      t.lineMat.color.setRGB(...((t.read ? [0.2, 1.6, 0.4] : [1.8, 0.15, 0.1]) as RGB));
+      t.lineMat.opacity = 0.35 + 0.6 * t.flash;
+    }
     t.ring.color.copy(t.col).multiplyScalar(0.25 + t.flash * 3).lerp(this.white, t.flash * 0.4);
     if (this.day > 0) t.ring.color.lerp(this.c.setHex(DAY.orangeL).lerp(this.white, t.flash * 0.8), this.day);
     t.curtain.opacity = (0.1 + t.flash * 0.45 + this.snare * 0.35) * (1 - this.day);
@@ -2088,11 +2190,18 @@ export class Sorter implements Scene3D {
     };
     const wx = wallMat(Math.round(HW / 4), 4);
     const wz = wallMat(16, 4);
+    void wx;
+    const ribsM = ribs.clone();
+    ribsM.repeat.set(1 / 4, 4 / HH);
+    ribsM.offset.set(0, 0.5 * (4 / HH));
+    ribsM.needsUpdate = true;
+    const longNight = new THREE.MeshStandardMaterial({ map: ribsM, roughness: 0.85, metalness: 0.3, side: THREE.DoubleSide });
     for (const z of [-HZ, HZ]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HW, HH), wx);
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longNight);
       w.position.set(HCX, HH / 2, z);
       this.put(w, 'night');
     }
+    this.buildTrailers();
     for (const x of [WX, EX]) {
       const w = new THREE.Mesh(new THREE.PlaneGeometry(HZ * 2, HH), wz);
       w.position.set(x, HH / 2, 0);
@@ -2115,7 +2224,7 @@ export class Sorter implements Scene3D {
     const col = this.std(0x3a3d45, 0.6, 0.6, 0xf3f4f6);
     const colRed = this.std(0x7a1a20, 0.6, 0.3, 0xe2231a);
     // (In the walls, between the dock doors.)
-    for (let x = WX + 19; x <= EX - 6; x += 24) {
+    for (const x of COLUMNS) {
       // North: halfway between truck docks (x −13.6 + 6k); south: between the box doors (x −16 + 6k).
       for (const [z, dx] of [[-33.6, 2.4], [33.6, 0]] as const) {
         const cx = x + dx;
@@ -2179,7 +2288,77 @@ export class Sorter implements Scene3D {
     // (North wall east of x 12: truck docks; south wall east of x −8: box forklift aisle.)
     for (let x = -58; x < -18; x += 1.6) if (Math.random() < 0.65) stack(x, -32.6);
     for (let k = 0; k < 18; k++) stack(rnd(-58, -32), rnd(-28, -12));
-    for (let x = -40; x < -25; x += 1.6) if (Math.random() < 0.5) stack(x, 32.6);
+    // (South wall west of the box doors: the break area.)
+  }
+
+  /**
+   * Trailers behind the open dock doors: an inside you can look into (and the box
+   * forklifts drive into), with cargo at the far end and a strip light.
+   */
+  private buildTrailers(): void {
+    const inside = this.std(0x1b1d22, 0.7, 0.3, 0xe6e9ed);
+    inside.side = THREE.BackSide;
+    inside.map = sectionalDoor();
+    const floorM = this.std(0x2a2c31, 0.8, 0.2, 0xb9c0c8);
+    floorM.map = checkerPlate();
+    const lamp = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.3, 1.25, 1.1) });
+    const cageM = this.std(0x5d6670, 0.5, 0.6, DAY.teal);
+    const card = this.std(0x8a7050, 0.95, 0, 0xe0b882);
+    card.map = cardboardSide();
+    const L = 12;
+    const geo = new THREE.BoxGeometry(DOOR_W - 0.1, DOOR_H - 0.1, L);
+    for (const [xs, dir] of [[NORTH_DOORS, -1], [SOUTH_DOORS, 1]] as const) {
+      xs.forEach((x, k) => {
+        const zc = dir * (HZ + L / 2 + 0.02);
+        const box = new THREE.Mesh(geo, inside);
+        box.position.set(x, DOOR_H / 2, zc);
+        this.put(box);
+        box.userData.noInk = true;
+        this.box('trfloor', floorM, x, 0.02, zc, DOOR_W - 0.2, 0.04, L);
+        this.box('trlamp', lamp, x, DOOR_H - 0.15, zc, 0.2, 0.04, L - 2);
+        // Cargo at the far end: roll cages in the north trailers, boxes on pallets in the south ones.
+        const fill = 2 + ((k * 7) % 4);
+        for (let r = 0; r < fill; r++) {
+          const z = dir * (HZ + L - 0.9 - r * 1.3);
+          for (const sx of [-0.75, 0.75]) {
+            if (dir < 0) this.box('trcage', cageM, x + sx, 0.95, z, 1.3, 1.7, 1.0);
+            else {
+              this.box('trpal', card, x + sx, 0.55, z, 1.2, 0.9, 1.2);
+              this.box('trpalw', this.std(0x6a5038, 0.9, 0, 0xd8b080), x + sx, 0.06, z, 1.2, 0.12, 1.2);
+            }
+          }
+        }
+      });
+    }
+  }
+
+  /** Big KPI boards and clocks on the walls, showing live numbers and the real time. */
+  private buildBoards(): void {
+    const board = new THREE.MeshBasicMaterial({ map: this.screens.board });
+    const frame = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
+    const place = (x: number, y: number, z: number, ry: number) => {
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      g.rotation.y = ry;
+      this.put(g);
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(6.2, 2.5, 0.12), frame));
+      const sc = new THREE.Mesh(new THREE.PlaneGeometry(6, 2.25), board);
+      sc.position.z = 0.07;
+      g.add(sc);
+    };
+    place(-40, 7.2, -HZ + 0.12, 0);
+    place(-45, 7.2, HZ - 0.12, Math.PI);
+    place(EX - 0.12, 7.2, -14, -Math.PI / 2);
+    const clock = new THREE.MeshBasicMaterial({ map: this.screens.clock, transparent: true });
+    const clk = (x: number, y: number, z: number, ry: number) => {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), clock);
+      m.position.set(x, y, z);
+      m.rotation.y = ry;
+      this.put(m);
+    };
+    clk(WX + 0.1, 8.4, 4, Math.PI / 2);
+    clk(-30, 8.4, -HZ + 0.1, 0);
+    clk(-30, 8.4, HZ - 0.1, Math.PI);
   }
 
   /** Control room: a cabin with a window band, door, roof plant and a stair to the roof. Front faces −z. */
@@ -2520,7 +2699,16 @@ export class Sorter implements Scene3D {
       const leg = this.std(0x6b7280, 0.5, 0.7, DAY.orange);
       for (const x of [-W / 2, W / 2]) add(new THREE.BoxGeometry(0.15, this.p.y - 0.3, 0.15), leg, x, -(this.p.y + 0.3) / 2, 0);
     }
-    return { ring, curtain, flash: 0, col: new THREE.Color(0.3, 1, 0.5) };
+    const lineMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.6, 0.4), transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+    const line = add(new THREE.PlaneGeometry(W - 0.4, 0.05), lineMat, 0, 0.35, 0);
+    line.rotation.x = -Math.PI / 2;
+    line.visible = false;
+    // A fan of light from the top scanner down to the line.
+    const fanMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+    const fan = add(new THREE.PlaneGeometry(W - 0.4, H - 0.9), fanMat, 0, 0.35 + (H - 0.9) / 2, 0);
+    fan.visible = false;
+    line.userData.fan = fan;
+    return { ring, curtain, flash: 0, col: new THREE.Color(0.3, 1, 0.5), line, lineMat, depth: D, read: true };
   }
 
   private buildStore(): void {
@@ -2633,17 +2821,33 @@ export class Sorter implements Scene3D {
         .replace('#include <common>', '#include <common>\nvarying vec3 vGlow;')
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow;');
     };
-    // Slightly rounded boxes: a softer, more real silhouette than sharp cubes.
-    const geo = new RoundedBoxGeometry(1, 1, 1, 2, 0.06);
-    this.glowAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS * 3), 3);
-    this.glowAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('aGlow', this.glowAttr);
-    this.parcelMesh = new THREE.InstancedMesh(geo, mat, MAX_PARCELS);
-    this.parcelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.parcelMesh.setColorAt(0, this.white);
-    this.parcelMesh.frustumCulled = false;
-    this.parcelMesh.count = 0;
-    this.put(this.parcelMesh);
+    toonify(mat);
+    // Plastic for the polybags: shiny, no cardboard print.
+    const plastic = mat.clone();
+    plastic.map = null;
+    plastic.roughness = 0.35;
+    plastic.onBeforeCompile = mat.onBeforeCompile;
+    plastic.customProgramCacheKey = () => 'parcel-plastic';
+    const geos = [
+      // Slightly rounded boxes: a softer, more real silhouette than sharp cubes.
+      new RoundedBoxGeometry(1, 1, 1, 2, 0.06),
+      // Polybags: a soft pillow.
+      new RoundedBoxGeometry(1, 1, 1, 5, 0.42),
+      // Tubes, lying along their length.
+      new THREE.CylinderGeometry(0.5, 0.5, 1, 18).rotateX(Math.PI / 2),
+    ];
+    geos.forEach((geo, k) => {
+      const glow = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS * 3), 3);
+      glow.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('aGlow', glow);
+      const mesh = new THREE.InstancedMesh(geo, k === 1 ? plastic : mat, MAX_PARCELS);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.setColorAt(0, this.white);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      this.put(mesh);
+      this.shapes.push({ mesh, glow });
+    });
     this.hull = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }), MAX_PARCELS);
     this.hull.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.hull.setColorAt(0, this.white);
@@ -2742,7 +2946,9 @@ export class Sorter implements Scene3D {
 
   /** A forklift serving the store, driving a loop along the east wall. (The box forklifts live in BoxYard.) */
   private buildForklifts(): void {
-    const routes = [roundRect(57.6 + STORE_DX, 0, 6, 44, 2.4)];
+    // (The east side of the rack is the reach truck's now; see Life.)
+    const routes: Path[] = [];
+    void roundRect;
     routes.forEach((route, k) => {
       const { g, forks, beacon } = buildForklift(this, pick([0xb08860, 0xd8d4cc]));
       this.forklifts.push({ g, route, s: rnd(0, route.len), speed: 1.1 + k * 0.15, forks, beacon });
@@ -2777,8 +2983,15 @@ export class Sorter implements Scene3D {
     };
     const wall = cladding(HZ * 2);
     const longWall = cladding(HW);
+    void longWall;
+    const cl = dayWall().clone();
+    // Shape UVs are in metres from the wall's centre: one cladding tile per 8 m, windows at the top.
+    cl.repeat.set(1 / 8, 1 / HH);
+    cl.offset.set(0, 0.5);
+    cl.needsUpdate = true;
+    const longDay = new THREE.MeshBasicMaterial({ color: DAY.wall, map: cl, side: THREE.DoubleSide });
     for (const z of [-HZ, HZ]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HW, HH), longWall);
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longDay);
       w.position.set(HCX, HH / 2, z);
       this.put(w);
     }
@@ -2819,7 +3032,7 @@ export class Sorter implements Scene3D {
     this.blob(dx, dz - 0.3, 4, 3);
     for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('desk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
     // Three screens on arms, curved slightly around the operator.
-    const dash = new THREE.MeshBasicMaterial({ map: this.dashTex() });
+    const dash = new THREE.MeshBasicMaterial({ map: this.screens.dash });
     const ink = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
     for (const [ox, a] of [[-1.05, 0.35], [0, 0], [1.05, -0.35]] as const) {
       const g = new THREE.Group();
@@ -2918,23 +3131,7 @@ export class Sorter implements Scene3D {
     this.flushBoxes();
   }
 
-  private dashTex(): THREE.CanvasTexture {
-    return canvasTex(256, 144, (g) => {
-      g.fillStyle = '#eee8fc';
-      g.fillRect(0, 0, 256, 144);
-      g.fillStyle = '#6b3fd1';
-      for (let k = 0; k < 8; k++) {
-        const h = 20 + ((k * 37) % 70);
-        g.fillRect(20 + k * 18, 120 - h, 12, h);
-      }
-      g.strokeStyle = '#d6339a';
-      g.lineWidth = 4;
-      g.beginPath();
-      g.moveTo(176, 110);
-      for (let k = 0; k < 6; k++) g.lineTo(176 + k * 13, 110 - ((k * 23) % 60) - 10);
-      g.stroke();
-    });
-  }
+
 
   /** A person in the illustration style: white shirt, blue trousers, cap. */
   person(x: number, z: number, ry: number): void {
@@ -3032,6 +3229,22 @@ export class Sorter implements Scene3D {
       fixed('manual sorting', v(-27, 3.6, 17.5), v(-33, 1, 22), 'Manual sorting'),
       fixed('control room', v(-42, 4, 16.5), v(-54, 2, 26), 'Control room'),
       fixed('boxes', v(28, 4.2, 25.5), v(32, 0.8, 32), 'Boxes & trucks'),
+      fixed('dj', v(-40, 7.5, 2), v(-50, 7, -4.5)),
+      fixed('break', v(-30, 3.6, 22), v(-37, 0.8, 29.5)),
+      {
+        name: 'loop ride',
+        dept: 'Ride the loop',
+        // Alongside the trays, at tray speed, looking ahead.
+        at: (p, l) => {
+          const s = this.ct * BEAT_M + 6;
+          loopAt(s + 8, l, this.t);
+          loopAt(s, p, this.t);
+          outward(this.t, this.n);
+          p.addScaledVector(this.n, 2.6).setY(LOOP_Y + 1.6);
+          l.setY(LOOP_Y);
+          return true;
+        },
+      },
       {
         name: 'forklift',
         dept: 'Forklifts',

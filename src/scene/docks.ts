@@ -408,10 +408,9 @@ export function buildDockDoor(k: FloorKit, x: number, wallZ: number, dir: 1 | -1
   const { dark, rubber, door } = M as Record<string, THREE.Material>;
   if (closed) k.box('rolldoor', M.closedDoor!, x, 1.9, z(0.08), 3.2, 3.8, 0.1);
   else {
-    k.box('trailer', dark!, x, 1.9, z(0.06), 3.2, 3.8, 0.1);
+    // (The wall has an opening here; the trailer behind it is built by the hall.)
+    void dark;
     k.box('rolldoor', door!, x, 4.4, z(0.25), 3.6, 0.7, 0.35);
-    // Trailer floor edge and the dock seal's light.
-    k.box('trailerfloor', M.leveler!, x, 1.0, z(-0.4), 3.0, 0.08, 0.8);
   }
   k.box('shelter', rubber!, x - 1.8, 2.0, z(0.2), 0.4, 4.0, 0.3);
   k.box('shelter', rubber!, x + 1.8, 2.0, z(0.2), 0.4, 4.0, 0.3);
