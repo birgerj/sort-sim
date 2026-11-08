@@ -27,12 +27,14 @@ sound is generated in code.
                       south wall: 20 dock doors (box trucks)
 ```
 
-1. **Infeed (west).** Four lanes (two low, two on a mezzanine) come through
-   the wall and pass a scan tunnel; each lane joins the west side of the
-   loop on its own at 30°, two on odd and two on even trays, so every tray
-   can be filled. Parcels come in
+1. **Infeed (west).** Four low lanes, 4 m apart, come through the west wall
+   and pass a row of scan tunnels just inside it. They run under the west
+   end of the loop into the middle, climb to loop height and, one after the
+   other, turn left onto the north straight from the inside at 30°, 6 m
+   apart; two land on the beat and two half a beat later, so every tray can
+   be filled. Parcels come in
    at a set rate; when that is more than the lanes take, they queue at the
-   hold points before the tunnels (and outside).
+   hold points after the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
    parcel carries a Dutch postcode (four digits): about 88% for the 20 largest
    municipalities (north docks), about 12% for the next 20 (robots; fewer while
