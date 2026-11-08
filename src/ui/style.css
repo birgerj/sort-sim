@@ -202,3 +202,8 @@ input[type='range'] {
     flex-basis: 100%;
   }
 }
+
+/* Touch drags on the hall (walking, looking) must not scroll or zoom the page. */
+#app canvas {
+  touch-action: none;
+}

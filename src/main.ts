@@ -3,7 +3,7 @@
  *
  * URL parameters (all optional):
  *   time=day|night|cycle   time of day
- *   camera=auto|fly|follow camera mode
+ *   camera=auto|fly|follow|walk camera mode
  *   dept=<id>              start at a department (see Sorter.departments())
  *   mute=1                 no start screen, no sound
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
@@ -16,18 +16,20 @@ import './ui/style.css';
 import { Music } from './audio/music';
 import { Sorter } from './scene/sorter';
 import { Hud, loadSettings, type TimeMode } from './ui/hud';
+import { WalkControls } from './ui/walk';
 
 const q = new URLSearchParams(location.search);
 const app = document.getElementById('app')!;
 const scene = new Sorter();
 app.append(scene.canvas);
+const walk = new WalkControls(scene, scene.canvas);
 const music = new Music();
 const settings = loadSettings();
 
 const time = q.get('time');
 if (time === 'day' || time === 'night' || time === 'cycle') settings.time = time as TimeMode;
 const cam = q.get('camera');
-if (cam === 'auto' || cam === 'fly' || cam === 'follow') scene.setControl('cam', cam);
+if (cam === 'auto' || cam === 'fly' || cam === 'follow' || cam === 'walk') scene.setControl('cam', cam);
 const speed = Number(q.get('speed') ?? settings.speed);
 scene.setBeltSpeed(speed);
 const dept = q.get('dept');
@@ -72,6 +74,7 @@ function frame(now: number): void {
   // (The first frame's timestamp can be earlier than the start time.)
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
   last = now;
+  walk.frame();
   const f = music.frame();
   for (const n of f.notes) scene.note(n.color, n.pitch, n.vel, n.dur, n.role);
   tod += (targetTod(now / 1000) - tod) * Math.min(1, dt * 0.8);
