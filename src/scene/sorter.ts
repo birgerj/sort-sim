@@ -19,6 +19,9 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
@@ -27,6 +30,7 @@ import { DOCK_BELT_END, Docks } from './docks';
 import { BoxYard } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
+import { blobTexture, InkPass, TOON, toonify } from './post';
 import { brushed, cardboardSide, dayFloor, dayWall, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { FleetEvent } from '../sim/robotFleet';
@@ -91,6 +95,12 @@ const CHUTES: [number, number][] = [
   ...Array.from({ length: 20 }, (_, k): [number, number] => [150 + 6 * k, 1]),
 ];
 const FIRST_STATION_S = 147;
+/**
+ * Render quality. low: pixel ratio 1, no extras. normal: outlines, toon shading and
+ * contact shadows (always on). high: also ambient occlusion, sun shadows around the
+ * camera, a glossy floor at night and depth of field when following a parcel.
+ */
+export type Quality = 'low' | 'normal' | 'high';
 /** Belt speeds the conveyor clock can run at: multiples of the beat, so events stay on 8th and 16th notes. */
 export const BELT_SPEEDS = [0.5, 1, 2, 4];
 /** x of the 20 truck docks on the north wall: straight north of each dock chute's end. */
@@ -698,6 +708,12 @@ export class Sorter implements Scene3D {
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  /** Day outlines as a screen effect. */
+  private ink: InkPass;
+  private gtao: GTAOPass;
+  private bokeh: BokehPass;
+  private mirror: Reflector | null = null;
+  private quality: Quality = 'normal';
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 260);
 
@@ -785,7 +801,6 @@ export class Sorter implements Scene3D {
   readonly nightOnly: THREE.Object3D[] = [];
   /** Which look the objects being built belong to (undefined: both). */
   only: 'day' | 'night' | undefined;
-  private readonly ink = new THREE.LineBasicMaterial({ color: DAY.ink });
   private nightEnv: THREE.Texture | null = null;
   private keyLight!: THREE.DirectionalLight;
   private hull!: THREE.InstancedMesh;
@@ -827,8 +842,17 @@ export class Sorter implements Scene3D {
     this.scene.fog = new THREE.FogExp2(0x0b0910, 0.017);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.gtao = new GTAOPass(this.scene, this.camera, 512, 512);
+    this.gtao.enabled = false;
+    this.gtao.blendIntensity = 0.85;
+    this.composer.addPass(this.gtao);
+    this.ink = new InkPass(this.scene, this.camera);
+    this.composer.addPass(this.ink);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.55, 0.6);
     this.composer.addPass(this.bloom);
+    this.bokeh = new BokehPass(this.scene, this.camera, { focus: 10, aperture: 0.0025, maxblur: 0.006 });
+    this.bokeh.enabled = false;
+    this.composer.addPass(this.bokeh);
     this.composer.addPass(new OutputPass());
     try {
       const saved = localStorage.getItem(CAM_KEY);
@@ -860,7 +884,70 @@ export class Sorter implements Scene3D {
     this.buildDay();
     this.buildCamera();
     this.prefill();
+    this.setupShadows();
     this.applyTheme(0);
+  }
+
+  private buildMirror(): Reflector {
+    const base = (Reflector as unknown as { ReflectorShader: { uniforms: Record<string, THREE.IUniform>; vertexShader: string; fragmentShader: string } }).ReflectorShader;
+    const shader = {
+      ...base,
+      fragmentShader: base.fragmentShader.replace(
+        'gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );',
+        // A soft, faint reflection: four taps of the mirror image, mostly transparent.
+        `vec2 px = vec2(0.004, 0.0) * vUv.w;
+        vec3 sum = base.rgb;
+        sum += texture2DProj(tDiffuse, vUv + vec4(px, 0.0, 0.0)).rgb;
+        sum += texture2DProj(tDiffuse, vUv - vec4(px, 0.0, 0.0)).rgb;
+        sum += texture2DProj(tDiffuse, vUv + vec4(0.0, px.x, 0.0, 0.0)).rgb;
+        // Only the bright parts (lights, lasers, LED strips) reflect, added on top of the floor.
+        gl_FragColor = vec4(max(sum * 0.25 - vec3(0.45), vec3(0.0)) * 0.7, 1.0);`,
+      ),
+    };
+    const m = new Reflector(new THREE.PlaneGeometry(HW, HZ * 2), {
+      shader,
+      textureWidth: Math.round(this.canvas.width * 0.4) || 512,
+      textureHeight: Math.round(this.canvas.height * 0.4) || 288,
+      clipBias: 0.003,
+    });
+    const mat = m.material as THREE.ShaderMaterial;
+    mat.transparent = true;
+    mat.blending = THREE.AdditiveBlending;
+    mat.depthWrite = false;
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(HCX, 0.006, 0);
+    m.userData.noInk = true;
+    m.renderOrder = -2;
+    this.scene.add(m);
+    this.ink.refresh();
+    return m;
+  }
+
+  /** Sun shadows (quality high): every solid mesh casts and receives; the shadow box follows the camera. */
+  private setupShadows(): void {
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const sun = this.keyLight;
+    sun.shadow.mapSize.set(2048, 2048);
+    const c = sun.shadow.camera;
+    c.left = c.bottom = -36;
+    c.right = c.top = 36;
+    c.near = 1;
+    c.far = 140;
+    sun.shadow.bias = -0.0006;
+    sun.shadow.normalBias = 0.03;
+    this.scene.add(sun.target);
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || o.userData.noInk) return;
+      const mat = m.material as THREE.Material;
+      if (!(mat instanceof THREE.MeshStandardMaterial)) {
+        // Lights and labels catch no shadow, but floors and walls drawn flat by day do.
+        if (mat instanceof THREE.MeshBasicMaterial) return;
+        return;
+      }
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
   }
 
   resize(w: number, h: number, ratio: number): void {
@@ -1021,6 +1108,15 @@ export class Sorter implements Scene3D {
     this.yard.update(bt);
     this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown });
     this.updateCamera(dt, bar, i.travelSpeed);
+    if (this.quality === 'high') {
+      // The sun stands high in the south-east; its shadow box is centred where the camera looks.
+      this.keyLight.position.copy(this.look).add(this.t.set(25, 45, 30));
+      this.keyLight.target.position.copy(this.look);
+      const f = this.follow;
+      const following = !!f && (this.camMode === 'follow' || (this.camMode === 'auto' && this.autoFollow));
+      this.bokeh.enabled = following;
+      if (following) (this.bokeh.uniforms as Record<string, { value: number }>).focus!.value = this.camera.position.distanceTo(f.pos);
+    } else this.bokeh.enabled = false;
     this.bloom.strength = (0.75 + this.kick * 0.35 + this.snare * 0.15) * (1 - this.day);
     this.bloom.enabled = this.day < 0.98;
     this.composer.render(dt);
@@ -1039,6 +1135,28 @@ export class Sorter implements Scene3D {
     // Fewer when a lead plays (the notes bring their own parcels).
     const quiet = this.bt - this.lastLead > 2;
     if (Math.random() < (quiet ? 0.8 : 0.25)) this.spawn(Math.floor(Math.random() * 4), null, false);
+  }
+
+  getQuality(): Quality {
+    return this.quality;
+  }
+
+  setQuality(q: Quality): void {
+    if (q === this.quality) return;
+    const shadows = q === 'high';
+    if (shadows !== this.renderer.shadowMap.enabled) {
+      this.renderer.shadowMap.enabled = shadows;
+      // Shadow maps change the shader programs.
+      this.scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        if (m) for (const x of Array.isArray(m) ? m : [m]) x.needsUpdate = true;
+      });
+    }
+    this.keyLight.castShadow = shadows;
+    this.gtao.enabled = q === 'high';
+    this.quality = q;
+    this.dayShown = null; // re-apply the look (mirror floor)
+    this.applyTheme(this.day);
   }
 
   /** Belt speed, as a multiple of 2 m per beat (3.3 m/s at 100 BPM). */
@@ -1512,6 +1630,7 @@ export class Sorter implements Scene3D {
     const kick = 0.55 + this.kick * 0.8;
     const o = this.o;
     let k = 0;
+    let hull = 0;
     for (const p of this.parcels) {
       if (k >= MAX_PARCELS) break;
       this.n.set(0, 1, 0).applyQuaternion(p.q);
@@ -1521,13 +1640,13 @@ export class Sorter implements Scene3D {
       o.updateMatrix();
       this.parcelMesh.setMatrixAt(k, o.matrix);
       this.parcelMesh.setColorAt(k, p.col);
-      if (this.dayShown) {
-        // Outline: a slightly larger box drawn inside out; the followed parcel in blue.
-        const e = p === this.follow ? 0.12 : 0.05;
-        o.scale.set(p.w + e, p.h + e, p.d + e);
+      if (p === this.follow) {
+        // The followed parcel gets a blue outline (a slightly larger box drawn inside out).
+        o.scale.set(p.w + 0.12, p.h + 0.12, p.d + 0.12);
         o.updateMatrix();
-        this.hull.setMatrixAt(k, o.matrix);
-        this.hull.setColorAt(k, this.c.setHex(p === this.follow ? DAY.blue : DAY.ink));
+        this.hull.setMatrixAt(0, o.matrix);
+        this.hull.setColorAt(0, this.c.setHex(DAY.blue));
+        hull = 1;
       }
       const g = (p.scanned ? (p.lead ? 0.38 : 0.16) * kick + (p === this.follow ? 0.25 : 0) : p.lead ? 0.25 : 0) * (1 - this.day * 0.85);
       this.c.copy(p.glow).multiplyScalar(g).lerp(this.white, p.flash * 0.8);
@@ -1543,7 +1662,7 @@ export class Sorter implements Scene3D {
     }
     this.parcelMesh.count = k;
     this.labelMesh.count = k;
-    this.hull.count = this.dayShown ? k : 0;
+    this.hull.count = hull;
     this.hull.instanceMatrix.needsUpdate = true;
     if (this.hull.instanceColor) this.hull.instanceColor.needsUpdate = true;
     this.parcelMesh.instanceMatrix.needsUpdate = true;
@@ -1784,7 +1903,6 @@ export class Sorter implements Scene3D {
   private flushBoxes(): void {
     const g = new THREE.BoxGeometry(1, 1, 1);
     const o = this.o;
-    const edges = new THREE.EdgesGeometry(g).getAttribute('position');
     for (const { mat, list, only } of this.boxes.values()) {
       const im = new THREE.InstancedMesh(g, mat, list.length);
       list.forEach((e, k) => {
@@ -1797,28 +1915,9 @@ export class Sorter implements Scene3D {
       });
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
       this.put(im, only);
-      // Day look: black outlines on solid parts (not on lights, lines or thin rods).
-      if (only === 'night' || !(mat instanceof THREE.MeshStandardMaterial)) continue;
-      const pos: number[] = [];
-      const vtx = new THREE.Vector3();
-      for (const e of list) {
-        const dims = [e[3]!, e[4]!, e[5]!].sort((a, b) => a - b);
-        if (dims[1]! < 0.09) continue;
-        o.position.set(e[0]!, e[1]!, e[2]!);
-        o.rotation.set(0, e[7]!, 0);
-        o.scale.set(e[3]!, e[4]!, e[5]!);
-        o.updateMatrix();
-        for (let j = 0; j < edges.count; j++) {
-          vtx.fromBufferAttribute(edges, j).applyMatrix4(o.matrix);
-          pos.push(vtx.x, vtx.y, vtx.z);
-        }
-      }
-      if (!pos.length) continue;
-      const lg = new THREE.BufferGeometry();
-      lg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      this.put(new THREE.LineSegments(lg, this.ink), 'day');
     }
     this.boxes.clear();
+    this.flushBlobs();
   }
 
   private mesh(geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
@@ -1835,48 +1934,88 @@ export class Sorter implements Scene3D {
     else if (only === 'night') this.nightOnly.push(obj);
   }
 
-  /** Black outline for a mesh, shown by day. */
   /**
-   * Day outline for rounded shapes (where edge lines would miss the silhouette):
-   * a copy of the mesh drawn inside out and pushed out along its normals.
+   * Outlines come from the InkPass (a screen effect) for everything; these two
+   * remain as hooks, e.g. to mark parts that should get no outline later.
    */
-  outline(m: THREE.Mesh, width = 0.02): void {
-    let mat = this.outlineMats.get(width);
-    if (!mat) {
-      mat = new THREE.MeshBasicMaterial({ color: DAY.ink, side: THREE.BackSide });
-      mat.onBeforeCompile = (sh) => {
-        sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed += normalize(normal) * ${width.toFixed(4)};`);
-      };
-      this.outlineMats.set(width, mat);
-    }
-    const h = new THREE.Mesh(m.geometry, mat);
-    m.add(h);
-    this.dayOnly.push(h);
+  inkify(m: THREE.Mesh, angle = 25): void {
+    void m;
+    void angle;
   }
 
-  private outlineMats = new Map<number, THREE.MeshBasicMaterial>();
+  outline(m: THREE.Mesh, width = 0.02): void {
+    void m;
+    void width;
+  }
 
-  inkify(m: THREE.Mesh, angle = 25): void {
-    const l = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, angle), this.ink);
-    m.add(l);
-    this.dayOnly.push(l);
+  // ---------- contact shadows ----------
+
+  private blobs: [number, number, number, number, number][] = [];
+  private blobMat: THREE.MeshBasicMaterial | null = null;
+  private blobGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+
+  private blobMaterial(): THREE.MeshBasicMaterial {
+    if (!this.blobMat) {
+      this.blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: blobTexture(), transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    }
+    return this.blobMat;
+  }
+
+  /** A soft contact shadow on the floor (static). */
+  blob(x: number, z: number, w: number, d: number, ry = 0): void {
+    this.blobs.push([x, z, w, d, ry]);
+  }
+
+  /** A soft contact shadow that moves with an object (a child at floor level). */
+  blobUnder(obj: THREE.Object3D, w: number, d: number): void {
+    const m = new THREE.Mesh(this.blobGeo, this.blobMaterial());
+    m.scale.set(w, 1, d);
+    m.position.y = 0.03;
+    m.renderOrder = -1;
+    m.userData.noInk = true;
+    obj.add(m);
+  }
+
+  private flushBlobs(): void {
+    if (!this.blobs.length) return;
+    const im = new THREE.InstancedMesh(this.blobGeo, this.blobMaterial(), this.blobs.length);
+    this.blobs.forEach(([x, z, w, d, ry], k) => {
+      this.o.position.set(x, 0.028, z);
+      this.o.rotation.set(0, ry, 0);
+      this.o.scale.set(w, 1, d);
+      this.o.updateMatrix();
+      im.setMatrixAt(k, this.o.matrix);
+    });
+    im.renderOrder = -1;
+    im.userData.noInk = true;
+    this.put(im);
+    this.blobs = [];
   }
 
   /** A material that takes another colour (and a matte finish) by day. */
   private theme<M extends THREE.MeshStandardMaterial>(m: M, day: number, rough = 0.85, metal = 0.05): M {
     this.themed.push({ m, n: m.color.clone(), d: new THREE.Color(day), nr: m.roughness, dr: rough, nm: m.metalness, dm: metal });
+    toonify(m);
     return m;
   }
 
   std(color: number, rough = 0.7, metal = 0.2, day?: number): THREE.MeshStandardMaterial {
     const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
-    return day === undefined ? m : this.theme(m, day);
+    if (day === undefined) {
+      toonify(m);
+      return m;
+    }
+    return this.theme(m, day);
   }
 
   /** Blends between the club (0) and the day look (1). */
   private applyTheme(day: number): void {
     if (Math.abs(day - this.day) < 0.002 && this.dayShown !== null) return;
     this.day = day;
+    TOON.value = day;
+    this.ink.enabled = day > 0.02;
+    this.ink.strength = smooth01(day * 1.2);
+    if (this.blobMat) this.blobMat.opacity = 0.45 - 0.17 * day;
     for (const t of this.themed) {
       t.m.color.lerpColors(t.n, t.d, day);
       t.m.roughness = t.nr + (t.dr - t.nr) * day;
@@ -1900,6 +2039,9 @@ export class Sorter implements Scene3D {
     for (const o of this.dayOnly) o.visible = show;
     for (const o of this.nightOnly) o.visible = !show;
     this.scene.environment = show ? null : this.nightEnv;
+    // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
+    if (!show && this.quality === 'high' && !this.mirror) this.mirror = this.buildMirror();
+    if (this.mirror) this.mirror.visible = !show && this.quality === 'high';
     // Flat, bright colours by day, like the illustration; filmic tone mapping for the club.
     this.renderer.toneMapping = show ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
     drawBelt(this.beltTex, show);
@@ -2031,6 +2173,7 @@ export class Sorter implements Scene3D {
     const stack = (x: number, z: number) => {
       const h = rnd(0.8, 2);
       this.box('pal', pal, x, 0.07, z, 1.2, 0.14, 1);
+      this.blob(x, z, 1.8, 1.6);
       this.box('wrap', wrap, x, 0.14 + h / 2, z, 1.15, h, 0.95);
     };
     // (North wall east of x 12: truck docks; south wall east of x −8: box forklift aisle.)
@@ -2049,6 +2192,7 @@ export class Sorter implements Scene3D {
     const trim = this.std(0x22252b, 0.5, 0.5, DAY.purple);
     const dark = this.std(0x1b1c20, 0.6, 0.4, 0x3a3d44);
     this.outline(this.mesh(new RoundedBoxGeometry(W, H, D, 3, 0.12), wall, cx, H / 2, cz), 0.03);
+    this.blob(cx, cz, W + 2, D + 2);
     // Plinth and roof edge in the monitoring purple.
     this.box('roomtrim', trim, cx, 0.12, front - 0.01, W, 0.24, 0.04);
     this.box('roomtrim', trim, cx, H + 0.06, cz, W + 0.2, 0.12, D + 0.2);
@@ -2370,6 +2514,7 @@ export class Sorter implements Scene3D {
     }
     const curtain = new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
     for (const z of [-0.5, 0.5]) add(new THREE.PlaneGeometry(W - 0.3, H - 0.5), curtain, 0, H / 2 - 0.35, z);
+    if (this.p.y < 1.5) this.blob(this.p.x, this.p.z, W + 1.2, D + 1.2, Math.atan2(this.t.x, this.t.z));
     // Legs down to the floor for raised tunnels.
     if (this.p.y > 0.8) {
       const leg = this.std(0x6b7280, 0.5, 0.7, DAY.orange);
@@ -2402,6 +2547,7 @@ export class Sorter implements Scene3D {
       const bm = this.mesh(mergeGeometries(braces)!, upr);
       void bm;
     }
+    this.blob((RACK_X0 + RACK_X1) / 2, 0, 3, zMax * 2 + 1.5);
     const guard = this.std(0x8a6e00, 0.6, 0.2, 0xf2c200);
     for (const z of [-zMax - 0.3, zMax + 0.3]) {
       this.box('rguard', guard, (RACK_X0 + RACK_X1) / 2, 0.3, z, 1.8, 0.6, 0.12);
@@ -2503,7 +2649,8 @@ export class Sorter implements Scene3D {
     this.hull.setColorAt(0, this.white);
     this.hull.frustumCulled = false;
     this.hull.count = 0;
-    this.put(this.hull, 'day');
+    this.put(this.hull);
+    this.hull.userData.noInk = true;
     const barcode = canvasTex(64, 44, (g) => {
       g.fillStyle = '#fff';
       g.fillRect(0, 0, 64, 44);
@@ -2669,6 +2816,7 @@ export class Sorter implements Scene3D {
     const dx = -48;
     const dz = 20.6;
     this.box('desk', purple, dx, 1.2, dz, 3.2, 0.12, 1.6);
+    this.blob(dx, dz - 0.3, 4, 3);
     for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('desk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
     // Three screens on arms, curved slightly around the operator.
     const dash = new THREE.MeshBasicMaterial({ map: this.dashTex() });
@@ -2814,6 +2962,7 @@ export class Sorter implements Scene3D {
     card.map = cardboardSide();
     const black = this.std(0x1d1d1f, 0.6, 0.2);
     this.box('trolley', white, x, 0.32, z, 2.2, 0.08, 1.4);
+    this.blob(x, z, 2.8, 2.0);
     for (const sx of [-1.0, 1.0]) for (const sz of [-0.6, 0.6]) {
       this.box('caster', black, x + sx, 0.12, z + sz, 0.08, 0.2, 0.16);
       this.box('caster', white, x + sx, 0.25, z + sz, 0.14, 0.06, 0.14);

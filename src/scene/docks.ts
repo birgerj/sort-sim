@@ -322,6 +322,7 @@ export class Docks {
     g.position.copy(at);
     g.rotation.y = ry;
     k.put(g);
+    k.blobUnder(g, 1.9, 1.6);
     // Frame and wheels merged into one mesh each (20 docks × 3 cages adds up).
     const parts: THREE.BufferGeometry[] = [];
     const part = (w: number, h: number, d: number, x: number, y: number, z: number) => parts.push(new THREE.BoxGeometry(w, h, d).translate(x, y, z));

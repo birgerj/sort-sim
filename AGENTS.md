@@ -93,6 +93,24 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   `npm test` after any change.
 - South aisle: `AISLE_Z` in `boxYard.ts`; doors and forklift count there.
 
+## Rendering
+
+- **Ink outlines** are a screen effect (`InkPass` in `post.ts`): the scene is
+  drawn once more with normals and depth, and edges are inked where normals
+  turn or depth jumps. Day only. Objects get no outline when they are lines,
+  points, additive or see-through, or have `userData.noInk = true`; call
+  `ink.refresh()` after adding objects at runtime. `inkify()` and
+  `outline()` are now no-ops kept as hooks.
+- **Toon shading** by day: `toonify(material)` rounds light to three steps;
+  every `std()`/themed material has it; `TOON.value` follows the day amount.
+- **Contact shadows:** `blob(x, z, w, d)` (static, batched) and
+  `blobUnder(object, w, d)` (moves with it).
+- **Quality** (`setQuality`, HUD, `?quality=`): `low` (pixel ratio 1),
+  `normal` (1.5), `high` (2, plus GTAO, sun shadows from `keyLight` with a
+  shadow box that follows the camera, an additive mirror floor at night and
+  depth of field while following a parcel). Shadow casting is set once for
+  all standard-material meshes in `setupShadows()`.
+
 ## Theme (day / night)
 
 - `std(color, rough, metal, day?)` makes a `MeshStandardMaterial` with a

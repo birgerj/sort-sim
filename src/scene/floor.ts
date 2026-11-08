@@ -23,6 +23,9 @@ export interface FloorKit {
   inkify(m: THREE.Mesh, angle?: number): void;
   /** Day outline for rounded shapes. */
   outline(m: THREE.Mesh, width?: number): void;
+  /** Soft contact shadow on the floor, static or following an object. */
+  blob(x: number, z: number, w: number, d: number, ry?: number): void;
+  blobUnder(obj: THREE.Object3D, w: number, d: number): void;
   person(x: number, z: number, ry: number): void;
   sign(text: string, color: string, x: number, y: number, z: number, ry: number, icon: (g: CanvasRenderingContext2D) => void): void;
   dayOnly: THREE.Object3D[];
@@ -435,6 +438,7 @@ export class RobotFloor {
       k.box('stable', alu, x, 0.98, z - 0.7, 1.1, 0.08, 1.7);
       for (const sx of [-0.5, 0.5]) for (const sz of [-1.45, 0.05]) k.box('stable', alu, x + sx, 0.48, z + sz, 0.06, 0.96, 0.06);
       for (let n = 0; n < 8; n++) k.box('sroll', roller, x, 1.04, z - 1.45 + n * 0.21, 1.0, 0.06, 0.06);
+      k.blob(x, z - 0.7, 1.6, 2.4);
       this.stations.push({ x, z: cellZ(0), projector: -1 });
     }
   }
@@ -488,6 +492,7 @@ export class RobotFloor {
         board.rotation.y = flip;
         k.put(board);
       }
+      k.blobUnder(g, 1.6, 1.6);
       this.bins.push({ code, x, z, n: 0, open: true, g, fill });
       this.writeFill(this.bins.length - 1);
     }
@@ -514,7 +519,7 @@ export class RobotFloor {
     const frameGeo = mergeGeometries(frame)!;
     const deck: THREE.BufferGeometry[] = [new RoundedBoxGeometry(0.92, 0.08, 1.02, 2, 0.03)];
     for (const sz of [-0.49, 0.49]) deck.push(box(0.92, 0.12, 0.04, 0, 0.1, sz));
-    const deckGeo = mergeGeometries(deck.map((g) => g.toNonIndexed()))!;
+    const deckGeo = mergeGeometries(deck.map((g) => (g.index ? g.toNonIndexed() : g)))!;
     const rollers: THREE.BufferGeometry[] = [];
     for (let x = -0.36; x <= 0.37; x += 0.09) rollers.push(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 10).rotateX(Math.PI / 2).translate(x, 0.07, 0));
     const rollerGeo = mergeGeometries(rollers)!;
@@ -537,6 +542,7 @@ export class RobotFloor {
     for (const b of this.fleet.bots) {
       const g = new THREE.Group();
       k.put(g, undefined);
+      k.blobUnder(g, 1.5, 1.6);
       part(g, bodyGeo, blue, 'hull');
       part(g, skirtGeo, black, 'hull');
       part(g, wheelGeo, wheelMat, null);
@@ -591,13 +597,13 @@ export class RobotFloor {
     const face = new THREE.MeshBasicMaterial({ map: grille });
     // Housing: a rounded case with cooling fins, a pan-tilt yoke, and the lens pointing down.
     const housing = mergeGeometries([
-      new RoundedBoxGeometry(0.7, 0.62, 0.55, 3, 0.07).translate(0, 0.3, 0).toNonIndexed(),
+      new RoundedBoxGeometry(0.7, 0.62, 0.55, 3, 0.07).translate(0, 0.3, 0),
       ...[-0.2, -0.1, 0, 0.1, 0.2].map((x) => new THREE.BoxGeometry(0.04, 0.5, 0.06).translate(x, 0.32, -0.3).toNonIndexed()),
       new THREE.BoxGeometry(0.08, 0.5, 0.06).translate(-0.4, 0.05, 0).toNonIndexed(),
       new THREE.BoxGeometry(0.08, 0.5, 0.06).translate(0.4, 0.05, 0).toNonIndexed(),
       new THREE.BoxGeometry(0.88, 0.06, 0.1).translate(0, 0.66, 0).toNonIndexed(),
       new THREE.CylinderGeometry(0.06, 0.06, 0.3, 10).translate(0, 0.82, 0).toNonIndexed(),
-      new RoundedBoxGeometry(0.56, 0.38, 0.46, 3, 0.06).translate(0, -0.2, 0).toNonIndexed(),
+      new RoundedBoxGeometry(0.56, 0.38, 0.46, 3, 0.06).translate(0, -0.2, 0),
       new THREE.CylinderGeometry(0.17, 0.2, 0.12, 20).translate(0, -0.42, 0).toNonIndexed(),
     ])!;
     const lensGeo = new THREE.CircleGeometry(0.13, 20).rotateX(Math.PI / 2).translate(0, -0.485, 0);
@@ -656,6 +662,8 @@ export class RobotFloor {
     const yellow = k.std(0xa88400, 0.6, 0.2, 0xf2c200);
     const { x, z } = TABLE;
     k.box('table', yellow, x, 0.95, z, 4.4, 0.12, 2.0);
+    k.blob(x, z, 5.4, 2.8);
+    k.blob(x, z + 2.7, 5.2, 1.2);
     for (const sx of [-2.1, 2.1]) for (const sz of [-0.9, 0.9]) k.box('table', yellow, x + sx, 0.47, z + sz, 0.1, 0.95, 0.1);
     const stripe = tex(256, 16, (g) => {
       g.fillStyle = '#f2c200';
