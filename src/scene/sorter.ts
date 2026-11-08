@@ -91,6 +91,8 @@ const CHUTES: [number, number][] = [
   ...Array.from({ length: 20 }, (_, k): [number, number] => [150 + 6 * k, 1]),
 ];
 const FIRST_STATION_S = 147;
+/** Belt speeds the conveyor clock can run at: multiples of the beat, so events stay on 8th and 16th notes. */
+export const BELT_SPEEDS = [0.5, 1, 2, 4];
 /** x of the 20 truck docks on the north wall: straight north of each dock chute's end. */
 const DOCK_X = Array.from({ length: 20 }, (_, k) => LX + 4 + 6 * k + 2.4);
 
@@ -927,6 +929,10 @@ export class Sorter implements Scene3D {
         ],
       },
       { kind: 'action', id: 'next', label: 'Next parcel', title: 'Follow another parcel' },
+      {
+        kind: 'choice', id: 'speed', label: 'Belt speed', title: 'How fast the belts and the loop run', value: String(this.speed),
+        options: BELT_SPEEDS.map((v) => ({ value: String(v), label: `${v}×` })),
+      },
     ];
   }
 
@@ -940,6 +946,8 @@ export class Sorter implements Scene3D {
       } catch {
         /* no storage */
       }
+    } else if (id === 'speed') {
+      this.setBeltSpeed(Number(value));
     } else if (id === 'next') {
       if (this.camMode === 'fly' || this.camMode === 'visit') this.camMode = 'follow';
       this.autoFollow = true;
@@ -960,6 +968,9 @@ export class Sorter implements Scene3D {
     this.lastBeats = i.beats;
     this.bt = Math.max(prev, i.beats + this.offset);
     const bt = this.bt;
+    const prevCt = this.ct;
+    this.ct = Number.isNaN(this.lastCt) ? bt : this.ct + (bt - prev) * this.speed;
+    this.lastCt = this.ct;
     const crossed = Math.floor(bt) !== Math.floor(prev);
 
     this.kick += (i.kick - this.kick) * Math.min(1, dt * 20);
@@ -978,6 +989,7 @@ export class Sorter implements Scene3D {
     if (crossed) {
       for (let b = Math.floor(prev) + 1; b <= Math.floor(bt); b++) this.onBeat(b);
     }
+    for (let c = Math.floor(prevCt) + 1; c <= Math.floor(this.ct) && c - prevCt < 16; c++) this.onConveyorBeat(c);
     const liftTrig = this.bassPending || (crossed && bt - this.liftLastMove >= 2);
     if (this.lift.update(bt, liftTrig)) this.bassPending = false;
     if (!this.lift.busy) this.bassPending = false;
@@ -1019,9 +1031,23 @@ export class Sorter implements Scene3D {
     this.floor.beat(b);
     this.docks.beat(b, !!this.dayShown);
     if (b % 2 === 0) this.floor.tableBeat(b / 2, this.cols);
-    // Keep parcels flowing when no lead plays; fewer when one does.
-    const quiet = b - this.lastLead > 2;
+  }
+
+  /** Every beat of the conveyor clock: keep parcels flowing (more of them when the belts run faster). */
+  private onConveyorBeat(c: number): void {
+    void c;
+    // Fewer when a lead plays (the notes bring their own parcels).
+    const quiet = this.bt - this.lastLead > 2;
     if (Math.random() < (quiet ? 0.8 : 0.25)) this.spawn(Math.floor(Math.random() * 4), null, false);
+  }
+
+  /** Belt speed, as a multiple of 2 m per beat (3.3 m/s at 100 BPM). */
+  beltSpeed(): number {
+    return this.speed;
+  }
+
+  setBeltSpeed(v: number): void {
+    if (BELT_SPEEDS.includes(v)) this.speed = v;
   }
 
   /** Robots take parcels from the stations and tip them into bins. */
@@ -1054,7 +1080,7 @@ export class Sorter implements Scene3D {
       const lane = this.lanes[k]!;
       lane.doorFlash = 0.6 + vel * 0.4;
       lane.doorCol.setRGB(...color);
-      if (this.bt - lane.lastSpawn >= 0.5 && this.spawn(k, color, true)) return;
+      if (this.ct - lane.lastSpawn >= 0.5 && this.spawn(k, color, true)) return;
     }
   }
 
@@ -1108,7 +1134,7 @@ export class Sorter implements Scene3D {
   /** Puts a parcel on a lane, timed to land on a free tray on a beat. Returns false if the lane is full. */
   private spawn(k: number, color: RGB | null, lead: boolean): boolean {
     const lane = this.lanes[k]!;
-    const bt = this.bt;
+    const bt = this.ct;
     let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M), lane.lastArrive + 2);
     let tries = 0;
     while (this.trayOwner[trayAt(INDUCT[k]!, arrive)] && tries++ < 6) arrive++;
@@ -1166,12 +1192,13 @@ export class Sorter implements Scene3D {
 
   private updateParcels(dt: number): void {
     const bt = this.bt;
+    const ct = this.ct;
     for (const p of this.parcels) {
       const before = this.p.copy(p.pos);
       switch (p.mode) {
         case 'path': {
           const path = p.path!;
-          let f = clamp((bt - p.t0) / (p.t1 - p.t0), 0, 1);
+          let f = clamp((ct - p.t0) / (p.t1 - p.t0), 0, 1);
           if (p.ease) f = f * f;
           const s = f * path.len;
           path.at(s, p.pos, this.t);
@@ -1181,18 +1208,18 @@ export class Sorter implements Scene3D {
             if (p.sPrev < lane.tunnelS && s >= lane.tunnelS) this.scan(p, lane.tunnel);
           }
           p.sPrev = s;
-          if (bt >= p.t1) this.pathEnd(p);
+          if (ct >= p.t1) this.pathEnd(p);
           break;
         }
         case 'loop': {
-          const s = p.sIn + (Math.min(bt, p.divertAt) - p.tIn) * BEAT_M;
+          const s = p.sIn + (Math.min(ct, p.divertAt) - p.tIn) * BEAT_M;
           loopAt(s, p.pos, this.t);
           this.orient(p, this.t);
           for (const lt of this.loopTunnels) {
             if (Math.floor((p.sPrev - lt.s) / LOOP_LEN) !== Math.floor((s - lt.s) / LOOP_LEN)) this.scan(p, lt.t);
           }
           p.sPrev = s;
-          if (bt >= p.divertAt) this.divert(p);
+          if (ct >= p.divertAt) this.divert(p);
           break;
         }
         case 'tween': {
@@ -1445,7 +1472,7 @@ export class Sorter implements Scene3D {
 
   private sendBack(p: Parcel): void {
     this.retrieving = Math.max(0, this.retrieving - 1);
-    const bt = this.bt;
+    const bt = this.ct;
     let arrive = Math.max(Math.ceil(bt + this.back.len / BEAT_M), this.backLast + 2);
     let tries = 0;
     while (this.trayOwner[trayAt(STORE_BACK, arrive)] && tries++ < 10) arrive++;
@@ -1527,7 +1554,7 @@ export class Sorter implements Scene3D {
 
   private updateTrays(dt: number): void {
     const o = this.o;
-    const bt = this.bt;
+    const bt = this.ct;
     for (let c = 0; c < TRAYS; c++) {
       loopAt(c * PITCH + bt * BEAT_M, this.p, this.t);
       this.m4.lookAt(ZERO, this.t, UP);
@@ -1549,7 +1576,7 @@ export class Sorter implements Scene3D {
   private updateClub(dt: number, bar: number): void {
     const bt = this.bt;
     const ph = bt % 1;
-    this.beltTex.offset.y = -((bt * BEAT_M) / 1.2) % 1;
+    this.beltTex.offset.y = -((this.ct * BEAT_M) / 1.2) % 1;
     this.strips.forEach((m, k) => {
       const u = m.uniforms;
       (u.uCol!.value as THREE.Color).copy(this.cols[k % 3]!);
@@ -1674,7 +1701,7 @@ export class Sorter implements Scene3D {
 
   // ---------- camera ----------
   private pickFollow(): void {
-    const fresh = this.parcels.filter((p) => p.mode === 'path' && p.pathKind === 'lane' && (p.path?.len ?? 0) * clamp((this.bt - p.t0) / (p.t1 - p.t0), 0, 1) < 20);
+    const fresh = this.parcels.filter((p) => p.mode === 'path' && p.pathKind === 'lane' && (p.path?.len ?? 0) * clamp((this.ct - p.t0) / (p.t1 - p.t0), 0, 1) < 20);
     const pool = fresh.length ? fresh : this.parcels.filter((p) => p.mode === 'loop');
     const leads = pool.filter((p) => p.lead);
     const stores = pool.filter((p) => p.dest < 0);
@@ -2885,6 +2912,15 @@ export class Sorter implements Scene3D {
   }
 
   private tourRobot = 0;
+  /**
+   * Conveyor clock: beats of the belts and the loop. It runs at `speed` times the
+   * music, so belts can run faster (or slower) and still land on 8th or 16th notes.
+   * Parcels on belts and the loop are timed in this clock; robots, people, lifts and
+   * lights stay on the music's beat (`bt`).
+   */
+  private ct = 0;
+  private lastCt = NaN;
+  private speed = 1;
   private visitPoi = 0;
 
   /** Departments the camera can go to. */

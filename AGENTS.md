@@ -48,6 +48,16 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/sim/rng.ts` | Seeded random numbers. |
 | `scripts/shots.mjs` | Headless screenshots per department, day and night. |
 
+## Two clocks
+
+- `bt`: the music's beats. Robots, workers, forklifts, the lift and shuttles,
+  lights and the camera run on it.
+- `ct`: the conveyor clock, `bt × speed` (`BELT_SPEEDS` 0.5, 1, 2, 4; set by
+  `setBeltSpeed`). Lanes, the loop, trays, chutes and dock belts are timed in
+  it, so all `Parcel.t0/t1/tIn/divertAt` in `path` and `loop` mode are `ct`
+  values. `onConveyorBeat` spawns parcels per conveyor beat. Speeds are
+  powers of two so diverts still land on 8th/16th notes.
+
 ## How a parcel travels
 
 `Parcel.mode` in `sorter.ts` says who moves it:

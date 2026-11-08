@@ -55,13 +55,14 @@ do one move per beat.
 | Go to a department | `1`–`9`, `0` |
 | Camera: Auto / Fly / Follow a parcel | `A` / `F` / `P` (next parcel) |
 | Time: Day / Night / Day ↔ night cycle | `D` / `N` / `C` |
+| Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Sound on/off | `M` |
 | Hide the controls | `H` |
 
 The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
 
 URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow`,
-`?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
+`?speed=0.5|1|2|4`, `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
 (no controls: for recordings), `?quality=low|high`.
 
 ## Development

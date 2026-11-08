@@ -7,6 +7,7 @@
  *   dept=<id>              start at a department (see Sorter.departments())
  *   mute=1                 no start screen, no sound
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
+ *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
  *   quality=low|high       pixel ratio cap 1 or 2 (default 1.5)
  */
 import './ui/style.css';
@@ -26,6 +27,8 @@ const time = q.get('time');
 if (time === 'day' || time === 'night' || time === 'cycle') settings.time = time as TimeMode;
 const cam = q.get('camera');
 if (cam === 'auto' || cam === 'fly' || cam === 'follow') scene.setControl('cam', cam);
+const speed = Number(q.get('speed') ?? settings.speed);
+scene.setBeltSpeed(speed);
 const dept = q.get('dept');
 if (dept) scene.visit(dept, true);
 const showUi = q.get('ui') !== '0';
