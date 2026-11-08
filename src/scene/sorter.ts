@@ -980,7 +980,7 @@ export class Sorter implements Scene3D {
   private yard!: BoxYard;
   /** Dock chutes: chute index → dock x. */
   private dockOf = new Map<number, number>();
-  /** Chutes of each north city (the docks west to east; the four largest cities have two). */
+  /** Chutes of each north city (the docks west to east; big cities have several, see planDoors). */
   private get cityChutes(): number[][] {
     const out: number[][] = NORTH_CITIES.map(() => []);
     [...this.dockOf.keys()].forEach((chute, door) => out[DOCK_CITY[door]!]!.push(chute));

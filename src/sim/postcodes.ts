@@ -14,15 +14,41 @@ export type { City };
 export const CITIES: City[] = COUNTRY.cities;
 
 /**
- * Cities at the north doors (roll cages) and at the south doors (robot boxes). The four
- * largest get two north doors each (the same postcodes at both, parcels split 50–50), so
- * 16 cities share the 20 north doors; the next 20 go to the robots. (The four smallest of
- * the 40 are not served.)
+ * How many north doors each city gets, from its volume (post goes out in proportion to
+ * inhabitants): every city served at the north side gets at least one door, and the
+ * remaining doors go one by one to the city with the most post per door (the D'Hondt
+ * rule). How many cities are served at the north side is chosen so the post per door is
+ * as even as possible over all doors (the busiest door against the quietest).
+ * Returns the door count per city, largest city first.
  */
-export const NORTH_CITIES = CITIES.slice(0, 16);
-export const SOUTH_CITIES = CITIES.slice(16, 36);
-/** The city (index in NORTH_CITIES) of each north door, west to east. */
-export const DOCK_CITY: number[] = [0, 0, 1, 1, 2, 2, 3, 3, ...Array.from({ length: 12 }, (_, k) => 4 + k)];
+export function planDoors(pops: number[], doors: number): number[] {
+  let best: number[] = [];
+  let bestScore = Infinity;
+  for (let k = Math.ceil(doors / 3); k <= Math.min(doors, pops.length); k++) {
+    const n = pops.slice(0, k).map(() => 1);
+    for (let left = doors - k; left > 0; left--) {
+      let i = 0;
+      for (let j = 1; j < k; j++) if (pops[j]! / n[j]! > pops[i]! / n[i]!) i = j;
+      n[i]!++;
+    }
+    const per = n.map((c, i) => pops[i]! / c);
+    // (A little bonus for serving more cities at the docks, on a near tie.)
+    const score = Math.max(...per) / Math.min(...per) - k * 0.002;
+    if (score < bestScore) {
+      bestScore = score;
+      best = n;
+    }
+  }
+  return best;
+}
+
+/** Doors per north city (see planDoors). */
+export const DOORS_PER_CITY = planDoors(CITIES.map((c) => c.pop), 20);
+/** Cities at the north doors (roll cages) and at the south doors (robot boxes, the next 20). */
+export const NORTH_CITIES = CITIES.slice(0, DOORS_PER_CITY.length);
+export const SOUTH_CITIES = CITIES.slice(DOORS_PER_CITY.length, DOORS_PER_CITY.length + 20);
+/** The city (index in NORTH_CITIES) of each north door, west to east: a city's doors side by side. */
+export const DOCK_CITY: number[] = DOORS_PER_CITY.flatMap((n, i) => Array.from({ length: n }, () => i));
 
 /** All area numbers of a city, low to high. */
 export function areas(c: City, step = COUNTRY.step): number[] {

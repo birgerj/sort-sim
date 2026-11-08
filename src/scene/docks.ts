@@ -1,6 +1,6 @@
 // The dock side of the hall (north wall): the chutes feed roller belts that
-// end at truck docks. Each dock serves one city (the four largest have two docks
-// with the same postcodes); its six roll cages each take a part of the city's
+// end at truck docks. Each dock serves one city (big cities have several docks,
+// shared out by volume, with the same postcodes); its six roll cages each take a part of the city's
 // postcodes (on the cards on each cage). At the end of each belt a picker takes
 // the parcels off (the flow projector shows the postcodes of the first three) and
 // walks each to the cage that takes it. A loader pushes full cages into the truck
