@@ -3178,9 +3178,9 @@ export class Sorter implements Scene3D {
       const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
       const corner = end.clone().addScaledVector(into, (z - end.z) / into.z);
       const path = Path.fillet([v(WX - 1, y, z), v(-44, y, z), v(corner.x - 4, LOOP_Y, z), corner, end], 3);
-      // The belt stops where its inner edge meets the loop's outer edge (at 30° that is about
-      // 3 m before the centre line); parcels slide the last bit onto their tray.
-      belt(path, 0.6, path.len - (0.8 + 0.7) / Math.sin(Math.PI / 6) - 0.1, stripIn);
+      // The belt runs right up to the loop: its end reaches over the edge of the trays
+      // (just above them), so parcels transfer straight onto their tray with no gap.
+      belt(path, 0.6, path.len - 1.75, stripIn);
 
       const tunnel = this.tunnel(path, LANE_TUNNEL_X - WX + 1, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
@@ -3997,7 +3997,7 @@ export class Sorter implements Scene3D {
       },
     });
     this.pois = [
-      fixed('infeeds', v(-56, 3, 15), v(-44, 1.2, 7), 'Infeed'),
+      fixed('infeeds', v(-31, 7.6, 9), v(-24.5, 3.8, 1.5), 'Infeed'),
       fixed('scan tunnels', v(-44, 4.5, 13), v(-50, 2.2, 4), 'Scanning'),
       fixed('high infeeds', v(-38, 8, -9), v(-50, 7.2, 0)),
       fixed('merge', v(-36, 7, 12), v(-25, 3.8, 2)),
