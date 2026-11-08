@@ -111,7 +111,7 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   later so they fill the odd trays; one parcel per lane per beat; `LANE_Z`;
   the belt reaches over the tray edge, so there is no gap), `HOLD_S` (queue point), `LANE_QUEUE`.
   Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).
-- Hall: `WX`/`EX` west/east wall, `HZ` half depth, `HH` height; `HCX`/`HW`
+- Hall: `WX`/`EX` west/east wall, `HZ` south wall, `NZ` north wall (further out: room at the docks; `HD` depth, `HZC` middle), `HH` height; `HCX`/`HW`
   centre and width.
 - Store: `STORE_DX` puts the rack against the east wall (no aisle behind it).
   It is a buffer: `buffer(p)` when a chute is full (sets `p.buffered`),
