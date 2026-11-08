@@ -190,4 +190,8 @@ the simulation:
 - The long walls are `ShapeGeometry` with holes at open doors; their UVs are
   in metres (textures use per-metre repeat and an offset).
 - Toggling shadows (quality high) recompiles all materials once.
+- Robots move one grid cell per beat in the fleet, but are drawn half a cell
+  behind on Bezier curves through the cell edges (`RobotFloor.updateRobots`),
+  so they drive continuously and round corners; they only ease when starting
+  or stopping.
 - `Reflector` renders the scene again: it exists only at night on high.

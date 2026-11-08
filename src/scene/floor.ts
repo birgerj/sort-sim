@@ -120,6 +120,16 @@ interface RobotView {
   beat: number;
   /** Party spin, by night on a parking spot. */
   spin: number;
+  /**
+   * The curve driven during the current beat: from S, bending at C, to E (a
+   * quadratic Bezier). Robots run half a cell behind the grid, from the middle
+   * of one cell edge to the next, so straight runs flow at constant speed and
+   * corners become arcs; they only ease when starting from or stopping at rest.
+   */
+  S: THREE.Vector3;
+  C: THREE.Vector3;
+  E: THREE.Vector3;
+  ease: { in: boolean; out: boolean };
 }
 
 interface Projector {
@@ -286,31 +296,44 @@ export class RobotFloor {
     for (const b of this.fleet.bots) {
       const r = this.robots[b.k]!;
       const moving = b.i !== b.fi || b.j !== b.fj;
-      const tx = cellX(b.i);
-      const tz = cellZ(b.j);
-      let x = tx;
-      let z = tz;
       const beat = Math.floor(bt);
       if (beat !== r.beat) {
+        // New beat: the next piece of curve starts where the last one ended.
         r.beat = beat;
-        r.yawFrom = r.yawTo;
+        const wasAtRest = r.E.equals(r.C);
+        r.S.copy(r.E);
+        if (moving) {
+          r.C.set(cellX(b.fi), 0, cellZ(b.fj));
+          r.E.set((cellX(b.fi) + cellX(b.i)) / 2, 0, (cellZ(b.fj) + cellZ(b.j)) / 2);
+        } else {
+          r.C.set(cellX(b.i), 0, cellZ(b.j));
+          r.E.copy(r.C);
+        }
+        r.ease.in = wasAtRest && moving;
+        r.ease.out = !moving;
       }
-      if (moving) {
-        const fx = cellX(b.fi);
-        const fz = cellZ(b.fj);
-        const want = Math.atan2(tx - fx, tz - fz);
-        let d = want - r.yawFrom;
+      // Linear while flowing; eased when pulling away or coming to a stop.
+      let t = ph;
+      if (r.ease.in && r.ease.out) t = ease(ph);
+      else if (r.ease.in) t = ph * ph;
+      else if (r.ease.out) t = 1 - (1 - ph) * (1 - ph);
+      const u = 1 - t;
+      const x = u * u * r.S.x + 2 * u * t * r.C.x + t * t * r.E.x;
+      const z = u * u * r.S.z + 2 * u * t * r.C.z + t * t * r.E.z;
+      // Face the way the curve goes; turn smoothly.
+      const dx = 2 * u * (r.C.x - r.S.x) + 2 * t * (r.E.x - r.C.x);
+      const dz = 2 * u * (r.C.z - r.S.z) + 2 * t * (r.E.z - r.C.z);
+      if (dx * dx + dz * dz > 1e-6) {
+        const want = Math.atan2(dx, dz);
+        let d = want - r.yawTo;
         while (d > Math.PI) d -= 2 * Math.PI;
         while (d < -Math.PI) d += 2 * Math.PI;
-        // Turn on the spot first, then drive the cell, all within the beat.
-        const turn = Math.abs(d) > 0.1 ? 0.35 : 0;
-        const tf = turn ? Math.min(1, ph / turn) : 1;
-        r.yaw = r.yawFrom + d * ease(tf);
-        r.yawTo = r.yawFrom + d;
-        const mf = ease(turn ? Math.max(0, (ph - turn) / (1 - turn)) : ph);
-        x = fx + (tx - fx) * mf;
-        z = fz + (tz - fz) * mf;
-      } else r.yaw = r.yawTo;
+        // Robots drive both ways: turn to the nearer end of the body.
+        if (d > Math.PI / 2) d -= Math.PI;
+        else if (d < -Math.PI / 2) d += Math.PI;
+        r.yawTo += d * Math.min(1, dt * 10);
+      }
+      r.yaw = r.yawTo;
       // Secret party: parked robots spin a quarter turn on every beat by night.
       const party = !s.dayShown && b.state === 'idle' && !b.path.length;
       r.spin = party ? (Math.floor(bt) + b.k) * (Math.PI / 2) + ease(ph) * (Math.PI / 2) : r.spin * Math.exp(-dt * 6);
@@ -584,7 +607,8 @@ export class RobotFloor {
       g.add(under);
       k.nightOnly.push(under);
       const yaw = b.i === 0 ? Math.PI / 2 : -Math.PI / 2;
-      this.robots.push({ g, top, glow: gm, num, yaw, yawFrom: yaw, yawTo: yaw, beat: -1, spin: 0 });
+      const at = v(cellX(b.i), 0, cellZ(b.j));
+      this.robots.push({ g, top, glow: gm, num, yaw, yawFrom: yaw, yawTo: yaw, beat: -1, spin: 0, S: at.clone(), C: at.clone(), E: at.clone(), ease: { in: false, out: false } });
     }
   }
 
