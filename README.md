@@ -33,8 +33,9 @@ sound is generated in code.
    at a set rate; when that is more than the lanes take, they queue at the
    hold points before the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
-   parcel carries a Dutch postcode (four digits): 70% for the 20 largest
-   municipalities (north docks), 30% for the next 20 (robots), and now and
+   parcel carries a Dutch postcode (four digits): about 88% for the 20 largest
+   municipalities (north docks), about 12% for the next 20 (robots; fewer while
+   their pickup tables fill up), and now and
    then an exception for manual sorting. When its chute is full, a parcel
    goes round again.
 3. **Docks (north), doors 1–20.** Each dock serves one city. Its chute drops

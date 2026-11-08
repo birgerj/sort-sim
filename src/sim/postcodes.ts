@@ -93,11 +93,11 @@ export const rangeText = ([a, b]: [number, number]) => (a === b ? String(a) : `$
 export const rangeOf = (ranges: [number, number][], pc: number) => ranges.findIndex(([a, b]) => pc >= a && pc <= b);
 
 /**
- * A random destination: 70% to a north city (roll cages), 30% to a south one
- * (robots). Bigger cities get a little more post.
+ * A random destination: a share `south` to the cities the robots serve, the
+ * rest to the north cities (roll cages). Bigger cities get a little more post.
  */
-export function randomPostcode(rnd: () => number = Math.random): { pc: number; city: number; north: boolean } {
-  const north = rnd() < 0.7;
+export function randomPostcode(rnd: () => number = Math.random, south = 0.3): { pc: number; city: number; north: boolean } {
+  const north = rnd() >= south;
   const list = north ? NORTH_CITIES : SOUTH_CITIES;
   // Weight by rank: the first city about twice as likely as the last.
   const w = list.map((_, i) => 2 - i / list.length);
