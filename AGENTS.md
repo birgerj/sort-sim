@@ -77,11 +77,13 @@ Read this before changing code. README.md describes the hall and the controls.
 → `loop` (on a tray) → divert into a chute → `path` (chute) → then one of:
 
 - dock chute → `path` (`pathKind: 'dock'`, the roller belt) → `dock` (owned
-  by `Docks`: queue, worker, cage) → in the cage's pile → the cage goes into
-  the trailer and leaves with the truck;
+  by `Docks`: queue, worker) → `held` in its cage (it keeps its shape and
+  colour and rides along) → the cage goes into the trailer and the parcel
+  leaves with the truck. Dock belts bank parcels up nose to tail by length
+  (`limit`, `Docks.depth`), as do pickup tables and the infeed hold points;
 - station chute → `table` (queue at a pickup station) → `robot` (rides a
-  robot; `dropAt` tips it into the box) → in the box's pile → a forklift takes
-  the box into a truck; small envelopes (by day, west stations) go to the
+  robot; `dropAt` tips it into the box) → `held` in the box → a forklift takes
+  the box into a truck (`RobotFloor.onEmptied`); small envelopes (by day, west stations) go to the
   manual drop instead → `manual` (owned by `ManualSort`);
 - destination full (`room()`): the parcel stays on its tray and goes round
   the loop again (`laps`).
