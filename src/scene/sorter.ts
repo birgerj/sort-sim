@@ -46,7 +46,7 @@ import { Clutter } from './clutter';
 import { BPM } from '../audio/composer';
 import { addressFor, type Address } from '../sim/addresses';
 import { Kpi } from '../sim/kpi';
-import { CITIES, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
+import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
 import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
@@ -975,17 +975,19 @@ export class Sorter implements Scene3D {
   private yard!: BoxYard;
   /** Dock chutes: chute index → dock x. */
   private dockOf = new Map<number, number>();
-  /** Chute of each north city (the docks west to east). */
-  private get cityChute(): number[] {
-    return [...this.dockOf.keys()];
+  /** Chutes of each north city (the docks west to east; the four largest cities have two). */
+  private get cityChutes(): number[][] {
+    const out: number[][] = NORTH_CITIES.map(() => []);
+    [...this.dockOf.keys()].forEach((chute, door) => out[DOCK_CITY[door]!]!.push(chute));
+    return out;
   }
+  /** Turn by turn between a city's two docks (50–50). */
+  private splitTurn = 0;
 
   // Day / night look.
   private day = 0;
   /** Christmas decorations (Settings → Christmas). */
   private xmas: Xmas | null = null;
-  /** Spots beside the chute tables (for Christmas trees). */
-  private deskTrees: { x: number; z: number }[] = [];
   private dayShown: boolean | null = null;
   private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
@@ -1081,7 +1083,7 @@ export class Sorter implements Scene3D {
       for (const p of this.parcels) if (p.mode === 'held' && p.holder === g) p.dead = true;
     };
     this.trucks = new Trucks(this, [
-      ...NORTH_DOORS.map((x, k) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[k]!.name, pc: pcs(NORTH_CITIES[k]!), hold: () => this.docks.pending(x), cages: () => (this.docks ? this.docks.cageFill(x) : 0) })),
+      ...NORTH_DOORS.map((x, k) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[DOCK_CITY[k]!]!.name, pc: pcs(NORTH_CITIES[DOCK_CITY[k]!]!), hold: () => this.docks.pending(x), cages: () => (this.docks ? this.docks.cageFill(x) : 0) })),
       ...SOUTH_DOORS.map((x, k) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const, number: 21 + k, city: SOUTH_CITIES[k]!.name, pc: pcs(SOUTH_CITIES[k]!) })),
     ]);
     this.trucks.clock = () => this.hubTime();
@@ -1140,8 +1142,6 @@ export class Sorter implements Scene3D {
           { x: -48.6, z: 31.2, h: 6 },
           { x: -19.5, z: -30.4, h: 7 },
           { x: PLATFORM_X - 2.2, z: 2.4, y: PLATFORM_Y, h: 3.4 },
-          // Beside every chute table, inside the loop: as tall as fits under the track.
-          ...this.deskTrees.map((t) => ({ ...t, h: 4.6 })),
         ],
         canes: [
           { x: -41.6, z: 1.7, ry: 0 },
@@ -1696,7 +1696,11 @@ export class Sorter implements Scene3D {
     p.pc = r.pc;
     p.manual = false;
     if (r.north) {
-      p.dest = this.cityChute[r.city]!;
+      // A city with two docks: they take turns; if the one whose turn it is is full, the other.
+      const ch = this.cityChutes[r.city]!;
+      let pick = ch[this.splitTurn++ % ch.length]!;
+      if (ch.length > 1 && this.room(pick) <= 0) pick = ch.find((c) => c !== pick && this.room(c) > 0) ?? pick;
+      p.dest = pick;
       return;
     }
     const stations = CHUTES.map((_, k) => k).filter((k) => this.stationOf.has(k));
@@ -3544,15 +3548,13 @@ export class Sorter implements Scene3D {
         const dock = dockXs.findIndex(([c]) => c === k);
         if (k === REJECT) shows.set(k, 'NO READ', 'to manual sorting', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
         else if (dock >= 0) {
-          const c = NORTH_CITIES[dock]!;
+          const c = NORTH_CITIES[DOCK_CITY[dock]!]!;
           shows.set(k, `${dock + 1} · ${c.name}`, rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]), { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
         } else shows.set(k, 'Robots', `station ${(this.stationOf.get(k) ?? 0) + 1} · doors 21–40`, { bg: '#101114', fg: '#ffffff', sub: '#f6a6d6' });
         // The table: right under the display, against the pillar, along the loop.
         const tx = this.p.x + this.n.x * 0.62;
         const tz = this.p.z + this.n.z * 0.62;
         desk.table(tx, tz, Math.atan2(this.t.x, this.t.z), k * 7919 + 13);
-        // (Christmas: a tree beside each table, further in from the track.)
-        this.deskTrees.push({ x: tx + this.t.x * 1.9 + this.n.x * 1.5, z: tz + this.t.z * 1.9 + this.n.z * 1.5 });
       });
       desk.build();
       shows.flush();
@@ -4410,7 +4412,8 @@ export class Sorter implements Scene3D {
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     const north = NORTH_CITIES.findIndex((c) => c.name === city);
     const south = SOUTH_CITIES.findIndex((c) => c.name === city);
-    const route = north >= 0 ? `Door ${north + 1} · chute ${p.dest + 1}` : south >= 0 ? `Door ${21 + south} · robots` : 'Store';
+    const door = [...this.dockOf.keys()].indexOf(p.dest);
+    const route = north >= 0 ? `Door ${door >= 0 ? door + 1 : DOCK_CITY.indexOf(north) + 1} · chute ${p.dest + 1}` : south >= 0 ? `Door ${21 + south} · robots` : 'Store';
     const cm = (x: number) => Math.round(x * 100);
     // Weighed and measured at the infeed: actual, volumetric (L×W×H cm / 5000) and the one charged.
     const vol = (cm(p.d) * cm(p.w) * cm(p.h)) / 5000;

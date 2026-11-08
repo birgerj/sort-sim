@@ -38,18 +38,20 @@ sound is generated in code.
    at a set rate; when that is more than the lanes take, they queue at the
    buffers after the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
-   parcel carries a postcode of the chosen country: about 88% for the 20 largest
-   municipalities (north docks), about 12% for the next 20 (robots; fewer while
+   parcel carries a postcode of the chosen country: about 88% for the 16 largest
+   municipalities (north docks; the four largest have two docks each, with the
+   same postcodes, parcels split 50–50), about 12% for the next 20 (robots; fewer while
    their pickup tables fill up), and now and
    then an exception for manual sorting. When its chute is full, a parcel
    goes round again.
-3. **Docks (north), doors 1–20.** Each dock serves one city. Its chute drops
-   onto a roller belt; five roll cages stand round the belt end, each for
-   part of the city's postcodes (on its board). The flow projector shows the
-   parcel's postcode on it and the worker walks it to the right cage. Full
-   cages are pushed into the trailer. At a cleardown the amber lamp flashes,
-   the worker pushes the remaining cages in, the truck leaves, and the worker
-   pulls empty cages out of the next truck.
+3. **Docks (north), doors 1–20.** Each dock serves one city (the four largest
+   two docks each). Its chute drops onto a roller belt; six roll cages stand
+   round the belt end, each for part of the city's postcodes (on its cards).
+   The flow projector shows the postcodes of the first three parcels and the
+   picker walks each to the right cage. A loader pushes full cages into the
+   truck (ten fit in a trailer) and brings an empty one from the stack by the
+   door. At a cleardown the amber lamp flashes, the loader pushes every cage
+   with parcels in, and the truck leaves.
 4. **Robots (south).** 20 chutes end at long pickup roller tables. A robot
    takes a parcel (the projector shows its postcode), drives to the box for
    that postcode (two boxes per city, doors 21–40), tips it in, and parks.

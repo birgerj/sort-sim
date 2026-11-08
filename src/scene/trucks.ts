@@ -53,12 +53,12 @@ const L = 12; // trailer length
 const W = 3.1;
 const H = 3.7;
 const DOOR_H = 3.8;
-/** Loads after which a truck leaves on its own: two full roll cages (the rest go in at cleardown), or four boxes. */
-const CAP: Record<Cargo, number> = { cage: 2, box: 4 };
+/** Loads a truck is planned for: ten roll cages, or four boxes. */
+const CAP: Record<Cargo, number> = { cage: 10, box: 4 };
 /** Places in a trailer for cages or boxes, and what it can carry (scaled to the hall). */
-const SLOTS = 8;
-const TRAILER_M3 = 4.5;
-const TRAILER_KG = 2400;
+const SLOTS: Record<Cargo, number> = { cage: 10, box: 8 };
+const TRAILER_M3: Record<Cargo, number> = { cage: 11.5, box: 4.5 };
+const TRAILER_KG: Record<Cargo, number> = { cage: 3200, box: 2400 };
 /** Minutes of hub time before the departure that the cleardown starts. */
 const CLEARDOWN_LEAD = 6;
 const DUR: Record<Exclude<State, 'open'>, number> = { cleardown: 4, closing: 2, leaving: 4, away: 6, arriving: 4, opening: 2 };
@@ -152,9 +152,11 @@ export class Trucks {
       }
       // Cargo slots: two across, from the far end towards the door.
       const slots: THREE.Object3D[] = [];
-      for (let n = 0; n < 8; n++) {
+      for (let n = 0; n < SLOTS[d.cargo]; n++) {
         const s = k.batch(d.cargo === 'cage' ? cageG : boxG, d.cargo === 'cage' ? cageM : boxM, trailer);
-        s.position.set((n % 2 ? 0.7 : -0.7), 0.05, -d.dir * (L / 2 - 0.9 - Math.floor(n / 2) * 1.35));
+        // (Cages two across, 1.1 m deep each; boxes two across, 1.35 m.)
+        const pitch = d.cargo === 'cage' ? 1.12 : 1.35;
+        s.position.set((n % 2 ? 0.72 : -0.72), 0.05, -d.dir * (L / 2 - 0.75 - Math.floor(n / 2) * pitch));
         s.visible = false;
         slots.push(s);
       }
@@ -190,7 +192,7 @@ export class Trucks {
 
   /** How full a trailer is: by volume, weight, or places for cages and boxes, whichever is first. */
   private fill(d: Dock): number {
-    return Math.max(d.vol / TRAILER_M3, d.kg / TRAILER_KG, d.load / SLOTS);
+    return Math.max(d.vol / TRAILER_M3[d.cargo], d.kg / TRAILER_KG[d.cargo], d.load / SLOTS[d.cargo]);
   }
 
   /** In cleardown (warning, still loading the last things). */
@@ -211,7 +213,7 @@ export class Trucks {
   load(i: number, vol = 0, kg = 0): void {
     const d = this.docks[i];
     if (!d) return;
-    d.load = Math.min(8, d.load + 1);
+    d.load = Math.min(SLOTS[d.cargo], d.load + 1);
     d.vol += vol;
     d.kg += kg;
     d.slots.forEach((s, n) => (s.visible = n < d.load));
@@ -246,7 +248,7 @@ export class Trucks {
         d.t0 = bt - (d.t0 + DUR[d.state]) > 1 ? Math.floor(bt) : d.t0 + DUR[d.state];
         d.state = NEXT[d.state];
         if (d.state === 'leaving') {
-          this.onDepart({ door: d.number, city: d.city, at: now, cutoff: d.cutoff, load: +d.vol.toFixed(2), room: TRAILER_M3, onTime: now <= d.cutoff + 2, full: d.full });
+          this.onDepart({ door: d.number, city: d.city, at: now, cutoff: d.cutoff, load: +d.vol.toFixed(2), room: TRAILER_M3[d.cargo], onTime: now <= d.cutoff + 2, full: d.full });
           // The next truck takes the next hour's departure (a full one that left early keeps this hour's).
           if (!d.full || now >= d.cutoff - CLEARDOWN_LEAD) while (d.cutoff <= now + CLEARDOWN_LEAD + 10) d.cutoff += 60;
         }

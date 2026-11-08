@@ -1,17 +1,18 @@
 // The dock side of the hall (north wall): the chutes feed roller belts that
-// end at truck docks. Each dock serves one city; its five roll cages each take
-// a part of the city's postcodes (on the board on each cage). At the end of
-// each belt a worker takes the parcels off; the flow projector above shows the
-// parcel's postcode on it, and the worker walks it to the cage that takes it.
-// The trucks stand outside, behind open dock doors.
+// end at truck docks. Each dock serves one city (the four largest have two docks
+// with the same postcodes); its six roll cages each take a part of the city's
+// postcodes (on the cards on each cage). At the end of each belt a picker takes
+// the parcels off (the flow projector shows the postcodes of the first three) and
+// walks each to the cage that takes it. A loader pushes full cages into the truck
+// (up to ten go in a trailer) and brings an empty one from the stack of empties
+// by the door, so the picker never has to stop.
 //
-// By day the workers work, one move per beat: pick, carry, drop, step back.
-// By night they dance, and the parcels drop into the cages by themselves.
+// By day the workers work, one move per beat. By night they dance when idle.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
-import { NORTH_CITIES, rangeOf, rangeText, split } from '../sim/postcodes';
+import { DOCK_CITY, NORTH_CITIES, rangeOf, rangeText, split } from '../sim/postcodes';
 import { Labels } from './labels';
 import { buildHuman } from './people';
 import { checkerPlate, sectionalDoor, wireMesh } from './textures';
@@ -110,7 +111,10 @@ interface Dock {
   city: number;
   queue: DockParcel[];
   cages: Cage[];
+  /** Takes parcels off the belt into the cages. */
   worker: Worker;
+  /** Pushes full cages into the truck and brings empty ones. */
+  loader: Worker;
 }
 
 export interface DockHandlers {
@@ -130,9 +134,12 @@ const CAGE_FULL = 12;
 /** A roll cage is full by volume: about this much of parcels (m³), stacked as well as they go. */
 const CAGE_M3 = 1.1;
 /** Card colours on the cages (pastel, for black print). */
-const CARD_COLS = ['#ffe45c', '#9fd8ff', '#a6e8a0', '#ffb877', '#f6a6d6'];
+const CARD_COLS = ['#ffe45c', '#9fd8ff', '#a6e8a0', '#ffb877', '#f6a6d6', '#c9b6ff'];
 /** Roll cages per dock. */
-const CAGES = 5;
+const CAGES = 6;
+/** Where the stack of empty cages stands, beside the door (x offset from the dock, z). */
+const STOCK_DX = -2.3;
+const STOCK_Z = -31.6;
 /** The front parcel stops this far before the end of the belt. */
 const QUEUE_FRONT = 0.1;
 
@@ -178,7 +185,7 @@ export class Docks {
   ) {
     this.boards = new Labels(lines.length * CAGES * 2, 0.68, 0.48, 200, 140);
     kit.put(this.boards.mesh);
-    for (const [n, l] of lines.entries()) this.buildDock(l.x, l.chute, n + 1, n);
+    for (const [n, l] of lines.entries()) this.buildDock(l.x, l.chute, n + 1, DOCK_CITY[n] ?? n);
   }
 
   /** City of a dock (by chute), or −1. */
@@ -200,7 +207,7 @@ export class Docks {
   /** Cages still to go into the trailer at this dock's cleardown (the truck waits for them). */
   pending(x: number): boolean {
     const d = this.docks.find((k) => k.x === x);
-    return !!d && (d.cages.some((c) => c.state !== 'gone') || d.worker.step?.pose === 'push');
+    return !!d && (d.cages.some((c) => c.state === 'moving') || d.loader.step?.pose === 'push' || (this.handlers.truck.clearing?.(x) === true && d.cages.some((c) => c.state === 'home' && c.n > 0)));
   }
 
   arrive(chute: number, p: DockParcel): void {
@@ -230,52 +237,48 @@ export class Docks {
   beat(b: number, day: boolean): void {
     void day;
     for (const d of this.docks) {
-      const w = d.worker;
-      if (w.step && b >= w.t0 + w.step.beats) {
-        const st = w.step;
-        w.step = null;
-        if (st.cage) st.cage.c.g.position.copy(st.cage.to);
-        w.root.position.copy(st.to).setY(0);
-        st.done?.();
-      }
-      if (!w.step && !w.steps.length) this.plan(d);
-      if (!w.step && w.steps.length) {
-        w.step = w.steps.shift()!;
-        w.t0 = b;
-        w.from.copy(w.root.position).setY(0);
-        if (w.step.cage) w.cageFrom.copy(w.step.cage.c.g.position);
+      for (const w of [d.worker, d.loader]) {
+        if (w.step && b >= w.t0 + w.step.beats) {
+          const st = w.step;
+          w.step = null;
+          if (st.cage) st.cage.c.g.position.copy(st.cage.to);
+          w.root.position.copy(st.to).setY(0);
+          st.done?.();
+        }
+        if (!w.step && !w.steps.length) {
+          if (w === d.loader) this.planLoad(d);
+          else this.plan(d);
+        }
+        if (!w.step && w.steps.length) {
+          w.step = w.steps.shift()!;
+          w.t0 = b;
+          w.from.copy(w.root.position).setY(0);
+          if (w.step.cage) w.cageFrom.copy(w.step.cage.c.g.position);
+        }
       }
     }
   }
 
-  /** The next job: load the trailer at cleardown, fetch empty cages from a new truck, ship full ones, or sort a parcel. */
+  /**
+   * The loader's next job: at cleardown, every cage with parcels goes into the truck;
+   * otherwise full ones do. Each is replaced at once by an empty one from the stack.
+   */
+  private planLoad(d: Dock): void {
+    const T = this.handlers.truck;
+    if (!T.open(d.x)) return;
+    const home = d.cages.filter((c) => c.state === 'home');
+    const c = T.clearing?.(d.x) ? home.find((x) => x.n > 0) : home.find((x) => this.isFull(x));
+    if (!c) return;
+    this.pushJob(d, c, v(d.x, 0, WALL_Z - 1.4), v(d.x, 0, c.at.z));
+  }
+
+  /** The picker's next job: a parcel off the belt into its cage (one of the first three it can place). */
   private plan(d: Dock): void {
     const w = d.worker;
-    const T = this.handlers.truck;
-    const door = v(d.x, 0, WALL_Z - 1.4);
-    const aisle = v(d.x, 0, DOCK_BELT_END - 3.4);
-    const home = d.cages.filter((c) => c.state === 'home');
-    // The order cages go in: the one at the end first (it stands in the way), then the sides.
-    const order = [2, 1, 3, 0, 4];
-    if (T.clearing?.(d.x) && home.length) {
-      this.pushJob(d, d.cages[order.find((i) => d.cages[i]!.state === 'home')!]!, door, aisle);
-      return;
-    }
-    if (T.open(d.x)) {
-      const gone = [...order].reverse().find((i) => d.cages[i]!.state === 'gone');
-      if (gone !== undefined) {
-        this.fetchJob(d, d.cages[gone]!, door, aisle);
-        return;
-      }
-      const full = home.find((c) => this.isFull(c));
-      if (full) {
-        this.pushJob(d, full, door, aisle);
-        return;
-      }
-    }
-    const p = d.queue[0];
+    const first = d.queue[0];
     // Not for any cage here (sent to the wrong dock): into the return tote beside the belt.
-    if (p && rangeOf(d.cages.map((c) => c.range), p.pc) < 0) {
+    if (first && rangeOf(d.cages.map((c) => c.range), first.pc) < 0) {
+      const p = first;
       d.queue.shift();
       w.parcel = p;
       w.cage = -1;
@@ -297,10 +300,19 @@ export class Docks {
       );
       return;
     }
-    const ci = p ? this.pickCage(d, p) : -1;
-    if (!p || ci < 0) return;
+    // The first of the three front parcels whose cage is by the belt and has room.
+    let qi = -1;
+    let ci = -1;
+    for (let i = 0; i < Math.min(3, d.queue.length) && qi < 0; i++) {
+      const c = this.pickCage(d, d.queue[i]!);
+      if (c >= 0) {
+        qi = i;
+        ci = c;
+      }
+    }
+    if (qi < 0) return;
+    const p = d.queue.splice(qi, 1)[0]!;
     // A parcel: pick it off the belt (the projector shows its postcode), walk to its cage, put it in, step back.
-    d.queue.shift();
     w.parcel = p;
     w.pickFrom.copy(p.pos);
     w.cage = ci;
@@ -324,16 +336,19 @@ export class Docks {
     );
   }
 
-  /** Walk to the cage, push it out through the door into the trailer, come back. */
+  /**
+   * The loader: walk to the cage, pull it into the aisle, push it through the door into the
+   * trailer, then take an empty cage from the stack by the door and push it into its place.
+   */
   private pushJob(d: Dock, c: Cage, door: V3, aisle: V3): void {
-    const w = d.worker;
+    const w = d.loader;
     const T = this.handlers.truck;
     c.state = 'moving';
     T.reserve(d.x, 1);
     const back = (to: V3, from: V3) => to.clone().addScaledVector(this.t.subVectors(to, from).setY(0).normalize(), -0.9);
     const turn = c.at.distanceTo(aisle) > 0.5;
-    w.steps.push({ beats: 1, to: back(c.at, turn ? aisle : door), face: c.at, pose: 'walk' });
-    if (turn) w.steps.push({ beats: 2, to: back(aisle, door), face: aisle, pose: 'push', cage: { c, to: aisle } });
+    w.steps.push({ beats: 2, to: back(c.at, turn ? aisle : door), face: c.at, pose: 'walk' });
+    if (turn) w.steps.push({ beats: 2, to: back(aisle, c.at), face: aisle, pose: 'push', cage: { c, to: aisle } });
     w.steps.push({
       beats: 2,
       to: back(door, aisle),
@@ -341,53 +356,47 @@ export class Docks {
       pose: 'push',
       cage: { c, to: door },
       done: () => {
-        c.state = 'gone';
-        c.g.visible = false;
         T.load(d.x, c.vol, c.kg);
+        // Its parcels leave with the truck; the cage stays in the trailer.
+        for (const p of c.items) p.dead = true;
+        c.items = [];
         c.n = 0;
         c.vol = 0;
         c.kg = 0;
-        // Its parcels leave with the truck.
-        for (const p of c.items) p.dead = true;
-        c.items = [];
+        c.state = 'gone';
+        c.g.visible = false;
         T.reserve(d.x, -1);
       },
     });
-    w.steps.push({ beats: 2, to: w.home, face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
-  }
-
-  /** Walk into the new truck, pull out an empty cage, push it to its place. */
-  private fetchJob(d: Dock, c: Cage, door: V3, aisle: V3): void {
-    const w = d.worker;
-    const T = this.handlers.truck;
-    c.state = 'moving';
-    T.reserve(d.x, 1);
+    // An empty one from the stack: pull it out, push it along the aisle to the free place.
+    const stock = v(d.x + STOCK_DX, 0, STOCK_Z);
+    const out = v(d.x, 0, STOCK_Z + 0.2);
     w.steps.push({
       beats: 2,
-      to: door.clone().setZ(door.z + 0.9),
-      face: door,
+      to: v(stock.x + 0.9, 0, stock.z),
+      face: stock,
       pose: 'walk',
       done: () => {
-        c.g.position.copy(door);
+        c.state = 'moving';
+        c.g.position.copy(stock);
+        c.g.rotation.y = 0;
         c.g.visible = true;
       },
     });
-    const turn = c.at.distanceTo(aisle) > 0.5;
-    const ahead = (to: V3, from: V3) => to.clone().addScaledVector(this.t.subVectors(to, from).setY(0).normalize(), -0.9);
-    if (turn) w.steps.push({ beats: 2, to: ahead(aisle, door), face: aisle, pose: 'push', cage: { c, to: aisle } });
+    w.steps.push({ beats: 1, to: v(out.x + 0.9, 0, out.z), face: out, pose: 'push', cage: { c, to: out } });
+    w.steps.push({ beats: 2, to: back(aisle, out), face: aisle, pose: 'push', cage: { c, to: aisle } });
     w.steps.push({
       beats: 2,
-      to: ahead(c.at, turn ? aisle : door),
+      to: back(c.at, aisle),
       face: c.at,
       pose: 'push',
       cage: { c, to: c.at },
       done: () => {
         c.state = 'home';
         c.g.rotation.y = c.ry;
-        T.reserve(d.x, -1);
       },
     });
-    w.steps.push({ beats: 1, to: w.home, face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
+    w.steps.push({ beats: 2, to: d.loader.home, face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
   }
 
   update(dt: number, bt: number, s: { kick: number; snare: number; dayShown: boolean }): void {
@@ -406,7 +415,8 @@ export class Docks {
         at += p.d + 0.06;
         p.pos.lerp(this.t, Math.min(1, dt * 8));
       }
-      this.animateWorker(d, dt, bt, ph, s);
+      this.animateWorker(d, d.worker, dt, bt, ph, s);
+      this.animateWorker(d, d.loader, dt, bt, ph, s);
     }
     // Cage cards hang on the outside of the mesh, on the side facing the worker and on the back.
     this.docks.forEach((d, n) =>
@@ -462,8 +472,7 @@ export class Docks {
     this.handlers.shipped(d.chute);
   }
 
-  private animateWorker(d: Dock, dt: number, bt: number, ph: number, s: { kick: number; snare: number; dayShown: boolean }): void {
-    const w = d.worker;
+  private animateWorker(d: Dock, w: Worker, dt: number, bt: number, ph: number, s: { kick: number; snare: number; dayShown: boolean }): void {
     const k = Math.min(1, dt * 12);
     const st = w.step;
     let pos: V3 = w.root.position.clone().setY(0);
@@ -543,11 +552,13 @@ export class Docks {
     // Five roll cages around the belt end: two on each side, one at the end; each takes part of the city.
     // (The belt stops short of them, so the worker can get round to every cage.)
     const E = DOCK_BELT_END;
+    // Six: three on each side; the middle stays free as the aisle to the door.
     const cageAt: [V3, number][] = [
       [v(x - 2.0, 0, E - 1.2), Math.PI / 2],
-      [v(x - 2.0, 0, E - 2.9), Math.PI / 2],
-      [v(x, 0, E - 4.6), 0],
-      [v(x + 2.0, 0, E - 2.9), -Math.PI / 2],
+      [v(x - 2.0, 0, E - 2.8), Math.PI / 2],
+      [v(x - 2.0, 0, E - 4.4), Math.PI / 2],
+      [v(x + 2.0, 0, E - 4.4), -Math.PI / 2],
+      [v(x + 2.0, 0, E - 2.8), -Math.PI / 2],
       [v(x + 2.0, 0, E - 1.2), -Math.PI / 2],
     ];
     const ranges = split(NORTH_CITIES[city]!, CAGES);
@@ -561,7 +572,10 @@ export class Docks {
     // The return tote for parcels sent here by mistake.
     k.box('tote', k.std(0x1f3f80, 0.6, 0.1, 0x2c62c8), x + 0.9, 0.22, E - 0.4, 0.6, 0.44, 0.42);
     const worker = this.buildWorker(v(x, 0, E - 1.1));
-    this.docks.push({ x, chute, city, queue: [], cages, worker });
+    const loader = this.buildWorker(v(x + 0.9, 0, -32.4), 1);
+    // The stack of empty cages by the door, nested into each other.
+    this.buildStock(v(x + STOCK_DX, 0, STOCK_Z));
+    this.docks.push({ x, chute, city, queue: [], cages, worker, loader });
   }
 
   private readonly cageMeshGeo = (() => {
@@ -621,9 +635,26 @@ export class Docks {
   private cageMats: Record<'teal' | 'wheel' | 'card', THREE.MeshStandardMaterial> | null = null;
 
 
+  /** Empty roll cages nested into each other (just the frames, close together). */
+  private buildStock(at: V3): void {
+    const k = this.kit;
+    const geo = cageGeometry();
+    const mats = this.cageMats!;
+    for (let i = 0; i < 4; i++) {
+      const g = new THREE.Group();
+      g.position.set(at.x, 0, at.z - i * 0.28);
+      g.scale.set(1, 1, 0.98);
+      k.put(g);
+      k.batch(geo.frame, mats.teal, g);
+      k.batch(geo.wheels, mats.wheel, g);
+      if (i === 0) k.batch(this.cageMeshGeo, this.cageMeshMat(), g).position.y = 1.1;
+    }
+    k.blob(at.x, at.z - 0.4, 1.8, 2.2);
+  }
+
   /** A worker with jointed arms, legs and torso, so they can work and dance. */
-  private buildWorker(home: V3): Worker {
-    const n = this.docks.length;
+  private buildWorker(home: V3, role = 0): Worker {
+    const n = this.docks.length * 2 + role;
     const h = buildHuman(this.kit, {
       shirt: [0x2f3b6b, 0x2fa58f, 0xf3f4f6, 0x6b7280][n % 4]!,
       trousers: [0x22283f, 0x3a3d44][n % 2]!,

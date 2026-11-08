@@ -13,9 +13,16 @@ export type { City };
 /** Largest first. */
 export const CITIES: City[] = COUNTRY.cities;
 
-/** Cities at the north doors (roll cages) and at the south doors (robot boxes). */
-export const NORTH_CITIES = CITIES.slice(0, 20);
-export const SOUTH_CITIES = CITIES.slice(20, 40);
+/**
+ * Cities at the north doors (roll cages) and at the south doors (robot boxes). The four
+ * largest get two north doors each (the same postcodes at both, parcels split 50–50), so
+ * 16 cities share the 20 north doors; the next 20 go to the robots. (The four smallest of
+ * the 40 are not served.)
+ */
+export const NORTH_CITIES = CITIES.slice(0, 16);
+export const SOUTH_CITIES = CITIES.slice(16, 36);
+/** The city (index in NORTH_CITIES) of each north door, west to east. */
+export const DOCK_CITY: number[] = [0, 0, 1, 1, 2, 2, 3, 3, ...Array.from({ length: 12 }, (_, k) => 4 + k)];
 
 /** All area numbers of a city, low to high. */
 export function areas(c: City, step = COUNTRY.step): number[] {
