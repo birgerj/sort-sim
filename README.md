@@ -28,8 +28,9 @@ sound is generated in code.
 ```
 
 1. **Infeed (west).** Four lanes (two low, two on a mezzanine) come through
-   the wall and pass a scan tunnel; each pair merges at 30° into one belt,
-   and the two belts join the west side of the loop at 30°. Parcels come in
+   the wall and pass a scan tunnel; each lane joins the west side of the
+   loop on its own at 30°, two on odd and two on even trays, so every tray
+   can be filled. Parcels come in
    at a set rate; when that is more than the lanes take, they queue at the
    hold points before the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
