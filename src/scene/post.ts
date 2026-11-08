@@ -63,7 +63,9 @@ void main() {
 
 export class InkPass extends Pass {
   private target: THREE.WebGLRenderTarget;
-  private normalMat = new THREE.MeshNormalMaterial();
+  // Double-sided: belts and chutes are single surfaces; seen from behind they must still
+  // hide what is behind them, or its outlines show through and they look transparent.
+  private normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
   private quad: FullScreenQuad;
   private mat: THREE.ShaderMaterial;
   /** Objects hidden while normals are drawn (lights, lines, particles, glass, shadows). */
