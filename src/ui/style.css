@@ -82,6 +82,11 @@ body {
 .hud.idle .bar {
   opacity: 0;
   transform: translateY(12px);
+  pointer-events: none;
+}
+
+body:has(.hud.idle) {
+  cursor: none;
 }
 
 .group {

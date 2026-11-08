@@ -200,17 +200,21 @@ export class Hud {
     });
   }
 
-  /** Show the bar, and hide it again after a few quiet seconds. */
+  /** Show the bar, and hide it again after three quiet seconds. */
   private wake(): void {
     if (this.hidden) {
       this.hidden = false;
       this.root.classList.remove('idle');
     }
     clearTimeout(this.hideTimer);
+    // Hide after a few quiet seconds, also when the pointer rests on the bar
+    // (touch screens keep ':hover' on the last tapped button, so it is not a sign of use).
+    // Any movement, tap or key brings it back.
     this.hideTimer = window.setTimeout(() => {
-      if (this.bar.matches(':hover')) return this.wake();
+      if (this.bar.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement) return this.wake();
       this.hidden = true;
       this.root.classList.add('idle');
-    }, 4000);
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    }, 3000);
   }
 }
