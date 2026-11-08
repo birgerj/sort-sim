@@ -102,9 +102,10 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   position and direction; `s` runs east along the north side. Section
   starts are in the comment above `INDUCT`.
 - `CHUTES`: 20 dock chutes (s 4…118) and 20 station chutes (s 144…258), 6 m
-  apart. Infeeds: `INDUCT` (four join points on the north straight, from the
-  inside, s 13, 19, 25, 31; `LANE_PHASE` lands lanes 1 and 3 half a beat
-  later so they fill the even trays; one parcel per lane per beat; `LANE_Z`), `HOLD_S` (queue point), `LANE_QUEUE`.
+  apart. Infeeds: `INDUCT` (four join points on the west end, from the
+  outside, s 268, 272, 276, 280; `LANE_PHASE` lands lanes 1 and 3 half a beat
+  later so they fill the odd trays; one parcel per lane per beat; `LANE_Z`;
+  the belt stops at the loop's edge and parcels slide onto the tray), `HOLD_S` (queue point), `LANE_QUEUE`.
   Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).
 - Hall: `WX`/`EX` west/east wall, `HZ` half depth, `HH` height; `HCX`/`HW`
   centre and width.
