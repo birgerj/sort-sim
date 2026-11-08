@@ -2492,6 +2492,29 @@ export class Sorter implements Scene3D {
     this.look.lerp(this.wantLook, this.first ? 1 : 1 - Math.exp(-dt * 3.2));
     this.first = false;
     this.camera.lookAt(this.look);
+    // Looking around by hand (a swipe or drag): turn the view; ten seconds after the last
+    // swipe it eases back to where the camera itself looks.
+    if (this.time - this.lookAt > 10) {
+      const e = Math.exp(-dt * 1.2);
+      this.lookYaw *= e;
+      this.lookPitch *= e;
+    }
+    if (Math.abs(this.lookYaw) > 1e-4 || Math.abs(this.lookPitch) > 1e-4) {
+      this.camera.rotateOnWorldAxis(UP, this.lookYaw);
+      this.camera.rotateX(this.lookPitch);
+    }
+  }
+
+  private lookYaw = 0;
+  private lookPitch = 0;
+  private lookAt = -99;
+
+  /** Turn the view by hand (radians); it returns to the camera's own view after 10 s. */
+  lookAround(dYaw: number, dPitch: number): void {
+    if (this.camMode === 'walk') return;
+    this.lookYaw = clamp(this.lookYaw - dYaw, -Math.PI, Math.PI);
+    this.lookPitch = clamp(this.lookPitch - dPitch, -0.9, 0.9);
+    this.lookAt = this.time;
   }
 
   // ---------- building ----------
@@ -3149,6 +3172,30 @@ export class Sorter implements Scene3D {
       this.chutes[c.k] = { s: c.s, side: c.side, path: c.path, col: c.col, lamp: c.lamp, flash: 0, belt };
     });
     for (const bp of beltPaths) belt(bp, 0, bp.len, stripIn);
+
+    // A small display on the inside of the loop at every chute: where it goes.
+    {
+      const shows = new Labels(CHUTES.length, 0.9, 0.42, 216, 100);
+      const dockXs = [...this.dockOf.entries()];
+      const m = new THREE.Matrix4();
+      const r = new THREE.Matrix4();
+      CHUTES.forEach(([cs, side], k) => {
+        loopAt(cs + 0.9, this.p, this.t);
+        outward(this.t, this.n).multiplyScalar(-side);
+        const yaw = Math.atan2(this.n.x, this.n.z);
+        m.makeRotationY(yaw).multiply(r.makeRotationX(-0.35)).setPosition(this.p.x + this.n.x * 1.0, LOOP_Y + 0.12, this.p.z + this.n.z * 1.0);
+        shows.place(k, m);
+        this.box('chutedisp', legMat, this.p.x + this.n.x * 1.0, LOOP_Y - 0.25, this.p.z + this.n.z * 1.0, 0.1, 0.22, 0.1);
+        const dock = dockXs.findIndex(([c]) => c === k);
+        if (k === REJECT) shows.set(k, 'NO READ', 'to manual sorting', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
+        else if (dock >= 0) {
+          const c = NORTH_CITIES[dock]!;
+          shows.set(k, `${dock + 1} · ${c.name}`, rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]), { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+        } else shows.set(k, 'Robots', `station ${(this.stationOf.get(k) ?? 0) + 1} · doors 21–40`, { bg: '#101114', fg: '#ffffff', sub: '#f6a6d6' });
+      });
+      shows.flush();
+      this.put(shows.mesh);
+    }
 
     // To and from the store: off the loop's far bend and back on, tangentially.
     {

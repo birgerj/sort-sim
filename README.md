@@ -82,6 +82,10 @@ do one move per beat.
 | Hide the controls | `H` |
 | Quality: Low / Normal / High / Ultra | buttons (`?quality=`) |
 
+Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
+
+The music follows the parcels per minute: relaxed (≤ 100), steady (≤ 260), driving (≤ 480), and acid above that (a squelchy 16th acid bass line).
+
 The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
 
 URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow|walk`,
