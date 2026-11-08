@@ -151,6 +151,8 @@ export interface BinView {
 export class RobotFloor {
   readonly fleet: Fleet;
   readonly bins: BinView[] = [];
+  /** Boxes taken to a truck so far. */
+  shippedBoxes = 0;
   readonly stations: { x: number; z: number; projector: number }[] = [];
   private robots: RobotView[] = [];
   private projectors: Projector[] = [];
@@ -245,6 +247,7 @@ export class RobotFloor {
 
   /** The box came back empty from the truck. */
   emptied(b: number): void {
+    this.shippedBoxes++;
     const bin = this.bins[b]!;
     bin.n = 0;
     this.writeFill(b);

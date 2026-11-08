@@ -31,6 +31,8 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
+import { Life } from './life';
+import { Screens } from './screens';
 import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { FleetEvent } from '../sim/robotFleet';
@@ -101,6 +103,9 @@ const FIRST_STATION_S = 147;
  * camera, a glossy floor at night and depth of field when following a parcel.
  */
 export type Quality = 'low' | 'normal' | 'high';
+/** x of the wall columns (south wall; the north ones stand 2.4 m further east). */
+const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }, (_, k) => WX + 19 + 24 * k);
+
 /** Belt speeds the conveyor clock can run at: multiples of the beat, so events stay on 8th and 16th notes. */
 export const BELT_SPEEDS = [0.5, 1, 2, 4];
 /** x of the 20 truck docks on the north wall: straight north of each dock chute's end. */
@@ -822,6 +827,10 @@ export class Sorter implements Scene3D {
   private hemi!: THREE.HemisphereLight;
   private forklifts: Forklift[] = [];
   private docks!: Docks;
+  private life!: Life;
+  private screens = new Screens();
+  /** Counters for the screens. */
+  private stats = { inducted: 0, toDocks: 0, toRobots: 0 };
   private yard!: BoxYard;
   /** Dock chutes: chute index → dock x. */
   private dockOf = new Map<number, number>();
@@ -914,6 +923,18 @@ export class Sorter implements Scene3D {
         shipped: (chute) => (this.chutes[chute]!.flash = 1),
       },
     );
+    this.life = new Life(this, {
+      wx: WX,
+      ex: EX,
+      hz: HZ,
+      rackEastX: RACK_X1,
+      rackHalf: BAYS * BAY,
+      levels: LEVELS,
+      controlRoom: [-48, 23.5],
+      columnsNorth: COLUMNS.map((x) => x + 2.4),
+      columnsSouth: COLUMNS,
+    });
+    this.buildBoards();
     this.buildDay();
     this.buildCamera();
     this.prefill();
@@ -1139,6 +1160,16 @@ export class Sorter implements Scene3D {
     this.updateClub(dt, bar);
     this.updateForklifts(dt, prev);
     this.yard.update(bt);
+    this.life.update(dt, bt);
+    const bots = this.floor.fleet.bots;
+    this.screens.update(this.time, {
+      ...this.stats,
+      boxesShipped: this.floor.shippedBoxes,
+      robotsBusy: bots.filter((b) => b.state !== 'idle').length,
+      robots: bots.length,
+      fullBoxes: this.floor.bins.filter((b) => !b.open).length,
+      speed: this.speed,
+    });
     this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown });
     this.updateCamera(dt, bar, i.travelSpeed);
     if (this.quality === 'high') {
@@ -1218,6 +1249,7 @@ export class Sorter implements Scene3D {
       const p = this.botParcel.get(e.bot);
       if (p) p.dropAt = this.bt;
     } else if (e.t === 'dropped') {
+      this.stats.toRobots++;
       const p = this.botParcel.get(e.bot);
       if (p) p.dead = true;
       this.botParcel.delete(e.bot);
@@ -1453,6 +1485,7 @@ export class Sorter implements Scene3D {
   private pathEnd(p: Parcel): void {
     switch (p.pathKind) {
       case 'lane':
+        this.stats.inducted++;
         this.induct(p, INDUCT[p.lane]!, p.t1);
         break;
       case 'back':
@@ -1474,6 +1507,7 @@ export class Sorter implements Scene3D {
         break;
       }
       case 'dock':
+        this.stats.toDocks++;
         p.mode = 'dock';
         this.docks.arrive(p.dest, p);
         break;
@@ -2168,7 +2202,7 @@ export class Sorter implements Scene3D {
     const col = this.std(0x3a3d45, 0.6, 0.6, 0xf3f4f6);
     const colRed = this.std(0x7a1a20, 0.6, 0.3, 0xe2231a);
     // (In the walls, between the dock doors.)
-    for (let x = WX + 19; x <= EX - 6; x += 24) {
+    for (const x of COLUMNS) {
       // North: halfway between truck docks (x −13.6 + 6k); south: between the box doors (x −16 + 6k).
       for (const [z, dx] of [[-33.6, 2.4], [33.6, 0]] as const) {
         const cx = x + dx;
@@ -2232,7 +2266,7 @@ export class Sorter implements Scene3D {
     // (North wall east of x 12: truck docks; south wall east of x −8: box forklift aisle.)
     for (let x = -58; x < -18; x += 1.6) if (Math.random() < 0.65) stack(x, -32.6);
     for (let k = 0; k < 18; k++) stack(rnd(-58, -32), rnd(-28, -12));
-    for (let x = -40; x < -25; x += 1.6) if (Math.random() < 0.5) stack(x, 32.6);
+    // (South wall west of the box doors: the break area.)
   }
 
   /**
@@ -2274,6 +2308,35 @@ export class Sorter implements Scene3D {
         }
       });
     }
+  }
+
+  /** Big KPI boards and clocks on the walls, showing live numbers and the real time. */
+  private buildBoards(): void {
+    const board = new THREE.MeshBasicMaterial({ map: this.screens.board });
+    const frame = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
+    const place = (x: number, y: number, z: number, ry: number) => {
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      g.rotation.y = ry;
+      this.put(g);
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(6.2, 2.5, 0.12), frame));
+      const sc = new THREE.Mesh(new THREE.PlaneGeometry(6, 2.25), board);
+      sc.position.z = 0.07;
+      g.add(sc);
+    };
+    place(-40, 7.2, -HZ + 0.12, 0);
+    place(-45, 7.2, HZ - 0.12, Math.PI);
+    place(EX - 0.12, 7.2, -14, -Math.PI / 2);
+    const clock = new THREE.MeshBasicMaterial({ map: this.screens.clock, transparent: true });
+    const clk = (x: number, y: number, z: number, ry: number) => {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), clock);
+      m.position.set(x, y, z);
+      m.rotation.y = ry;
+      this.put(m);
+    };
+    clk(WX + 0.1, 8.4, 4, Math.PI / 2);
+    clk(-30, 8.4, -HZ + 0.1, 0);
+    clk(-30, 8.4, HZ - 0.1, Math.PI);
   }
 
   /** Control room: a cabin with a window band, door, roof plant and a stair to the roof. Front faces −z. */
@@ -2845,7 +2908,9 @@ export class Sorter implements Scene3D {
 
   /** A forklift serving the store, driving a loop along the east wall. (The box forklifts live in BoxYard.) */
   private buildForklifts(): void {
-    const routes = [roundRect(57.6 + STORE_DX, 0, 6, 44, 2.4)];
+    // (The east side of the rack is the reach truck's now; see Life.)
+    const routes: Path[] = [];
+    void roundRect;
     routes.forEach((route, k) => {
       const { g, forks, beacon } = buildForklift(this, pick([0xb08860, 0xd8d4cc]));
       this.forklifts.push({ g, route, s: rnd(0, route.len), speed: 1.1 + k * 0.15, forks, beacon });
@@ -2929,7 +2994,7 @@ export class Sorter implements Scene3D {
     this.blob(dx, dz - 0.3, 4, 3);
     for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('desk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
     // Three screens on arms, curved slightly around the operator.
-    const dash = new THREE.MeshBasicMaterial({ map: this.dashTex() });
+    const dash = new THREE.MeshBasicMaterial({ map: this.screens.dash });
     const ink = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
     for (const [ox, a] of [[-1.05, 0.35], [0, 0], [1.05, -0.35]] as const) {
       const g = new THREE.Group();
@@ -3028,23 +3093,7 @@ export class Sorter implements Scene3D {
     this.flushBoxes();
   }
 
-  private dashTex(): THREE.CanvasTexture {
-    return canvasTex(256, 144, (g) => {
-      g.fillStyle = '#eee8fc';
-      g.fillRect(0, 0, 256, 144);
-      g.fillStyle = '#6b3fd1';
-      for (let k = 0; k < 8; k++) {
-        const h = 20 + ((k * 37) % 70);
-        g.fillRect(20 + k * 18, 120 - h, 12, h);
-      }
-      g.strokeStyle = '#d6339a';
-      g.lineWidth = 4;
-      g.beginPath();
-      g.moveTo(176, 110);
-      for (let k = 0; k < 6; k++) g.lineTo(176 + k * 13, 110 - ((k * 23) % 60) - 10);
-      g.stroke();
-    });
-  }
+
 
   /** A person in the illustration style: white shirt, blue trousers, cap. */
   person(x: number, z: number, ry: number): void {
