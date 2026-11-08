@@ -12,6 +12,8 @@ export interface XmasLayout {
   wx: number;
   ex: number;
   hz: number;
+  /** North wall. */
+  nz: number;
   hh: number;
   /** x of the roof beams (they run north–south). */
   beams: number[];
@@ -143,8 +145,8 @@ export class Xmas {
     const pts: THREE.Vector3[] = [];
     for (const x of L.beams) {
       const span = 8;
-      for (let z = -L.hz + 1; z <= L.hz - 1; z += 0.8) {
-        const u = (((z + L.hz) % span) + span) % span / span;
+      for (let z = L.nz + 1; z <= L.hz - 1; z += 0.8) {
+        const u = (((z - L.nz) % span) + span) % span / span;
         pts.push(new THREE.Vector3(x + 0.3, L.hh - 1.0 - Math.sin(u * Math.PI) * 0.6, z));
       }
     }
@@ -165,10 +167,10 @@ export class Xmas {
     };
     const y = 6.2;
     const step = 6;
-    for (const z of [-L.hz + 0.25, L.hz - 0.25]) {
+    for (const z of [L.nz + 0.25, L.hz - 0.25]) {
       for (let x = L.wx + 2; x + step <= L.ex - 1; x += step) swag(new THREE.Vector3(x, y, z), new THREE.Vector3(x + step, y, z), 0.9);
     }
-    for (let z = -L.hz + 2; z + step <= L.hz - 1; z += step) swag(new THREE.Vector3(L.wx + 0.25, y, z), new THREE.Vector3(L.wx + 0.25, y, z + step), 0.9);
+    for (let z = L.nz + 2; z + step <= L.hz - 1; z += step) swag(new THREE.Vector3(L.wx + 0.25, y, z), new THREE.Vector3(L.wx + 0.25, y, z + step), 0.9);
     const green = this.k.std(0x14532d, 0.9, 0, GREEN);
     this.k.put(new THREE.Mesh(merge(tubes), green));
     // Red and gold baubles where the swags meet, each with a small bow.
@@ -192,7 +194,7 @@ export class Xmas {
     const red = this.k.std(0x8a0b1f, 0.5, 0.1, RED);
     const berries = this.k.std(0x8a0b1f, 0.3, 0.2, 0xe2231a);
     const bow = merge([new THREE.ConeGeometry(0.14, 0.26, 4).rotateZ(Math.PI / 2).translate(-0.13, 0, 0), new THREE.ConeGeometry(0.14, 0.26, 4).rotateZ(-Math.PI / 2).translate(0.13, 0, 0), new THREE.SphereGeometry(0.06, 8, 6)]);
-    const doors = [...L.northDoors.map((x) => [x, -L.hz + 0.2, 0] as const), ...L.southDoors.map((x) => [x, L.hz - 0.2, Math.PI] as const)];
+    const doors = [...L.northDoors.map((x) => [x, L.nz + 0.2, 0] as const), ...L.southDoors.map((x) => [x, L.hz - 0.2, Math.PI] as const)];
     const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, dy: number, dz: number) => {
       const m = new THREE.InstancedMesh(geo, mat, doors.length);
       const o = new THREE.Object3D();

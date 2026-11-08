@@ -55,6 +55,8 @@ export interface LifeLayout {
   wx: number;
   ex: number;
   hz: number;
+  /** North wall (further out than the south one). */
+  nz: number;
   /** East face of the high-bay rack, its half length and its shelf heights. */
   rackEastX: number;
   rackHalf: number;
@@ -203,7 +205,7 @@ export class Life {
     };
     for (const z of [-24, 20]) place(L.wx + 0.1, 3.2, z, Math.PI / 2);
     for (const z of [-20, 20]) place(L.ex - 0.1, 3.2, z, -Math.PI / 2);
-    place(-30, 4.2, -L.hz + 0.1, 0);
+    place(-30, 4.2, L.nz + 0.1, 0);
     place(-46, 4.2, L.hz - 0.1, Math.PI);
     // Fire extinguishers with a sign, on the columns.
     const red = k.std(0x8a1a14, 0.4, 0.3, 0xe2231a);
@@ -221,7 +223,7 @@ export class Life {
       if (dir < 0) s.rotation.y = Math.PI;
       g.add(s);
     };
-    for (const x of L.columnsNorth) ext(x + 0.55, -L.hz + 0.45, 1);
+    for (const x of L.columnsNorth) ext(x + 0.55, L.nz + 0.45, 1);
     for (const x of L.columnsSouth) ext(x + 0.55, L.hz - 0.45, -1);
     // First aid box beside the control room door.
     const [cx, cz] = L.controlRoom;

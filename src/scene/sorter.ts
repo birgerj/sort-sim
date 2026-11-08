@@ -87,6 +87,11 @@ const EX = 128;
 const HCX = (WX + EX) / 2;
 const HW = EX - WX;
 const HZ = 34;
+/** The north wall is further out than the south one (more room at the truck docks). */
+const NZ = -40;
+/** Depth of the hall (north to south) and its middle. */
+const HD = HZ - NZ;
+const HZC = (NZ + HZ) / 2;
 const HH = 11;
 const MAX_PARCELS = 1500;
 /** Shipping label canvas: cells of LABEL_W × LABEL_H pixels. */
@@ -113,7 +118,7 @@ const LANE_Y = 0.9;
 /** How far out from the loop's centre line each lane turns onto it (sets the lane's x). */
 const LANE_OUT = 3.6;
 /** z of the scan tunnels (just inside the north wall). */
-const LANE_TUNNEL_Z = -30.4;
+const LANE_TUNNEL_Z = -36.4;
 /** The maintenance platform inside the loop at its west end (the DJ's at night): centre x, top y. */
 const PLATFORM_X = -49;
 const PLATFORM_Y = 2.4;
@@ -1083,7 +1088,7 @@ export class Sorter implements Scene3D {
       for (const p of this.parcels) if (p.mode === 'held' && p.holder === g) p.dead = true;
     };
     this.trucks = new Trucks(this, [
-      ...NORTH_DOORS.map((x, k) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[DOCK_CITY[k]!]!.name, pc: pcs(NORTH_CITIES[DOCK_CITY[k]!]!), hold: () => this.docks.pending(x), cages: () => (this.docks ? this.docks.cageFill(x) : 0) })),
+      ...NORTH_DOORS.map((x, k) => ({ x, wallZ: NZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[DOCK_CITY[k]!]!.name, pc: pcs(NORTH_CITIES[DOCK_CITY[k]!]!), hold: () => this.docks.pending(x), cages: () => (this.docks ? this.docks.cageFill(x) : 0) })),
       ...SOUTH_DOORS.map((x, k) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const, number: 21 + k, city: SOUTH_CITIES[k]!.name, pc: pcs(SOUTH_CITIES[k]!) })),
     ]);
     this.trucks.clock = () => this.hubTime();
@@ -1132,6 +1137,7 @@ export class Sorter implements Scene3D {
         wx: WX,
         ex: EX,
         hz: HZ,
+        nz: NZ,
         hh: HH,
         beams,
         northDoors: NORTH_DOORS,
@@ -1140,7 +1146,7 @@ export class Sorter implements Scene3D {
         trees: [
           { x: -55.8, z: 21.2, h: 7 },
           { x: -48.6, z: 31.2, h: 6 },
-          { x: -19.5, z: -30.4, h: 7 },
+          { x: -19.5, z: -36.2, h: 7 },
           { x: PLATFORM_X - 2.2, z: 2.4, y: PLATFORM_Y, h: 3.4 },
         ],
         canes: [
@@ -1148,7 +1154,7 @@ export class Sorter implements Scene3D {
           { x: -41.6, z: -1.7, ry: Math.PI },
           { x: -45.4, z: 22.8, ry: Math.PI / 2 },
           { x: -42.6, z: 22.8, ry: -Math.PI / 2 },
-          { x: -17.6, z: -27.5, ry: 0.4 },
+          { x: -17.6, z: -33.5, ry: 0.4 },
           { x: -31.2, z: 31.6, ry: Math.PI },
         ],
         stars: [
@@ -1163,6 +1169,7 @@ export class Sorter implements Scene3D {
       wx: WX,
       ex: EX,
       hz: HZ,
+      nz: NZ,
       rackEastX: RACK_X1,
       rackHalf: BAYS * BAY,
       levels: LEVELS,
@@ -1197,7 +1204,7 @@ export class Sorter implements Scene3D {
         gl_FragColor = vec4(max(sum * 0.25 - vec3(0.45), vec3(0.0)) * 0.7, 1.0);`,
       ),
     };
-    const m = new Reflector(new THREE.PlaneGeometry(HW, HZ * 2), {
+    const m = new Reflector(new THREE.PlaneGeometry(HW, HD), {
       shader,
       textureWidth: Math.round(this.canvas.width * 0.4) || 512,
       textureHeight: Math.round(this.canvas.height * 0.4) || 288,
@@ -2642,7 +2649,7 @@ export class Sorter implements Scene3D {
       let t = 1e9;
       if (dx) t = Math.min(t, ((dx > 0 ? EX - 0.1 : WX + 0.1) - B.x) / dx);
       if (dy) t = Math.min(t, ((dy > 0 ? HH - 0.05 : 0.03) - B.y) / dy);
-      if (dz) t = Math.min(t, ((dz > 0 ? HZ - 0.1 : -HZ + 0.1) - B.z) / dz);
+      if (dz) t = Math.min(t, ((dz > 0 ? HZ - 0.1 : NZ + 0.1) - B.z) / dz);
       this.sparkPos[k * 3] = B.x + dx * t;
       this.sparkPos[k * 3 + 1] = B.y + dy * t;
       this.sparkPos[k * 3 + 2] = B.z + dz * t;
@@ -2723,7 +2730,7 @@ export class Sorter implements Scene3D {
     this.tour = null;
     const d = this.t.subVectors(this.look, this.camera.position);
     this.walk.x = clamp(this.camera.position.x, WX + 1, EX - 1);
-    this.walk.z = clamp(this.camera.position.z, -HZ + 1, HZ - 1);
+    this.walk.z = clamp(this.camera.position.z, NZ + 1, HZ - 1);
     this.walk.yaw = Math.atan2(d.x, d.z);
     this.walk.pitch = 0;
   }
@@ -2749,7 +2756,7 @@ export class Sorter implements Scene3D {
     const mx = (fx * i.fwd - fz * i.side) / len;
     const mz = (fz * i.fwd + fx * i.side) / len;
     w.x = clamp(w.x + mx * w.speed * dt, WX + 0.6, EX - 0.6);
-    w.z = clamp(w.z + mz * w.speed * dt, -HZ + 0.6, HZ - 0.6);
+    w.z = clamp(w.z + mz * w.speed * dt, NZ + 0.6, HZ - 0.6);
     // Footsteps bob the view, two steps per beat when walking to the music.
     w.step += w.speed * dt * 1.6;
     const bob = Math.sin(w.step * Math.PI) * 0.035 * Math.min(1, w.speed);
@@ -2813,7 +2820,7 @@ export class Sorter implements Scene3D {
     // Stay inside the hall, and under the ceiling's ducts, cable trays and lamps.
     this.want.y = Math.min(this.want.y, FLY_MAX_Y);
     this.want.x = clamp(this.want.x, WX + 1.5, EX - 1.5);
-    this.want.z = clamp(this.want.z, -HZ + 1.5, HZ - 1.5);
+    this.want.z = clamp(this.want.z, NZ + 1.5, HZ - 1.5);
     const k = this.first ? 1 : 1 - Math.exp(-dt * (p ? 2.6 : 1.2));
     this.camera.position.lerp(this.want, k);
     this.look.lerp(this.wantLook, this.first ? 1 : 1 - Math.exp(-dt * 3.2));
@@ -3041,11 +3048,11 @@ export class Sorter implements Scene3D {
     });
     concrete.repeat.set(Math.round(HW / 6.2), 11);
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(HW, HZ * 2),
+      new THREE.PlaneGeometry(HW, HD),
       new THREE.MeshStandardMaterial({ color: 0x7c7c82, map: concrete, roughnessMap: concrete, roughness: 0.55, metalness: 0.05 }),
     );
     floor.rotation.x = -Math.PI / 2;
-    floor.position.x = HCX;
+    floor.position.set(HCX, 0, HZC);
     this.put(floor, 'night');
     // Walkway lines.
     const yel = new THREE.MeshBasicMaterial({ color: 0x8a7420 });
@@ -3072,15 +3079,15 @@ export class Sorter implements Scene3D {
     ribsM.offset.set(0, 0.5 * (4 / HH));
     ribsM.needsUpdate = true;
     const longNight = new THREE.MeshStandardMaterial({ map: ribsM, roughness: 0.85, metalness: 0.3, side: THREE.DoubleSide });
-    for (const z of [-HZ, HZ]) {
+    for (const z of [NZ, HZ]) {
       const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longNight);
       w.position.set(HCX, HH / 2, z);
       this.put(w, 'night');
     }
     // (The trailers behind the openings are the Trucks'.)
     for (const x of [WX, EX]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HZ * 2, HH), wz);
-      w.position.set(x, HH / 2, 0);
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wz);
+      w.position.set(x, HH / 2, HZC);
       w.rotation.y = Math.PI / 2;
       this.put(w, 'night');
     }
@@ -3088,21 +3095,21 @@ export class Sorter implements Scene3D {
     ceilT.repeat.set(Math.round(HW / 3), 1);
     ceilT.rotation = Math.PI / 2;
     ceilT.needsUpdate = true;
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HW, HZ * 2), new THREE.MeshStandardMaterial({ map: ceilT, color: 0x77777a, roughness: 0.9, metalness: 0.2 }));
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), new THREE.MeshStandardMaterial({ map: ceilT, color: 0x77777a, roughness: 0.9, metalness: 0.2 }));
     ceil.rotation.x = Math.PI / 2;
-    ceil.position.set(HCX, HH, 0);
+    ceil.position.set(HCX, HH, HZC);
     this.put(ceil, 'night');
 
     const steel = this.std(0x4c515a, 0.5, 0.7, DAY.steel);
-    for (let x = WX + 2; x <= EX - 2; x += 10) this.box('steel', steel, x, HH - 0.5, 0, 0.35, 0.8, HZ * 2);
-    for (let z = -32; z <= 32; z += 8) this.box('steel', steel, HCX, HH - 0.12, z, HW, 0.18, 0.18);
+    for (let x = WX + 2; x <= EX - 2; x += 10) this.box('steel', steel, x, HH - 0.5, HZC, 0.35, 0.8, HD);
+    for (let z = NZ + 2; z <= HZ - 2; z += 8) this.box('steel', steel, HCX, HH - 0.12, z, HW, 0.18, 0.18);
     // Columns: red at the foot, as in the photos.
     const col = this.std(0x3a3d45, 0.6, 0.6, 0xf3f4f6);
     const colRed = this.std(0x7a1a20, 0.6, 0.3, 0xe2231a);
     // (In the walls, between the dock doors.)
     for (const x of COLUMNS) {
       // North: halfway between truck docks (x −13.6 + 6k); south: between the box doors (x −16 + 6k).
-      for (const [z, dx] of [[-33.6, 2.4], [33.6, 0]] as const) {
+      for (const [z, dx] of [[NZ + 0.4, 2.4], [HZ - 0.4, 0]] as const) {
         const cx = x + dx;
         this.box('colred', colRed, cx, 0.9, z, 0.76, 1.8, 0.76);
         this.box('col', col, cx, 1.8 + (HH - 1.8) / 2, z, 0.7, HH - 1.8, 0.7);
@@ -3181,7 +3188,7 @@ export class Sorter implements Scene3D {
     };
     // (North wall east of x 12: truck docks; south wall east of x −8: box forklift aisle.)
     // (Not where the infeed lanes come in through the north wall, x −52 … −35.)
-    for (let x = -60; x < -18; x += 1.6) if ((x < -53 || x > -34) && Math.random() < 0.65) stack(x, -32.6);
+    for (let x = -60; x < -18; x += 1.6) if ((x < -53 || x > -34) && Math.random() < 0.65) stack(x, NZ + 1.4);
     for (let k = 0; k < 14; k++) stack(rnd(-33, -21), rnd(-28, -14));
     // (South wall west of the box doors: the break area.)
   }
@@ -3216,7 +3223,7 @@ export class Sorter implements Scene3D {
       if ((p.laps ?? 0) > 0 && p.mode === 'loop') recirculating++;
     }
     // (The plan shows the sorter, the docks and the robot floor: the infeed and store ends are cropped.)
-    return { hall: [LX - 12, LX + STRAIGHT + 12, -HZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
+    return { hall: [LX - 12, LX + STRAIGHT + 12, NZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
   }
 
   /** Big KPI boards and clocks on the walls, showing live numbers and the real time. */
@@ -3233,9 +3240,9 @@ export class Sorter implements Scene3D {
       sc.position.z = 0.07;
       g.add(sc);
     };
-    place(-40, 7.2, -HZ + 0.12, 0);
+    place(-40, 7.2, NZ + 0.12, 0);
     place(-45, 7.2, HZ - 0.12, Math.PI);
-    place(EX - 6, 7.2, -HZ + 0.12, 0);
+    place(EX - 6, 7.2, NZ + 0.12, 0);
     const clock = new THREE.MeshBasicMaterial({ map: this.screens.clock, transparent: true });
     const clk = (x: number, y: number, z: number, ry: number) => {
       const m = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), clock);
@@ -3244,7 +3251,7 @@ export class Sorter implements Scene3D {
       this.put(m);
     };
     clk(WX + 0.1, 8.4, 4, Math.PI / 2);
-    clk(-30, 8.4, -HZ + 0.1, 0);
+    clk(-30, 8.4, NZ + 0.1, 0);
     clk(-30, 8.4, HZ - 0.1, Math.PI);
   }
 
@@ -3376,7 +3383,7 @@ export class Sorter implements Scene3D {
       const corner = end.clone().addScaledVector(into, -LANE_OUT / Math.abs(into.z));
       corner.y = LOOP_Y - 0.5;
       const x = corner.x;
-      const z0 = -HZ - 1;
+      const z0 = NZ - 1;
       const path = Path.fillet([v(x, y, z0), v(x, y, -23.5), v(x, corner.y, corner.z), end], 3);
       // The belt runs right up to the loop: its end reaches over the edge of the trays
       // (just above them), so parcels transfer straight onto their tray with no gap.
@@ -3386,10 +3393,10 @@ export class Sorter implements Scene3D {
       const tunnel = this.tunnel(path, tunnelS, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
       // Lit opening in the north wall where the lane comes in.
-      this.box('dark', new THREE.MeshBasicMaterial({ color: 0x020203 }), x, y + 0.6, -HZ + 0.05, 1.8, 1.8, 0.05);
-      this.box(`door${k}`, doorMat, x, y + 1.55, -HZ + 0.1, 2.0, 0.1, 0.08);
-      this.box(`door${k}`, doorMat, x - 0.95, y + 0.6, -HZ + 0.1, 0.1, 1.9, 0.08);
-      this.box(`door${k}`, doorMat, x + 0.95, y + 0.6, -HZ + 0.1, 0.1, 1.9, 0.08);
+      this.box('dark', new THREE.MeshBasicMaterial({ color: 0x020203 }), x, y + 0.6, NZ + 0.05, 1.8, 1.8, 0.05);
+      this.box(`door${k}`, doorMat, x, y + 1.55, NZ + 0.1, 2.0, 0.1, 0.08);
+      this.box(`door${k}`, doorMat, x - 0.95, y + 0.6, NZ + 0.1, 0.1, 1.9, 0.08);
+      this.box(`door${k}`, doorMat, x + 0.95, y + 0.6, NZ + 0.1, 0.1, 1.9, 0.08);
       this.lanes.push({ path, tunnelS, lastArrive: -99, lastSpawn: -99, tunnel, door: doorMat, doorFlash: 0, doorCol: new THREE.Color(1, 1, 1) });
     }
     // A maintenance walkway along the infeeds (east of them), with a stair up to where the belts are high.
@@ -3978,11 +3985,11 @@ export class Sorter implements Scene3D {
     });
     void grid;
     const slabs = dayFloor().clone();
-    slabs.repeat.set(HW / 6, (HZ * 2) / 6);
+    slabs.repeat.set(HW / 6, HD / 6);
     slabs.needsUpdate = true;
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW, HZ * 2), new THREE.MeshStandardMaterial({ color: DAY.floor, map: slabs, roughness: 0.95, metalness: 0 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), new THREE.MeshStandardMaterial({ color: DAY.floor, map: slabs, roughness: 0.95, metalness: 0 }));
     floor.rotation.x = -Math.PI / 2;
-    floor.position.x = HCX;
+    floor.position.set(HCX, 0, HZC);
     this.put(floor);
     // Flat walls and ceiling, as in a drawing.
     // Cladding with a band of high windows.
@@ -3992,7 +3999,7 @@ export class Sorter implements Scene3D {
       t.needsUpdate = true;
       return new THREE.MeshBasicMaterial({ color: DAY.wall, map: t, side: THREE.DoubleSide });
     };
-    const wall = cladding(HZ * 2);
+    const wall = cladding(HD);
     const longWall = cladding(HW);
     void longWall;
     const cl = dayWall().clone();
@@ -4001,20 +4008,20 @@ export class Sorter implements Scene3D {
     cl.offset.set(0, 0.5);
     cl.needsUpdate = true;
     const longDay = new THREE.MeshBasicMaterial({ color: DAY.wall, map: cl, side: THREE.DoubleSide });
-    for (const z of [-HZ, HZ]) {
+    for (const z of [NZ, HZ]) {
       const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longDay);
       w.position.set(HCX, HH / 2, z);
       this.put(w);
     }
     for (const x of [WX, EX]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HZ * 2, HH), wall);
-      w.position.set(x, HH / 2, 0);
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wall);
+      w.position.set(x, HH / 2, HZC);
       w.rotation.y = Math.PI / 2;
       this.put(w);
     }
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HW, HZ * 2), new THREE.MeshBasicMaterial({ color: DAY.ceiling, side: THREE.DoubleSide }));
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), new THREE.MeshBasicMaterial({ color: DAY.ceiling, side: THREE.DoubleSide }));
     ceil.rotation.x = Math.PI / 2;
-    ceil.position.set(HCX, HH, 0);
+    ceil.position.set(HCX, HH, HZC);
     this.put(ceil);
     // Rows of linear LED fixtures between the skylights, and cable trays along the hall.
     const led = new THREE.MeshBasicMaterial({ color: 0xffffff });

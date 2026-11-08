@@ -22,7 +22,7 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
 /** z of the end of the dock belts, and of the wall. */
 export const DOCK_BELT_END = -25.4;
-const WALL_Z = -34;
+const WALL_Z = -40;
 
 /** What the docks need from a parcel (the Sorter's parcels have all of it). */
 export interface DockParcel {
@@ -139,7 +139,7 @@ const CARD_COLS = ['#ffe45c', '#9fd8ff', '#a6e8a0', '#ffb877', '#f6a6d6', '#c9b6
 const CAGES = 6;
 /** Where the stack of empty cages stands, beside the door (x offset from the dock, z). */
 const STOCK_DX = -2.3;
-const STOCK_Z = -31.6;
+const STOCK_Z = -36.6;
 /** The front parcel stops this far before the end of the belt. */
 const QUEUE_FRONT = 0.1;
 
@@ -350,7 +350,7 @@ export class Docks {
     w.steps.push({ beats: 2, to: back(c.at, turn ? aisle : door), face: c.at, pose: 'walk' });
     if (turn) w.steps.push({ beats: 2, to: back(aisle, c.at), face: aisle, pose: 'push', cage: { c, to: aisle } });
     w.steps.push({
-      beats: 2,
+      beats: Math.max(2, Math.round(door.distanceTo(aisle) / 2.5)),
       to: back(door, aisle),
       face: door,
       pose: 'push',
@@ -372,7 +372,7 @@ export class Docks {
     const stock = v(d.x + STOCK_DX, 0, STOCK_Z);
     const out = v(d.x, 0, STOCK_Z + 0.2);
     w.steps.push({
-      beats: 2,
+      beats: Math.max(2, Math.round(door.distanceTo(stock) / 2.5)),
       to: v(stock.x + 0.9, 0, stock.z),
       face: stock,
       pose: 'walk',
@@ -384,7 +384,7 @@ export class Docks {
       },
     });
     w.steps.push({ beats: 1, to: v(out.x + 0.9, 0, out.z), face: out, pose: 'push', cage: { c, to: out } });
-    w.steps.push({ beats: 2, to: back(aisle, out), face: aisle, pose: 'push', cage: { c, to: aisle } });
+    w.steps.push({ beats: Math.max(2, Math.round(out.distanceTo(aisle) / 2.5)), to: back(aisle, out), face: aisle, pose: 'push', cage: { c, to: aisle } });
     w.steps.push({
       beats: 2,
       to: back(c.at, aisle),
@@ -572,7 +572,7 @@ export class Docks {
     // The return tote for parcels sent here by mistake.
     k.box('tote', k.std(0x1f3f80, 0.6, 0.1, 0x2c62c8), x + 0.9, 0.22, E - 0.4, 0.6, 0.44, 0.42);
     const worker = this.buildWorker(v(x, 0, E - 1.1));
-    const loader = this.buildWorker(v(x + 0.9, 0, -32.4), 1);
+    const loader = this.buildWorker(v(x + 0.9, 0, -33.6), 1);
     // The stack of empty cages by the door, nested into each other.
     this.buildStock(v(x + STOCK_DX, 0, STOCK_Z));
     this.docks.push({ x, chute, city, queue: [], cages, worker, loader });
