@@ -5,7 +5,7 @@
  */
 import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
-import { BELT_SPEEDS, Sorter, type Quality } from '../scene/sorter';
+import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
 
@@ -40,6 +40,7 @@ function saveSettings(s: Settings): void {
   }
 }
 
+const el_ = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => el(tag, cls, text);
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -59,6 +60,8 @@ export class Hud {
   private soundBtn!: HTMLButtonElement;
   private rateOut!: HTMLElement;
   private panel: HTMLElement | null = null;
+  /** The shipping label of a clicked parcel. */
+  private card: { el: HTMLElement; p: Parcel; where: HTMLElement } | null = null;
   private hideTimer = 0;
   private menuBtn!: HTMLButtonElement;
   private hidden = false;
@@ -113,6 +116,10 @@ export class Hud {
     const q = this.scene.backlog;
     const txt = `${this.settings.rate}/min · ${Math.round(this.music.bpm)} BPM ${MOODS[this.music.mood]}${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
     if (this.rateOut.textContent !== txt) this.rateOut.textContent = txt;
+    if (this.card) {
+      const w = this.scene.parcelInfo(this.card.p).where;
+      if (this.card.where.textContent !== w) this.card.where.textContent = w;
+    }
     if (this.panel) {
       this.refreshPanel();
       // Stay clear of the control bar below.
@@ -376,10 +383,22 @@ export class Hud {
   private bindLook(): void {
     const canvas = document.querySelector('#app canvas') ?? document.querySelector('canvas');
     let drag: { id: number; x: number; y: number } | null = null;
+    let tap: { x: number; y: number; t: number } | null = null;
     const target = (canvas ?? window) as HTMLElement;
     target.addEventListener('pointerdown', (e: PointerEvent) => {
-      if (this.scene.cameraMode() === 'walk' || (e.target as HTMLElement).closest?.('.bar,.panel,.menu')) return;
+      if ((e.target as HTMLElement).closest?.('.bar,.panel,.menu,.label-card')) return;
+      tap = { x: e.clientX, y: e.clientY, t: performance.now() };
+      if (this.scene.cameraMode() === 'walk') return;
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    });
+    // A click or tap (not a drag) on a parcel shows its shipping label.
+    window.addEventListener('pointerup', (e) => {
+      if (!tap) return;
+      const still = Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 8 && performance.now() - tap.t < 500;
+      tap = null;
+      if (!still) return;
+      const p = this.scene.pickParcel(e.clientX, e.clientY);
+      if (p) this.showLabel(p);
     });
     window.addEventListener('pointermove', (e) => {
       if (!drag || drag.id !== e.pointerId) return;
@@ -393,6 +412,42 @@ export class Hud {
     };
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
+  }
+
+  private showLabel(p: Parcel): void {
+    this.card?.el.remove();
+    const info = this.scene.parcelInfo(p);
+    const a = info.address;
+    const el = el_('div', 'label-card');
+    const head = el_('div', 'lc-head');
+    head.append(el_('b', '', 'PARCEL'), el_('span', '', info.id));
+    const close = el_('button', 'lc-close', '×');
+    close.setAttribute('aria-label', 'Close label');
+    close.onclick = () => {
+      el.remove();
+      this.card = null;
+    };
+    head.append(close);
+    const to = el_('div', 'lc-to');
+    to.append(el_('span', 'lc-small', 'Deliver to'), el_('div', 'lc-name', a.name), el_('div', '', `${a.street} ${a.number}`), el_('div', 'lc-pc', `${a.postcode}  ${a.city.toUpperCase()}`));
+    // Barcode from the parcel number.
+    const bars = el_('div', 'lc-bars');
+    let seed = Number(info.id) * 2654435761;
+    for (let i = 0; i < 46; i++) {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      const b = el_('i');
+      b.style.width = `${1 + ((seed >>> 29) % 3)}px`;
+      b.style.marginRight = `${1 + ((seed >>> 26) & 1)}px`;
+      bars.append(b);
+    }
+    const meta = el_('div', 'lc-meta');
+    meta.append(el_('span', '', info.route), el_('span', '', `${info.kg} kg`), el_('span', '', info.size));
+    const where = el_('div', 'lc-where', info.where);
+    el.append(head, to, bars, el_('div', 'lc-id', info.id), meta, where);
+    if (info.noread) el.append(el_('div', 'lc-noread', 'Label could not be read: to manual sorting'));
+    this.root.append(el);
+    this.card = { el, p, where };
+    this.scene.followParcel(p);
   }
 
   private hide(): void {
