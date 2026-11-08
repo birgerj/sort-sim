@@ -48,9 +48,11 @@ sound is generated in code.
    two docks each). Its chute drops onto a roller belt; six roll cages stand
    round the belt end, each for part of the city's postcodes (on its cards).
    The flow projector shows the postcodes of the first three parcels and the
-   picker walks each to the right cage. A loader pushes full cages into the
-   truck (ten fit in a trailer) and brings an empty one from the stack by the
-   door. At a cleardown the amber lamp flashes, the loader pushes every cage
+   picker walks each to the right cage. As soon as a cage is full, a loader
+   takes it away and brings an empty one from the stack by the door: straight
+   into the truck (ten fit in a trailer), or, while there is no truck, to a
+   waiting place by the door, from where it goes in when the next truck is
+   there. At a cleardown the amber lamp flashes, the loader pushes every cage
    with parcels in, and the truck leaves.
 4. **Robots (south).** 20 chutes end at long pickup roller tables. A robot
    takes a parcel (the projector shows its postcode), drives to the box for
