@@ -105,6 +105,9 @@ interface Worker {
   pickFrom: V3;
   cage: number;
   yaw: number;
+  /** Loaders: where they stand to chat with the others of their group when there is no work, and the middle of the group. */
+  chat?: V3;
+  chatMid?: V3;
 }
 
 interface Dock {
@@ -205,6 +208,22 @@ export class Docks {
     this.boards = new Labels(lines.length * CAGES * 2, 0.68, 0.48, 200, 140);
     kit.put(this.boards.mesh);
     for (const [n, l] of lines.entries()) this.buildDock(l.x, l.chute, n + 1, DOCK_CITY[n] ?? n);
+    // Loaders of neighbouring docks chat in groups of two or three when there is nothing to load.
+    const groups: Dock[][] = [];
+    for (let i = 0; i < this.docks.length; ) {
+      const left = this.docks.length - i;
+      const size = left === 4 ? 2 : Math.min(3, left);
+      groups.push(this.docks.slice(i, i + size));
+      i += size;
+    }
+    for (const g of groups) {
+      const mid = v(g.reduce((a, d) => a + d.x, 0) / g.length + 0.9, 0, -33.2);
+      g.forEach((d, k) => {
+        const a = (k / g.length) * Math.PI * 2 + 0.6;
+        d.loader.chat = mid.clone().add(v(Math.cos(a) * 0.65, 0, Math.sin(a) * 0.65));
+        d.loader.chatMid = mid;
+      });
+    }
   }
 
   /** City of a dock (by chute), or −1. */
@@ -270,9 +289,15 @@ export class Docks {
         if (!w.step && !w.steps.length) {
           if (w === d.loader) this.planLoad(d);
           else this.plan(d);
+          // Nothing to load (by day): over to the others for a chat.
+          if (w === d.loader && day && !w.steps.length && w.chat && w.root.position.distanceTo(w.chat) > 0.3) {
+            w.steps.push({ beats: 1, to: w.chat, face: w.chatMid, pose: 'walk' });
+          }
         }
         if (!w.step && w.steps.length) {
           w.step = w.steps.shift()!;
+          // Walking takes as long as the distance needs (about 1.6 m a beat).
+          if (w.step.pose === 'walk') w.step.beats = Math.max(w.step.beats, Math.ceil(w.root.position.distanceTo(w.step.to) / 1.6));
           w.t0 = b;
           w.from.copy(w.root.position).setY(0);
           if (w.step.cage) w.cageFrom.copy(w.step.cage.c.g.position);
@@ -675,6 +700,12 @@ export class Docks {
       armUpR = beat % 2 ? 0.6 + s.snare : 2.6;
       bend = -0.15 * s.snare;
       step = Math.sin(bt * Math.PI) * 0.4;
+    } else if (w.chat && w.chatMid && w.root.position.distanceTo(w.chat) < 0.4) {
+      // Chatting: face the group, nod, and talk with the hands now and then.
+      face = Math.atan2(w.chatMid.x - pos.x, w.chatMid.z - pos.z);
+      const talk = Math.floor(bt / 4 + (w.home.x % 3)) % 3 === 0;
+      armF = talk ? 0.5 + 0.35 * Math.abs(Math.sin(bt * Math.PI)) : 0.1;
+      bend = 0.05 * Math.sin(bt * Math.PI * 0.5 + w.home.x);
     } else bend = 0.04 * Math.sin(bt * Math.PI * 0.5);
     w.root.position.lerp(this.t.copy(pos).setY(bounce), st ? 1 : k);
     let dy = face - w.yaw;
