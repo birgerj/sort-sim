@@ -1,5 +1,5 @@
 // Parcel hub as an empty club (three.js). Four infeeds at two heights run
-// through scan tunnels and merge onto an endless tilt-tray loop sorter, which
+// through scan tunnels and each join an endless tilt-tray loop sorter, which
 // tips parcels into chutes, sends some up a lift into a high-bay store and
 // takes them out again. Some chutes end at pickup stations where sort robots
 // take the parcels to rows of open bins (sorterFloor.ts), under flow
@@ -95,12 +95,11 @@ const LABEL_ROWS = 32;
 // 142–262: south straight, 20 robot station chutes · 263–284: west end, the infeeds.
 /**
  * Infeeds: four lanes from the west wall, two low and two high, each through
- * its own scan tunnel. Each pair merges into one belt (a Y at 30°), and each of
- * the two belts joins the west side of the loop at 30°, from the outside, the
- * low one first. The lanes of a pair share the end of their path, so INDUCT is
- * the same for both; parcels on them land on the beat, two metres apart.
+ * its own scan tunnel and each joining the west side of the loop on its own,
+ * at 30° from the outside. Two join at odd metre marks and two at even ones,
+ * so parcels land on every tray (odd and even) on the beat.
  */
-const INDUCT = [270, 270, 276, 276];
+const INDUCT = [267, 271, 276, 280];
 const LANE_Y = [1.0, 1.0, 7.0, 7.0];
 /** z of the lanes at the wall; lanes 1 and 2 run straight on, 0 and 3 join them. */
 const LANE_Z = [9.8, 7.2, 4.0, 1.4];
@@ -1384,7 +1383,8 @@ export class Sorter implements Scene3D {
   private onConveyorBeat(c: number): void {
     void c;
     // Parcels arrive at the set rate (lead notes count towards it); each goes to the lane with
-    // the shortest queue. A lane takes one parcel every two belt beats, so above that a queue
+    // the shortest queue. Each lane lands at most one parcel per belt beat on the next free tray
+    // of its parity (the loop then fills every tray); above that a queue
     // builds up at the infeed (shown on the lanes, the rest counted on the screens).
     while (this.due >= 1) {
       this.due--;
@@ -1680,7 +1680,7 @@ export class Sorter implements Scene3D {
   private spawn(k: number, color: RGB | null, lead: boolean): boolean {
     const lane = this.lanes[k]!;
     const bt = this.ct;
-    let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M), lane.lastArrive + 2);
+    let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M), lane.lastArrive + 1);
     if (this.waiting[k]! >= LANE_QUEUE) return false;
     const p = this.newParcel();
     if (!p) return false;
@@ -3150,30 +3150,14 @@ export class Sorter implements Scene3D {
     for (let k = 0; k < 4; k++) {
       const y = LANE_Y[k]!;
       const z = LANE_Z[k]!;
-      // In from the west wall; lanes 0 and 3 swing into lanes 1 and 2 at 30° (after their
-      // scan tunnels), then each pair's belt ramps to loop height, turns 60° and joins the
-      // loop at 30° from the outside.
-      const pair = k < 2 ? 1 : 2;
-      const zp = LANE_Z[pair]!;
+      // In from the west wall, through the scan tunnel, ramp to loop height, then turn and
+      // join the loop at 30° from the outside, each lane at its own point.
       loopAt(INDUCT[k]!, this.p, this.t);
       const end = this.p.clone();
       const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
-      const corner = end.clone().addScaledVector(into, -(zp - end.z) / -into.z).setY(LOOP_Y);
-      const join = Math.tan(Math.PI / 6);
-      const head = k === pair ? [v(WX - 1, y, z)] : [v(WX - 1, y, z), v(-45 - Math.abs(z - zp) / join, y, z)];
-      const path = Path.fillet([...head, v(-45, y, zp), v(-42, y, zp), v(corner.x - 6, LOOP_Y, zp), corner, end], 3);
-      // The shared part of a pair is drawn once. Where the side lane joins, the main lane's rail on
-      // that side is open, and the side lane's inner rail stops where it meets the main lane's edge.
-      const sAt = (x: number) => path.acc[Math.max(0, path.pts.findIndex((q) => q.x > x))]!;
-      const joinSide: 'L' | 'R' = pair === 1 ? 'R' : 'L';
-      if (k === pair) {
-        const end = path.len - 1.0;
-        belt(path, 0.6, end, stripIn, { [joinSide]: [[0.6, sAt(-48.2)], [sAt(-44.0), end]] });
-      } else {
-        const end = sAt(-44.3);
-        const inner: 'L' | 'R' = joinSide === 'R' ? 'L' : 'R';
-        belt(path, 0.6, end, stripIn, { [inner]: [[0.6, sAt(-48.3)]] });
-      }
+      const corner = end.clone().addScaledVector(into, -(z - end.z) / -into.z).setY(LOOP_Y);
+      const path = Path.fillet([v(WX - 1, y, z), v(-42, y, z), v(corner.x - 6, LOOP_Y, z), corner, end], 3);
+      belt(path, 0.6, path.len - 1.0, stripIn);
 
       const tunnel = this.tunnel(path, LANE_TUNNEL_X - WX + 1, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
