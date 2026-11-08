@@ -27,7 +27,8 @@ import { DOCK_BELT_END, Docks } from './docks';
 import { BoxYard } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
-import { dayFloor, dayWall } from './textures';
+import { brushed, cardboardSide, dayFloor, dayWall, wireMesh } from './textures';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { FleetEvent } from '../sim/robotFleet';
 
 type V3 = THREE.Vector3;
@@ -2025,7 +2026,10 @@ export class Sorter implements Scene3D {
     this.beltTex.repeat.set(1, 1 / 1.2);
     const beltMat = this.theme(new THREE.MeshStandardMaterial({ map: this.beltTex, roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide }), 0xffffff);
     const frameMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x2b5ea8, roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide }), DAY.teal);
-    const chuteMat = this.theme(new THREE.MeshStandardMaterial({ color: 0xa8b0ba, roughness: 0.3, metalness: 0.9, side: THREE.DoubleSide }), DAY.tealP);
+    const chuteTex = brushed().clone();
+    chuteTex.repeat.set(1, 1 / 3);
+    chuteTex.needsUpdate = true;
+    const chuteMat = this.theme(new THREE.MeshStandardMaterial({ color: 0xa8b0ba, map: chuteTex, roughness: 0.3, metalness: 0.9, side: THREE.DoubleSide }), DAY.tealP);
     const trackMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x3c4048, roughness: 0.45, metalness: 0.7, side: THREE.DoubleSide }), DAY.teal);
     const legMat = this.std(0x6b7280, 0.5, 0.7, DAY.teal);
     const strip = () => {
@@ -2041,7 +2045,13 @@ export class Sorter implements Scene3D {
     const stripIn = strip();
     const stripLoop = strip();
     const stripChute = strip();
-    const geo: Record<string, THREE.BufferGeometry[]> = { belt: [], frame: [], chute: [], track: [], sIn: [], sLoop: [], sChute: [] };
+    const geo: Record<string, THREE.BufferGeometry[]> = { belt: [], frame: [], chute: [], track: [], sIn: [], sLoop: [], sChute: [], rail: [] };
+    // Guide rails above the belt edges (closed little profiles), on posts; the loop gets a cable tray on its inside.
+    const RAIL_L: [number, number][] = [[-0.74, 0.2], [-0.74, 0.3], [-0.66, 0.3], [-0.66, 0.2], [-0.74, 0.2]];
+    const RAIL_R: [number, number][] = RAIL_L.map(([x, y]) => [-x, y]);
+    const railMat = this.std(0x8a9099, 0.35, 0.8, 0xdfe3e8);
+    const motorMat = this.std(0x2a2c31, 0.5, 0.5, 0x6b7280);
+    const footMat = this.std(0x3a3d44, 0.6, 0.5, 0xb9c0c8);
     const BELT: [number, number][] = [[-0.6, 0], [0.6, 0]];
     const FRAME: [number, number][] = [[-0.68, 0.1], [-0.68, -0.28], [0.68, -0.28], [0.68, 0.1]];
     const LEDL: [number, number][] = [[-0.69, -0.07], [-0.69, -0.15]];
@@ -2052,8 +2062,15 @@ export class Sorter implements Scene3D {
         const h = this.p.y - 0.3;
         if (h < 0.3) continue;
         this.n.set(-this.t.z, 0, this.t.x).normalize();
-        for (const sg of [-1, 1]) this.box('leg', legMat, this.p.x + this.n.x * half * sg, h / 2, this.p.z + this.n.z * half * sg, 0.1, h, 0.1);
+        for (const sg of [-1, 1]) {
+          const lx = this.p.x + this.n.x * half * sg;
+          const lz = this.p.z + this.n.z * half * sg;
+          this.box('leg', legMat, lx, h / 2, lz, 0.1, h, 0.1);
+          this.box('foot', footMat, lx, 0.01, lz, 0.22, 0.02, 0.22);
+        }
         this.box('leg', legMat, this.p.x, h - 0.05, this.p.z, Math.abs(this.n.x) * half * 2 + 0.1, 0.08, Math.abs(this.n.z) * half * 2 + 0.1);
+        // A lower cross bar for the taller supports.
+        if (h > 1.5) this.box('leg', legMat, this.p.x, 0.35, this.p.z, Math.abs(this.n.x) * half * 2 + 0.1, 0.06, Math.abs(this.n.z) * half * 2 + 0.1);
       }
     };
     const belt = (path: Path, s0: number, s1: number, led = stripIn) => {
@@ -2061,7 +2078,17 @@ export class Sorter implements Scene3D {
       geo.frame!.push(extrude(path, FRAME, s0, s1));
       const k = led === stripIn ? 'sIn' : led === stripLoop ? 'sLoop' : 'sChute';
       geo[k]!.push(extrude(path, LEDL, s0, s1), extrude(path, LEDR, s0, s1));
+      geo.rail!.push(extrude(path, RAIL_L, s0, s1), extrude(path, RAIL_R, s0, s1));
       legs(path, s0, s1, 0.6);
+      // Drive motors under the frame, one per section.
+      for (let s = s0 + 4; s < s1 - 2; s += 12) {
+        path.at(s, this.p, this.t);
+        this.n.set(-this.t.z, 0, this.t.x).normalize();
+        const mx = this.p.x + this.n.x * 0.45;
+        const mz = this.p.z + this.n.z * 0.45;
+        this.box('motor', motorMat, mx, this.p.y - 0.45, mz, 0.36, 0.3, 0.36);
+        this.box('motor', motorMat, mx, this.p.y - 0.45, mz, 0.5, 0.18, 0.18, undefined, Math.atan2(this.t.x, this.t.z));
+      }
     };
 
     // Infeeds: four lanes side by side, two low and two high, each through its own scan tunnel.
@@ -2099,9 +2126,32 @@ export class Sorter implements Scene3D {
     for (let s = 1; s < LOOP_LEN; s += 4) {
       loopAt(s, this.p, this.t);
       this.box('leg', legMat, this.p.x, (LOOP_Y - 0.6) / 2, this.p.z, 0.22, LOOP_Y - 0.6, 0.22);
+      this.box('foot', footMat, this.p.x, 0.01, this.p.z, 0.4, 0.02, 0.4);
+    }
+    // Linear drive units and a cable tray on the inside of the loop.
+    for (let s = 9; s < LOOP_LEN; s += 24) {
+      loopAt(s, this.p, this.t);
+      this.box('motor', motorMat, this.p.x, LOOP_Y - 0.85, this.p.z, Math.abs(this.t.x) * 1.4 + 0.5, 0.36, Math.abs(this.t.z) * 1.4 + 0.5);
+    }
+    {
+      const tray: V3[] = [];
+      for (let s = 0; s <= LOOP_LEN; s += 1) {
+        loopAt(s, this.p, this.t);
+        outward(this.t, this.n);
+        tray.push(this.p.clone().addScaledVector(this.n, -1.05).setY(LOOP_Y - 0.55));
+      }
+      const tp = new Path(tray, true);
+      geo.rail!.push(extrude(tp, [[-0.15, 0.08], [-0.15, 0], [0.15, 0], [0.15, 0.08]], 0, tp.len, 0.5));
     }
     const trayMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x8c96a4, roughness: 0.35, metalness: 0.85 }), 0xffffff, 0.7);
-    this.trays = new THREE.InstancedMesh(new THREE.BoxGeometry(1.25, 0.12, PITCH * 0.9), trayMat, TRAYS);
+    // Tilt trays: a plate with raised side lips and a pivot block underneath.
+    const trayGeo = mergeGeometries([
+      new THREE.BoxGeometry(1.2, 0.06, PITCH * 0.88).toNonIndexed(),
+      new THREE.BoxGeometry(0.05, 0.12, PITCH * 0.88).translate(-0.6, 0.04, 0).toNonIndexed(),
+      new THREE.BoxGeometry(0.05, 0.12, PITCH * 0.88).translate(0.6, 0.04, 0).toNonIndexed(),
+      new THREE.BoxGeometry(0.3, 0.1, 0.3).translate(0, -0.08, 0).toNonIndexed(),
+    ])!;
+    this.trays = new THREE.InstancedMesh(trayGeo, trayMat, TRAYS);
     this.trays.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.trays.frustumCulled = false;
     this.put(this.trays);
@@ -2194,6 +2244,7 @@ export class Sorter implements Scene3D {
     merged(geo.frame!, frameMat);
     merged(geo.chute!, chuteMat);
     merged(geo.track!, trackMat);
+    merged(geo.rail!, railMat);
     merged(geo.sIn!, stripIn);
     merged(geo.sLoop!, stripLoop);
     merged(geo.sChute!, stripChute);
@@ -2217,9 +2268,27 @@ export class Sorter implements Scene3D {
       g.add(m);
       return m;
     };
-    this.inkify(add(new THREE.BoxGeometry(0.3, H, D), shell, -W / 2, H / 2 - 0.3, 0));
-    this.inkify(add(new THREE.BoxGeometry(0.3, H, D), shell, W / 2, H / 2 - 0.3, 0));
-    this.inkify(add(new THREE.BoxGeometry(W + 0.3, 0.4, D), shell, 0, H - 0.1, 0));
+    // Rounded shell: two side columns and a roof, with camera pods, a light stack and a cable duct.
+    for (const x of [-W / 2, W / 2]) this.outline(add(new RoundedBoxGeometry(0.34, H, D, 3, 0.08), shell, x, H / 2 - 0.3, 0), 0.02);
+    this.outline(add(new RoundedBoxGeometry(W + 0.34, 0.44, D, 3, 0.1), shell, 0, H - 0.1, 0), 0.02);
+    const dark = this.std(0x1b1c20, 0.5, 0.4, 0x2a2c31);
+    const glass = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.4, 0.9) });
+    for (const z of [-0.6, 0.6]) {
+      for (const x of [-W / 3, 0, W / 3]) {
+        this.inkify(add(new THREE.BoxGeometry(0.22, 0.16, 0.3), dark, x, H + 0.2, z));
+        add(new THREE.CircleGeometry(0.06, 12), glass, x, H + 0.2, z + Math.sign(z) * 0.152).rotation.y = z < 0 ? Math.PI : 0;
+      }
+    }
+    // Vents on the columns.
+    for (const x of [-W / 2 - 0.172, W / 2 + 0.172]) {
+      for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.01, 0.04, 0.9), dark, x, 0.25 + k * 0.1, -0.7);
+    }
+    // Signal light stack: green, amber, red.
+    [0x22cc66, 0xf2a51a, 0xe2231a].forEach((c, k) => {
+      add(new THREE.CylinderGeometry(0.07, 0.07, 0.12, 12), new THREE.MeshBasicMaterial({ color: c }), W / 2, H + 0.18 + k * 0.13, D / 2 - 0.25);
+    });
+    add(new THREE.BoxGeometry(0.18, 0.12, 0.18), dark, W / 2, H + 0.08, D / 2 - 0.25);
+    this.inkify(add(new THREE.BoxGeometry(0.2, 0.14, D * 0.8), dark, -W / 2, H + 0.18, 0));
     // By day: a barcode panel on both faces and the eye mark on the side, as in the illustration.
     for (const z of [D / 2 + 0.02, -D / 2 - 0.02]) {
       const p = add(new THREE.PlaneGeometry(Math.min(1.4, W - 0.2), 0.3), new THREE.MeshBasicMaterial({ map: barcodeTex() }), 0, H - 0.1, z);
@@ -2255,6 +2324,27 @@ export class Sorter implements Scene3D {
       for (const x of [RACK_X0, RACK_X1]) this.box('upr', upr, x, 4.8, z, 0.1, 9.6, 0.1);
     }
     const carton = this.std(0xffffff, 0.88, 0);
+    carton.map = cardboardSide();
+    // Diagonal bracing between the upright pairs, base plates and yellow end guards.
+    const braces: THREE.BufferGeometry[] = [];
+    const brace = (x: number, z: number, y0: number, y1: number, dir: 1 | -1) => {
+      const len = Math.hypot(y1 - y0, RACK_X1 - RACK_X0);
+      const ang = Math.atan2(RACK_X1 - RACK_X0, y1 - y0) * dir;
+      braces.push(new THREE.BoxGeometry(0.04, len, 0.04).rotateZ(-ang).translate(x, (y0 + y1) / 2, z).toNonIndexed());
+    };
+    for (let z = -zMax; z <= zMax + 0.01; z += BAY) {
+      for (let y = 0.2; y < 9.4; y += 1.6) brace((RACK_X0 + RACK_X1) / 2, z, y, y + 1.6, Math.round(y / 1.6) % 2 ? 1 : -1);
+      for (const x of [RACK_X0, RACK_X1]) this.box('rackfoot', this.std(0x3a3d44, 0.6, 0.5, 0xb9c0c8), x, 0.02, z, 0.24, 0.04, 0.24);
+    }
+    if (braces.length) {
+      const bm = this.mesh(mergeGeometries(braces)!, upr);
+      void bm;
+    }
+    const guard = this.std(0x8a6e00, 0.6, 0.2, 0xf2c200);
+    for (const z of [-zMax - 0.3, zMax + 0.3]) {
+      this.box('rguard', guard, (RACK_X0 + RACK_X1) / 2, 0.3, z, 1.8, 0.6, 0.12);
+      for (const x of [RACK_X0, RACK_X1]) this.box('rguard', guard, x, 0.3, z, 0.12, 0.6, 0.3);
+    }
     for (const y of LEVELS) {
       for (const x of [RACK_X0, RACK_X1]) this.box('beam', beam, x, y - 0.08, 0, 0.08, 0.14, zMax * 2);
       this.box('srail', this.std(0x50555e, 0.4, 0.8, DAY.tealD), SHUTTLE_X, y - 0.2, 0, 0.9, 0.06, zMax * 2);
@@ -2282,6 +2372,26 @@ export class Sorter implements Scene3D {
     const mast = this.std(0x50555e, 0.4, 0.8, DAY.teal);
     for (const z of [-1.75, 1.75]) this.box('mast', mast, LIFT_X + 0.95, 5.2, z, 0.25, 10.4, 0.25);
     this.box('mast', mast, LIFT_X + 0.95, 10.45, 0, 0.3, 0.3, 3.8);
+    // Mast cross bracing, a cable chain and a safety fence with wire mesh around the lift.
+    for (let y = 1.2; y < 10; y += 2.2) this.box('mast', mast, LIFT_X + 0.95, y, 0, 0.12, 0.12, 3.5);
+    this.box('liftchain', this.std(0x1b1c20, 0.6, 0.4, 0x3a3d44), LIFT_X + 1.15, 5.2, 1.4, 0.08, 9.6, 0.25);
+    {
+      const post = this.std(0x8a6e00, 0.5, 0.3, 0xf2c200);
+      const t = wireMesh().clone();
+      t.repeat.set(3, 2);
+      t.needsUpdate = true;
+      const panel = this.std(0x3a3d44, 0.5, 0.5, 0x6b7280);
+      panel.alphaMap = t;
+      panel.alphaTest = 0.5;
+      panel.side = THREE.DoubleSide;
+      const fx = LIFT_X - 2.6;
+      for (const z of [-2.6, 2.6]) {
+        this.box('fpost', post, fx, 1.1, z, 0.08, 2.2, 0.08);
+        this.box('fpost', post, LIFT_X + 0.5, 1.1, z, 0.08, 2.2, 0.08);
+        const m = this.mesh(new THREE.PlaneGeometry(LIFT_X + 0.5 - fx, 2.0), panel, (fx + LIFT_X + 0.5) / 2, 1.1, z);
+        void m;
+      }
+    }
     this.carriage = new THREE.Group();
     this.carriage.position.set(LIFT_X, LOOP_Y, 0);
     this.put(this.carriage);
@@ -2548,6 +2658,13 @@ export class Sorter implements Scene3D {
       g.lineTo(14, 12);
       g.stroke();
       for (const x of [-14, 0, 14]) g.fillRect(x - 5, 12, 10, 10);
+    });
+    this.sign('Storage', '#2fa58f', LIFT_X - 3, 9.4, -4, -Math.PI / 2, (g) => {
+      g.strokeRect(-16, -20, 32, 40);
+      for (const y of [-8, 4]) g.fillRect(-16, y, 32, 3);
+      g.fillRect(-10, -16, 8, 7);
+      g.fillRect(2, -4, 10, 7);
+      g.fillRect(-8, 8, 12, 7);
     });
     this.only = undefined;
     this.flushBoxes();

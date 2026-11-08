@@ -106,8 +106,13 @@ the simulation:
 - **Done so far (detail pass 1):** robots, forklifts (with driver),
   people, boxes on pallets, roll cages (wire mesh), dock doors (sectional
   doors, checker plate, seals, lights), day floor and wall cladding.
-  Still plain: loop and belts, chutes, scan tunnels, store rack and lift,
-  projectors, signs, control room, manual sort table.
+  Pass 2: belts (guide rails, drive motors, feet), loop (tilt trays with
+  lips, drive units, cable tray), brushed chutes, scan tunnels (rounded
+  shell, camera pods, light stack, vents), store rack (bracing, guards,
+  cardboard cartons), lift (mast bracing, cable chain, mesh fence),
+  projectors (finned housing, yoke, lens).
+  Still plain: signs, control room, monitoring desk, manual sort table,
+  trolleys, parcels' shapes (all boxes), ceiling and lights.
 - **Where each thing is built:** loop/belts/chutes `buildConveyors`, scan
   tunnels `tunnel()`, store and lift `buildStore`, parcels `buildParcels`,
   hall `buildHall` (night) and `buildDay` (day), people `person()`, signs
