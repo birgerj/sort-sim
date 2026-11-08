@@ -188,6 +188,7 @@ export class Docks {
   private boardsDay: boolean | null = null;
   private readonly t = new THREE.Vector3();
   private readonly hands = new THREE.Vector3();
+  private readonly t2 = new THREE.Vector3();
   private readonly o = new THREE.Object3D();
   private readonly q = new THREE.Quaternion();
   /** Postcode boards on the cages (two per cage, back to back). */
@@ -211,7 +212,8 @@ export class Docks {
 
   /** Projector position and default target for each dock (for the projector rig). */
   static projectorAt(x: number): V3 {
-    return v(x, 0, DOCK_BELT_END - 1.4);
+    // Right above the end of the belt, where the parcels wait.
+    return v(x, 0, DOCK_BELT_END + 1.3);
   }
 
   /** Belt length taken by the queue at a dock's belt end (by chute). */
@@ -435,7 +437,8 @@ export class Docks {
     w.cage = ci;
     const c = d.cages[ci]!;
     const belt = v(d.x, 0, DOCK_BELT_END + 0.35);
-    const near = w.home.clone().lerp(c.at, 0.5).setY(0);
+    // In front of the cage's open side, square to it, so the parcel goes straight in.
+    const near = c.at.clone().addScaledVector(v(Math.sin(c.ry), 0, Math.cos(c.ry)), 1.15).setY(0);
     w.steps.push(
       { beats: 1, to: w.home, face: belt, pose: 'pick' },
       { beats: 1, to: near, face: c.at, pose: 'carry' },
@@ -614,7 +617,17 @@ export class Docks {
         // (Its own vector: cageTop below uses this.t.)
         const hands = this.hands.set(Math.sin(w.yaw) * 0.55, 0.95, Math.cos(w.yaw) * 0.55).add(w.root.position).setY(0.95);
         if (st.pose === 'pick') w.parcel.pos.lerpVectors(w.pickFrom, hands, ease(ph));
-        else if (st.pose === 'drop') w.parcel.pos.lerpVectors(hands, w.cage < 0 ? v(d.x + 0.9, 0.5, DOCK_BELT_END - 0.4) : this.cageTop(d.cages[w.cage]!), ease(ph));
+        else if (st.pose === 'drop') {
+          if (w.cage < 0) w.parcel.pos.lerpVectors(hands, v(d.x + 0.9, 0.5, DOCK_BELT_END - 0.4), ease(ph));
+          else {
+            // Straight in through the open top half of the front, then down onto the pile.
+            const top = this.cageTop(d.cages[w.cage]!);
+            const enter = this.t2.copy(top).setY(Math.max(top.y, 1.3));
+            const u = ease(ph);
+            if (u < 0.6) w.parcel.pos.lerpVectors(hands, enter, u / 0.6);
+            else w.parcel.pos.lerpVectors(enter, top, (u - 0.6) / 0.4);
+          }
+        }
         else w.parcel.pos.copy(hands);
         this.q.setFromAxisAngle(UP, w.yaw);
         w.parcel.q.copy(this.q);
