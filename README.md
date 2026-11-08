@@ -54,7 +54,8 @@ sound is generated in code.
    the truck is doing.
 6. **Storage (east).** Parcels go up a lift into a high-bay rack (a buffer)
    and come back out onto the loop later.
-7. Around it: manual sorting (robots bring the exceptions to a drop; a belt
+7. Around it: robot parking in one block at the west end, manual sorting
+   at the east end (robots bring the exceptions to a drop; a belt
    takes them to the table; a worker puts them in pigeonholes), the control
    room with a video wall (live plan: chute fill, cleardowns, trucks, robots,
    infeed queue), computing racks, forklifts, signs.

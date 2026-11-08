@@ -298,7 +298,9 @@ export class Fleet {
 }
 
 /** The robot floor in the hall, south of the loop. */
-export const FLOOR = { x0: -22, z0: 18.8, cs: 1.5, ni: 84, nj: 7 };
+export const FLOOR = { x0: -40, z0: 18.8, cs: 1.5, ni: 96, nj: 7 };
+/** Columns at the west end that are the parking area (columns 0 and 1 are its aisles). */
+export const PARK_COLS = 13;
 
 /**
  * Grid, parking spots and bins of the robot floor. Stations are the pickup
@@ -309,18 +311,17 @@ export const FLOOR = { x0: -22, z0: 18.8, cs: 1.5, ni: 84, nj: 7 };
 export function sorterFloor(stationColumns: number[]): { grid: Grid; parks: Cell[]; stations: Cell[]; bins: Bin[] } {
   const grid = new Grid(FLOOR.ni, FLOOR.nj);
   const parks: Cell[] = [];
-  // (Cell (0, 2) is not a parking spot: robots unload small parcels there, into the drop to the manual sort table.)
-  for (let j = 2; j < FLOOR.nj; j++) parks.push(...(j === 2 ? [] : [[0, j] as Cell]), [FLOOR.ni - 1, j]);
-  // Parking bays between the boxes in the last row (odd columns), entered from row 5,
-  // so robots wait close to where they unload and all lanes stay open end to end.
-  for (let i = 3; i <= FLOOR.ni - 4; i += 2) parks.push([i, FLOOR.nj - 1]);
+  // The parking area at the west end: rows of spots, each beside a lane (rows 1 and 5 run west
+  // into the area, row 4 east out of it; columns 0 (south) and 1 (north) join them), four deep.
+  for (let i = 2; i < PARK_COLS; i++) for (const j of [0, 2, 3, 6]) parks.push([i, j]);
   const stations: Cell[] = stationColumns.map((i) => [i, 0]);
   const bins: Bin[] = [];
   const j = FLOOR.nj - 1;
-  for (let i = 2; i <= FLOOR.ni - 3; i += 2) bins.push({ i, j, access: [] });
+  for (let i = PARK_COLS + 2; i <= FLOOR.ni - 3; i += 2) bins.push({ i, j, access: [] });
   for (const b of bins) grid.set(b.i, b.j, BLOCK);
   for (const b of bins) b.access = ([[b.i, b.j - 1]] as Cell[]).filter(([i, jj]) => grid.inside(i, jj) && grid.get(i, jj) === FREE);
-  // Last: the drop to the manual sort table, just off the west end of row 2 (an eastbound lane, so robots drive on from it).
-  bins.push({ i: -1, j: 2, access: [[0, 2]], manual: true });
+  // Last: the drop to the manual sort table, just off the east end of row 2 (an eastbound lane;
+  // robots leave it up the last column, northbound).
+  bins.push({ i: FLOOR.ni, j: 2, access: [[FLOOR.ni - 1, 2]], manual: true });
   return { grid, parks, stations, bins };
 }

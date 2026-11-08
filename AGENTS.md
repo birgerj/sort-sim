@@ -109,9 +109,10 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   centre and width.
 - Store: `STORE_DX` shifts the whole store east of the loop.
 - Robot floor: `FLOOR` in `robotFleet.ts` (x0, z0, cell size, columns, rows).
-  Boxes are in the last row (every other column), parking at both ends and
-  on islands in row 3. Keep rows 2 and 4 (eastbound lanes) open end to end,
-  or robots fall back to driving against the lanes and deadlock. Run
+  Boxes are in the last row (every other column). All parking is one block
+  at the west end (`PARK_COLS` columns, rows 0, 2, 3, 6; columns 0 and 1 are
+  the aisles in and out). The manual-sort drop is at the east end, the table
+  east of it (`TABLE` in `floor.ts`). Run
   `npm test` after any change.
 - South aisle: `AISLE_Z` in `boxYard.ts`; doors and forklift count there.
 
