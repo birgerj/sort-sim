@@ -1121,6 +1121,7 @@ export class Sorter implements Scene3D {
           reserve: (x, n) => this.trucks.reserve(NORTH_DOORS.indexOf(x), n),
           load: (x, vol, kg) => this.trucks.load(NORTH_DOORS.indexOf(x), vol, kg),
           clearing: (x) => this.trucks.clearing(NORTH_DOORS.indexOf(x)),
+          slot: (x) => this.trucks.nextSlot(NORTH_DOORS.indexOf(x)),
         },
       },
     );
@@ -2191,6 +2192,9 @@ export class Sorter implements Scene3D {
   private dockFree(dest: number): number {
     const belt = this.chutes[dest]!.belt;
     if (!belt) return 0;
+    // During a cleardown nothing more goes down this chute, until everything is in the truck.
+    const door = NORTH_DOORS.indexOf(this.dockOf.get(dest) ?? NaN);
+    if (door >= 0 && this.trucks && (this.trucks.clearing(door) || this.trucks.docks[door]?.state === 'closing')) return 0;
     return belt.len - this.docks.depth(dest) - (this.dockLoad.get(dest) ?? 0) - 0.2;
   }
 

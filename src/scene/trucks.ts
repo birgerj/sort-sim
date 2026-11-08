@@ -209,6 +209,20 @@ export class Trucks {
     if (d) d.reserved = Math.max(0, d.reserved + n);
   }
 
+  /**
+   * Where the next load goes in this trailer (world position of its place, from the far
+   * end towards the door), or null if the trailer is full or not at the door.
+   */
+  nextSlot(i: number): THREE.Vector3 | null {
+    const d = this.docks[i];
+    if (!d || (d.state !== 'open' && d.state !== 'cleardown')) return null;
+    const n = d.load + d.reserved;
+    const s = d.slots[n];
+    if (!s) return null;
+    d.trailer.updateMatrixWorld();
+    return s.getWorldPosition(new THREE.Vector3()).setY(0);
+  }
+
   /** One more load in the trailer (a cage or a box), with its volume and weight. */
   load(i: number, vol = 0, kg = 0): void {
     const d = this.docks[i];

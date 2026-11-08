@@ -65,6 +65,8 @@ export interface TruckLink {
   load(x: number, vol: number, kg: number): void;
   /** The truck is in cleardown (it leaves once everything is in). */
   clearing?(x: number): boolean;
+  /** Where the next load goes in the trailer (null: full, or no truck). */
+  slot?(x: number): V3 | null;
 }
 
 /**
@@ -283,12 +285,23 @@ export class Docks {
    */
   private planLoad(d: Dock): void {
     const T = this.handlers.truck;
-    const truck = T.open(d.x) || T.clearing?.(d.x) === true;
+    // A truck at the door with room for another cage.
+    const truck = (T.open(d.x) || T.clearing?.(d.x) === true) && !!T.slot?.(d.x);
     const door = v(d.x, 0, WALL_Z - 1.4);
     // A truck at the door: first the cages that waited for it.
     const st = d.staged.find((x) => !x.moving);
     if (truck && st) {
       this.loadStaged(d, st, door);
+      return;
+    }
+    // After a cleardown: empty cages from the stack into every free place first.
+    const gone = d.cages.find((c) => c.state === 'gone');
+    if (gone && !T.clearing?.(d.x)) {
+      gone.state = 'moving';
+      gone.g.position.set(d.x + STOCK_DX, 0, STOCK_Z);
+      gone.g.rotation.y = 0;
+      gone.g.visible = true;
+      this.fetchEmpty(d, gone, v(d.x, 0, gone.at.z));
       return;
     }
     const home = d.cages.filter((c) => c.state === 'home');
@@ -299,6 +312,7 @@ export class Docks {
       if (c) this.pushJob(d, c, door, v(d.x, 0, c.at.z));
       return;
     }
+    if (T.clearing?.(d.x)) return;
     // No truck: a full cage is still taken away at once, to wait by the door, and replaced.
     const spot = STAGE_AT.findIndex((_, i) => !d.staged.some((x) => x.spot === i));
     if (full && spot >= 0 && d.spares.length) this.stageJob(d, full, spot);
@@ -344,18 +358,22 @@ export class Docks {
     const w = d.loader;
     const T = this.handlers.truck;
     st.moving = true;
+    const slot = T.slot?.(d.x) ?? door;
     T.reserve(d.x, 1);
     const tmp: Cage = { at: st.g.position.clone(), range: [0, 0], n: 0, vol: 0, kg: 0, g: st.g, pile: [], items: [], state: 'moving', ry: 0 };
     const mid = v(d.x, 0, st.g.position.z);
     const back = (a: V3, from: V3) => a.clone().addScaledVector(this.t.subVectors(a, from).setY(0).normalize(), -0.9);
     w.steps.push({ beats: 2, to: back(tmp.at, mid), face: tmp.at, pose: 'walk' });
     w.steps.push({ beats: 2, to: back(mid, tmp.at), face: mid, pose: 'push', cage: { c: tmp, to: mid } });
+    const row = v(d.x, 0, slot.z);
+    w.steps.push({ beats: 2, to: back(door, mid), face: door, pose: 'push', cage: { c: tmp, to: door } });
+    w.steps.push({ beats: Math.max(2, Math.round(door.distanceTo(row) / 2.5)), to: back(row, door), face: row, pose: 'push', cage: { c: tmp, to: row } });
     w.steps.push({
-      beats: 2,
-      to: back(door, mid),
-      face: door,
+      beats: 1,
+      to: back(slot, row),
+      face: slot,
       pose: 'push',
-      cage: { c: tmp, to: door },
+      cage: { c: tmp, to: slot },
       done: () => {
         T.load(d.x, st.vol, st.kg);
         for (const p of st.items) p.dead = true;
@@ -365,6 +383,7 @@ export class Docks {
         T.reserve(d.x, -1);
       },
     });
+    w.steps.push({ beats: 3, to: door.clone().setZ(WALL_Z + 0.8), face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
     w.steps.push({ beats: 2, to: d.loader.home, face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
   }
 
@@ -464,17 +483,23 @@ export class Docks {
     const w = d.loader;
     const T = this.handlers.truck;
     c.state = 'moving';
+    // (Its place in the trailer is taken before it is reserved: the next one gets the next place.)
+    const slot = T.slot?.(d.x) ?? door;
     T.reserve(d.x, 1);
     const back = (to: V3, from: V3) => to.clone().addScaledVector(this.t.subVectors(to, from).setY(0).normalize(), -0.9);
     const turn = c.at.distanceTo(aisle) > 0.5;
     w.steps.push({ beats: 2, to: back(c.at, turn ? aisle : door), face: c.at, pose: 'walk' });
     if (turn) w.steps.push({ beats: 2, to: back(aisle, c.at), face: aisle, pose: 'push', cage: { c, to: aisle } });
+    // Into the trailer: straight in to the row of its place, then across into the place.
+    const row = v(d.x, 0, slot.z);
+    w.steps.push({ beats: Math.max(2, Math.round(door.distanceTo(aisle) / 2.5)), to: back(door, aisle), face: door, pose: 'push', cage: { c, to: door } });
+    w.steps.push({ beats: Math.max(2, Math.round(door.distanceTo(row) / 2.5)), to: back(row, door), face: row, pose: 'push', cage: { c, to: row } });
     w.steps.push({
-      beats: Math.max(2, Math.round(door.distanceTo(aisle) / 2.5)),
-      to: back(door, aisle),
-      face: door,
+      beats: 1,
+      to: back(slot, row),
+      face: slot,
       pose: 'push',
-      cage: { c, to: door },
+      cage: { c, to: slot },
       done: () => {
         T.load(d.x, c.vol, c.kg);
         // Its parcels leave with the truck; the cage stays in the trailer.
@@ -488,10 +513,16 @@ export class Docks {
         T.reserve(d.x, -1);
       },
     });
-    // An empty one from the stack, into the free place.
+    // During a cleardown: straight back for the next cage (the empties come with the next truck).
+    if (T.clearing?.(d.x)) {
+      w.steps.push({ beats: 3, to: door.clone().setZ(WALL_Z + 0.8), face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
+      return;
+    }
+    // Out of the trailer, then an empty one from the stack into the free place.
     w.steps.push({
-      beats: 1,
-      to: w.root.position.clone(),
+      beats: 3,
+      to: door.clone().setZ(WALL_Z + 0.8),
+      face: v(d.x, 0, DOCK_BELT_END),
       pose: 'walk',
       done: () => {
         c.state = 'moving';
