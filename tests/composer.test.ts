@@ -8,8 +8,9 @@ describe('composer', () => {
     for (let bar = 0; bar < 64; bar++) expect(a.bar(bar)).toEqual(b.bar(bar));
   });
 
-  it('follows the form: kick only in the groove', () => {
+  it('follows the form: kick only in the groove (deep style)', () => {
     const c = new Composer(3);
+    c.mood = 1;
     for (let bar = 0; bar < FORM_BARS * 2; bar++) {
       const kicks = c.bar(bar).filter((e) => e.voice === 'kick').length;
       if (sectionOf(bar) === 'groove') expect(kicks).toBe(4);
@@ -35,7 +36,7 @@ describe('composer', () => {
     }
   });
 
-  it('changes with the mood: no kick when relaxed, an acid line only at the top', () => {
+  it('changes with the style: no kick when ambient, pads only when slow, acid only at the top', () => {
     for (const mood of [0, 1, 2, 3] as const) {
       const c = new Composer(5);
       c.mood = mood;
@@ -47,6 +48,16 @@ describe('composer', () => {
         acid += ev.filter((e) => e.voice === 'acid').length;
         for (const e of ev) if (e.voice === 'acid') expect(e.midi).toBeGreaterThan(20);
       }
+      const pads = (() => {
+        const c2 = new Composer(5);
+        c2.mood = mood;
+        let n = 0;
+        for (let bar = 0; bar < FORM_BARS; bar++) n += c2.bar(bar).filter((e) => e.voice === 'pad').length;
+        return n;
+      })();
+      // Pads belong to the slow styles; house and acid have none.
+      if (mood >= 2) expect(pads).toBe(0);
+      else expect(pads).toBeGreaterThan(0);
       if (mood === 0) expect(kicks).toBe(0);
       else expect(kicks).toBeGreaterThan(0);
       if (mood === 3) expect(acid).toBeGreaterThan(50);

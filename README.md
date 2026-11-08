@@ -103,7 +103,7 @@ Sort sim is a progressive web app: install it from the browser (the **Install ap
 
 Click or tap a parcel to see its shipping label (a made-up recipient, with a common Dutch surname and random initials, at a real street in the parcel's city; postcode letters and house number are random) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
 
-The music follows the parcels per minute: its tempo moves (3 BPM per bar) between 60 BPM at the lowest rate and 160 BPM at the highest, and its style with it: ambient below 82 BPM, the steady song, driving techno from 112, and an acid bass line from 136. The whole hall runs on the beat, so it speeds up and slows down with the music.
+The music follows the parcels per minute: its tempo moves (3 BPM per bar) between 60 BPM at the lowest rate and 160 BPM at the highest, and its style with it, four of them: ambient with warm pads below 82 BPM, deep (thin pads, soft beat) up to 112, pounding house (claps, open hats, off-beat bass, chord stabs, no pads) up to 136, and acid techno above. The whole hall runs on the beat, so it speeds up and slows down with the music.
 
 The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
 
