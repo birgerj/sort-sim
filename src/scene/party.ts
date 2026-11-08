@@ -131,8 +131,8 @@ export class Party {
     d.legL.rotation.x = -0.1 * s.kick;
     d.legR.rotation.x = 0.1 * s.kick;
     this.panel.color.copy(s.cols[Math.floor(bt) % s.cols.length]!).multiplyScalar(0.6 + s.kick * 1.4);
-    // Laser fans: in the groove, a fan of beams sweeping back and forth on the bar.
-    const on = s.energy > 0.5;
+    // Laser fans: switched off (they crossed the whole hall); kept for an easy return.
+    const on = false && s.energy > 0.5;
     const sweep = Math.sin((s.bar % 2) * Math.PI) * 0.6;
     for (let i = 0; i < FANS; i++) {
       if (!on) {

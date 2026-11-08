@@ -91,6 +91,7 @@ export class Life {
     this.buildCharging();
     this.buildSafety();
     this.buildBreakArea();
+    this.buildExtras();
     this.buildFloorNames();
   }
 
@@ -271,6 +272,53 @@ export class Life {
     const rail = k.std(0x8a6e00, 0.5, 0.3, 0xf2c200);
     for (let x = -60; x <= -26; x += 2) k.box('wrail', rail, x, 0.5, 14.1, 0.06, 1.0, 0.06);
     for (const y of [0.5, 1.0]) k.box('wrail', rail, -43, y, 14.1, 34, 0.05, 0.05);
+  }
+
+  /** Odds and ends of a working hall: cardboard baler, waste bins, empty pallets, a vending machine, a notice board. */
+  private buildExtras(): void {
+    const k = this.k;
+    const grey = k.std(0x50545b, 0.5, 0.4, 0xb9c0c8);
+    const yellow = k.std(0x8a6e00, 0.5, 0.3, 0xf2c200);
+    const dark = k.std(0x1d1d1f, 0.6, 0.2, 0x1d1d1f);
+    const card = k.std(0x8a7050, 0.95, 0, 0xc9a06c);
+    // Cardboard baler by the west wall: body, a yellow door with a window, a control box, and a finished bale.
+    const bx = -60.3;
+    const bz = -8;
+    k.box('baler', grey, bx, 1.3, bz, 1.6, 2.6, 1.8);
+    k.box('baler', grey, bx, 2.9, bz, 1.2, 0.6, 1.2);
+    k.box('balerdoor', yellow, bx + 0.82, 1.0, bz, 0.06, 1.6, 1.5);
+    k.box('balerwin', dark, bx + 0.86, 1.5, bz, 0.02, 0.35, 1.0);
+    k.box('balerctl', dark, bx + 0.82, 1.2, bz - 1.1, 0.2, 0.4, 0.3);
+    k.box('bale', card, bx + 0.2, 0.55, bz + 1.8, 1.1, 1.1, 0.8);
+    for (const y of [0.25, 0.85]) k.box('balestrap', dark, bx + 0.2, y, bz + 1.8, 1.12, 0.03, 0.82);
+    k.blob(bx, bz + 0.6, 2.4, 3.6);
+    // Wheelie bins: general, paper, plastic film.
+    [0x3a3d44, 0x1755fe, 0x2fa58f].forEach((c, i) => {
+      const m = k.std(0x2a2c31, 0.6, 0.1, c);
+      const z = -4.2 + i * 1.35;
+      k.box('bin', m, -60.9, 0.6, z, 1.0, 1.1, 1.2);
+      k.box('binlid', m, -60.85, 1.2, z, 1.06, 0.07, 1.26);
+      for (const dz of [-0.45, 0.45]) k.box('binwheel', dark, -61.2, 0.1, z + dz, 0.12, 0.2, 0.2);
+    });
+    k.blob(-60.9, -2.85, 1.6, 4.4);
+    // Stacks of empty pallets.
+    const wood = k.std(0x8a6a44, 0.9, 0, 0xd8b080);
+    for (const [px, pz, n] of [[-59.6, 29.5, 12], [-59.6, 31.6, 8], [-57.8, 31.6, 15]] as const) {
+      for (let i = 0; i < n; i++) k.box('epal', wood, px, 0.07 + i * 0.145, pz, 1.2, 0.13, 1.0, undefined, (i % 3) * 0.02);
+      k.blob(px, pz, 1.8, 1.6);
+    }
+    // Vending machine next to the coffee machine.
+    k.box('vend', k.std(0x2a2c31, 0.4, 0.3, 0x2fa58f), -43.1, 0.95, 31.6, 0.9, 1.9, 0.75);
+    k.box('vendwin', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.75, 0.85, 0.95) }), -43.25, 1.15, 31.21, 0.55, 1.1, 0.02);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      k.box('venditem', k.std(0x444444, 0.6, 0, [0xe2231a, 0xf2c200, 0x1755fe, 0xd6339a][(r + c) % 4]!), -43.45 + c * 0.13, 0.75 + r * 0.26, 31.24, 0.08, 0.12, 0.04);
+    }
+    k.box('vendpad', dark, -42.8, 1.2, 31.21, 0.16, 0.35, 0.02);
+    // Notice board with schedules on the south wall.
+    k.box('board', k.std(0x6a5038, 0.8, 0, 0xc49a6c), -35, 1.7, 33.93, 2.4, 1.2, 0.04);
+    for (let i = 0; i < 9; i++) {
+      k.box('note', k.std(0x777777, 0.8, 0, [0xffffff, 0xf2c200, 0x86d3c3, 0xf3f4f6][i % 4]!), -35.9 + (i % 4) * 0.55 + (i > 3 ? 0.2 : 0), 2.0 - Math.floor(i / 4) * 0.42, 33.9, 0.36, 0.3, 0.01, undefined, ((i * 37) % 7 - 3) * 0.02);
+    }
   }
 
   private buildBreakArea(): void {

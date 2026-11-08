@@ -26,12 +26,13 @@ interface Dancer {
 }
 
 const SKIN = [0xf3d3b5, 0xd9a77e, 0xc68e64, 0x8d5a3b, 0x5c3a24];
+const HAIR = [0x2a1d14, 0x4a3221, 0x7a5a3a, 0xc9a26a, 0x1b1b1d, 0xd6339a, 0x8f8f8f];
 const CLOTHES = [0x1d1d1f, 0xf3f4f6, 0x2fa58f, 0xd6339a, 0x6b3fd1, 0x1755fe, 0xf2c200, 0xe2231a, 0x3a3d44, 0x86d3c3];
 
 export class Crowd {
   private group = new THREE.Group();
   private dancers: Dancer[] = [];
-  private parts: Record<'body' | 'legs' | 'head' | 'armL' | 'armR' | 'stick', THREE.InstancedMesh>;
+  private parts: Record<'body' | 'legs' | 'head' | 'armL' | 'armR' | 'stick' | 'hair' | 'face' | 'shoes' | 'handL' | 'handR', THREE.InstancedMesh>;
   private tiles: THREE.InstancedMesh;
   private tileXY: [number, number][] = [];
   private lastBeat = -1;
@@ -61,6 +62,18 @@ export class Crowd {
       armL: mk(new THREE.CapsuleGeometry(0.055, 0.5, 3, 6).translate(0, -0.3, 0)),
       armR: mk(new THREE.CapsuleGeometry(0.055, 0.5, 3, 6).translate(0, -0.3, 0)),
       stick: mk(new THREE.CylinderGeometry(0.025, 0.025, 0.3, 6).translate(0, -0.65, 0), new THREE.MeshBasicMaterial({ color: 0xffffff })),
+      // Hair on the back and top of the head; eyes and mouth; shoes; hands.
+      hair: mk(new THREE.SphereGeometry(0.146, 12, 8, Math.PI, Math.PI, 0, Math.PI * 0.62).scale(1, 1.08, 1.04).translate(0, 1.69, -0.006)),
+      face: mk(
+        mergeTwo(
+          mergeTwo(new THREE.SphereGeometry(0.018, 6, 4).translate(-0.05, 1.71, 0.128), new THREE.SphereGeometry(0.018, 6, 4).translate(0.05, 1.71, 0.128)),
+          new THREE.BoxGeometry(0.05, 0.01, 0.01).translate(0, 1.62, 0.132),
+        ),
+        new THREE.MeshBasicMaterial({ color: 0x15161a }),
+      ),
+      shoes: mk(mergeTwo(new THREE.BoxGeometry(0.13, 0.09, 0.26).translate(-0.1, 0.045, 0.04), new THREE.BoxGeometry(0.13, 0.09, 0.26).translate(0.1, 0.045, 0.04))),
+      handL: mk(new THREE.SphereGeometry(0.055, 8, 6).translate(0, -0.6, 0)),
+      handR: mk(new THREE.SphereGeometry(0.055, 8, 6).translate(0, -0.6, 0)),
     };
     for (let i = 0; i < count; i++) {
       // Packed most densely in the middle of the floor.
@@ -75,6 +88,10 @@ export class Crowd {
       this.parts.armR.setColorAt(i, cloth);
       this.parts.legs.setColorAt(i, this.c.setHex([0x22283f, 0x1d1d1f, 0x3d4b8f, 0x6b7280][i % 4]!));
       this.parts.head.setColorAt(i, this.c.setHex(SKIN[i % SKIN.length]!));
+      this.parts.handL.setColorAt(i, this.c);
+      this.parts.handR.setColorAt(i, this.c);
+      this.parts.hair.setColorAt(i, this.c.setHex(HAIR[(i * 7) % HAIR.length]!));
+      this.parts.shoes.setColorAt(i, this.c.setHex([0xf3f4f6, 0x1d1d1f, 0xe2231a, 0x1755fe, 0x1d1d1f][i % 5]!));
     }
     for (const im of Object.values(this.parts)) if (im.instanceColor) im.instanceColor.needsUpdate = true;
     // LED dance floor tiles.
@@ -127,6 +144,9 @@ export class Crowd {
       this.parts.body.setMatrixAt(i, this.m);
       this.parts.legs.setMatrixAt(i, this.m);
       this.parts.head.setMatrixAt(i, this.m);
+      this.parts.hair.setMatrixAt(i, this.m);
+      this.parts.face.setMatrixAt(i, this.m);
+      this.parts.shoes.setMatrixAt(i, this.m);
       // Arms: down and swinging, pumping up on the beat, or waving.
       let l = 0.3 * Math.sin(t * Math.PI);
       let r = -l;
@@ -140,9 +160,11 @@ export class Crowd {
       const wave = d.style === 3 ? Math.sin(t * Math.PI) * 0.6 : 0;
       this.a.makeTranslation(-0.3, 1.46, 0).multiply(new THREE.Matrix4().makeRotationX(l));
       this.parts.armL.setMatrixAt(i, this.a.premultiply(this.m));
+      this.parts.handL.setMatrixAt(i, this.a);
       this.a.makeTranslation(0.3, 1.46, 0).multiply(new THREE.Matrix4().makeRotationZ(wave)).multiply(new THREE.Matrix4().makeRotationX(r));
       this.a.premultiply(this.m);
       this.parts.armR.setMatrixAt(i, this.a);
+      this.parts.handR.setMatrixAt(i, this.a);
       // Glow sticks for the wavers.
       if (d.style === 3) {
         this.parts.stick.setMatrixAt(i, this.a);

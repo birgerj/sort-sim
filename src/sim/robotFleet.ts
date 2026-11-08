@@ -298,7 +298,7 @@ export class Fleet {
 }
 
 /** The robot floor in the hall, south of the loop. */
-export const FLOOR = { x0: -22, z0: 20, cs: 1.5, ni: 84, nj: 7 };
+export const FLOOR = { x0: -22, z0: 18.8, cs: 1.5, ni: 84, nj: 7 };
 
 /**
  * Grid, parking spots and bins of the robot floor. Stations are the pickup

@@ -93,6 +93,71 @@ export class Music {
     if (this.out && this.ctx && !this.muted) this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
   }
 
+  /** A sound effect from the hall, now: a forklift horn, a reverse beeper, a cleardown buzzer. */
+  sfx(kind: 'horn' | 'beep' | 'buzz', vol = 1): void {
+    if (!this.audible || !this.ctx || !this.out) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.01;
+    const g = ctx.createGain();
+    g.connect(this.out);
+    if (this.reverb) g.connect(this.reverb);
+    const tone = (type: OscillatorType, f: number, len: number, level: number, start = 0) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = f;
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0, t + start);
+      og.gain.linearRampToValueAtTime(level, t + start + 0.01);
+      og.gain.setValueAtTime(level, t + start + len - 0.03);
+      og.gain.linearRampToValueAtTime(0, t + start + len);
+      o.connect(og);
+      og.connect(g);
+      o.start(t + start);
+      o.stop(t + start + len + 0.02);
+    };
+    g.gain.value = 0.18 * vol;
+    if (kind === 'horn') {
+      // Two short honks, a slightly sour pair of tones.
+      for (const st of [0, 0.22]) {
+        tone('square', 392, 0.14, 0.25, st);
+        tone('square', 466, 0.14, 0.2, st);
+      }
+    } else if (kind === 'beep') tone('sine', 1250, 0.18, 0.35);
+    else tone('sawtooth', 220, 0.3, 0.25);
+  }
+
+  /** The hall's background: belts and rollers humming, 0 (silent) to 1. */
+  setHum(level: number): void {
+    if (!this.ctx || !this.out) return;
+    if (!this.hum) {
+      const ctx = this.ctx;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 140;
+      bp.Q.value = 0.8;
+      const motor = ctx.createOscillator();
+      motor.type = 'triangle';
+      motor.frequency.value = 50;
+      const mg = ctx.createGain();
+      mg.gain.value = 0.25;
+      this.hum = ctx.createGain();
+      this.hum.gain.value = 0;
+      src.connect(bp);
+      bp.connect(this.hum);
+      motor.connect(mg);
+      mg.connect(this.hum);
+      this.hum.connect(this.out);
+      src.start();
+      motor.start();
+    }
+    this.hum.gain.setTargetAtTime(0.06 * level, this.ctx.currentTime, 0.5);
+  }
+
+  private hum: GainNode | null = null;
+
   dispose(): void {
     clearInterval(this.timer);
     void this.ctx?.close();
