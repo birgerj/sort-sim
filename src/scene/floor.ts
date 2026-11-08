@@ -10,6 +10,8 @@
 // the projectors become a laser show and parked robots dance on the beat.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { cardboardSide, palletWood } from './textures';
 
 import { Fleet, FLOOR, sorterFloor, type Bot, type FleetEvent } from '../sim/robotFleet';
 
@@ -19,6 +21,8 @@ export interface FloorKit {
   box(key: string, mat: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number, col?: number, ry?: number): void;
   std(color: number, rough?: number, metal?: number, day?: number): THREE.MeshStandardMaterial;
   inkify(m: THREE.Mesh, angle?: number): void;
+  /** Day outline for rounded shapes. */
+  outline(m: THREE.Mesh, width?: number): void;
   person(x: number, z: number, ry: number): void;
   sign(text: string, color: string, x: number, y: number, z: number, ry: number, icon: (g: CanvasRenderingContext2D) => void): void;
   dayOnly: THREE.Object3D[];
@@ -438,9 +442,11 @@ export class RobotFloor {
   /** Cardboard boxes on pallets in the last row; a forklift can lift each one. */
   private buildBins(): void {
     const k = this.kit;
-    const card = k.std(0x6f5a3f, 0.95, 0, 0xd9b07a);
+    const card = k.std(0x8a7050, 0.95, 0, 0xe0b882);
+    card.map = cardboardSide();
     const inner = k.std(0x4c3e2c, 0.95, 0, 0xb8925f);
-    const pallet = k.std(0x5a4430, 0.9, 0, 0xb48a5a);
+    const pallet = k.std(0x6a5038, 0.9, 0, 0xd8b080);
+    pallet.map = palletWood();
     const fillMat = k.std(0x5b4a35, 0.95, 0, 0xc9a06c);
     const post = k.std(0x50545b, 0.6, 0.3, 0xdfe3e8);
     const boardGeo = new THREE.PlaneGeometry(0.45, 0.3);
@@ -493,39 +499,63 @@ export class RobotFloor {
     const blue = k.std(0x2450a8, 0.45, 0.3, 0x2c62c8);
     const rollerMat = k.std(0x2a2c31, 0.4, 0.6, 0x3a3d44);
     const glow = glowTex();
-    const part = (g: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
+    // One set of geometries for the whole fleet, merged per material (few draw calls per robot).
+    const box = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+    const bodyGeo = new RoundedBoxGeometry(0.86, 0.3, 0.96, 3, 0.06).translate(0, 0.24, 0);
+    const skirtGeo = new RoundedBoxGeometry(0.92, 0.12, 1.02, 2, 0.04).translate(0, 0.07, 0);
+    const frame: THREE.BufferGeometry[] = [];
+    for (const sx of [-0.39, 0.39]) for (const sz of [-0.42, 0.42]) frame.push(new THREE.CylinderGeometry(0.035, 0.035, 1.0, 10).translate(sx, 0.88, sz));
+    // Cross braces on both sides, and the side panels with a cut-out window.
+    for (const sz of [-0.44, 0.44]) {
+      frame.push(box(0.8, 0.05, 0.04, 0, 0.45, sz), box(0.8, 0.05, 0.04, 0, 1.3, sz));
+      frame.push(box(0.8, 0.22, 0.03, 0, 0.6, sz));
+      for (const a of [0.62, -0.62]) frame.push(new THREE.BoxGeometry(0.03, 0.85, 0.03).rotateZ(a).translate(0, 0.98, sz));
+    }
+    const frameGeo = mergeGeometries(frame)!;
+    const deck: THREE.BufferGeometry[] = [new RoundedBoxGeometry(0.92, 0.08, 1.02, 2, 0.03)];
+    for (const sz of [-0.49, 0.49]) deck.push(box(0.92, 0.12, 0.04, 0, 0.1, sz));
+    const deckGeo = mergeGeometries(deck.map((g) => g.toNonIndexed()))!;
+    const rollers: THREE.BufferGeometry[] = [];
+    for (let x = -0.36; x <= 0.37; x += 0.09) rollers.push(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 10).rotateX(Math.PI / 2).translate(x, 0.07, 0));
+    const rollerGeo = mergeGeometries(rollers)!;
+    const wheels: THREE.BufferGeometry[] = [];
+    for (const sx of [-0.33, 0.33]) for (const sz of [-0.36, 0.36]) wheels.push(new THREE.CylinderGeometry(0.075, 0.075, 0.06, 14).rotateZ(Math.PI / 2).translate(sx, 0.075, sz));
+    const wheelGeo = mergeGeometries(wheels)!;
+    const padGeo = mergeGeometries([-0.47, 0.47].flatMap((sx) => [-0.52, 0.52].map((sz) => box(0.1, 0.1, 0.06, sx * 0.9, 0.08, sz))))!;
+    const lightGeo = mergeGeometries([box(0.5, 0.05, 0.01, 0, 0.27, 0.485), box(0.5, 0.05, 0.01, 0, 0.27, -0.485)])!;
+    const yellow = k.std(0x8a6e00, 0.5, 0.2, 0xf2c200);
+    const wheelMat = k.std(0x111111, 0.8, 0.1, 0x2a2c31);
+    const lightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.6, 1.8) });
+    const ledGeo = new THREE.SphereGeometry(0.04, 10, 8);
+    const part = (g: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, edge: 'ink' | 'hull' | null = 'ink') => {
       const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z);
       g.add(m);
-      k.inkify(m, 30);
+      if (edge === 'ink') k.inkify(m, 30);
+      else if (edge === 'hull') k.outline(m, 0.018);
       return m;
     };
     for (const b of this.fleet.bots) {
       const g = new THREE.Group();
       k.put(g, undefined);
-      part(g, new THREE.BoxGeometry(0.85, 0.28, 0.95), blue, 0, 0.22, 0);
-      part(g, new THREE.BoxGeometry(0.85, 0.12, 0.95), black, 0, 0.06, 0);
-      const post = new THREE.BoxGeometry(0.07, 1.0, 0.07);
-      for (const sx of [-0.4, 0.4]) for (const sz of [-0.43, 0.43]) part(g, post, black, sx, 0.85, sz);
-      const side = new THREE.BoxGeometry(0.85, 0.55, 0.05);
-      part(g, side, black, 0, 0.7, 0.45);
-      part(g, side, black, 0, 0.7, -0.45);
+      part(g, bodyGeo, blue, 'hull');
+      part(g, skirtGeo, black, 'hull');
+      part(g, wheelGeo, wheelMat, null);
+      part(g, padGeo, yellow);
+      part(g, frameGeo, black);
+      part(g, lightGeo, lightMat, null);
       const top = new THREE.Group();
       top.position.y = TOP_Y;
       g.add(top);
-      part(top, new THREE.BoxGeometry(0.9, 0.1, 1.0), black, 0, 0, 0);
-      const roll = new THREE.CylinderGeometry(0.035, 0.035, 0.9, 8);
-      for (let x = -0.35; x <= 0.36; x += 0.14) {
-        const r = new THREE.Mesh(roll, rollerMat);
-        r.position.set(x, 0.07, 0);
-        r.rotation.x = Math.PI / 2;
-        top.add(r);
-      }
+      part(top, deckGeo, black);
+      part(top, rollerGeo, rollerMat, null);
+      const led = new THREE.Mesh(ledGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.4, 0.5) }));
+      led.position.set(0.36, 0.1, 0.42);
+      top.add(led);
       const num = 1800 + ((b.k * 37 + 3) % 99);
       const plate = new THREE.MeshBasicMaterial({ map: numberTex(num) });
-      for (const sz of [0.476, -0.476]) {
+      for (const sz of [0.462, -0.462]) {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.31), plate);
-        p.position.set(0, 0.75, sz);
+        p.position.set(0, 0.82, sz);
         if (sz < 0) p.rotation.y = Math.PI;
         g.add(p);
       }

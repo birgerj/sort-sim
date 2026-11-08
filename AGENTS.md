@@ -41,7 +41,9 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/floor.ts` | `RobotFloor`: pickup stations, boxes on pallets, robots, flow projectors (all of them, including over the dock belts), manual sort table, floor details. |
 | `src/scene/docks.ts` | `Docks`: north dock doors, roll cages and dock workers (work by day, dance by night). Also `buildDockDoor`, shared with the south wall. |
 | `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
-| `src/scene/forklift.ts` | Forklift model (forks point to local +z). |
+| `src/scene/forklift.ts` | Forklift with driver (forks point to local +z); parts merged per material. |
+| `src/scene/people.ts` | `buildHuman`: jointed people (workers with hi-vis vest and helmet, staff with cap). |
+| `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
 | `src/sim/rng.ts` | Seeded random numbers. |
 | `scripts/shots.mjs` | Headless screenshots per department, day and night. |
@@ -88,6 +90,9 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
 - `put(obj, only?)` adds to the scene; with `only = 'day' | 'night'` (or
   `kit.only` set while building) the object shows in one look only.
 - `inkify(mesh)` adds the black day outline (edges, day only).
+- `outline(mesh, width)` adds a day outline for rounded shapes (an inverted
+  hull pushed out along the normals); use it for capsules, spheres and
+  rounded boxes, where `inkify` would miss the silhouette.
 - `box(key, mat, x, y, z, sx, sy, sz)` adds a box to an instanced batch per
   key+material, flushed with `flushBoxes()`: use it for static clutter.
 - Night lights are `MeshBasicMaterial` with colours above 1 so bloom picks
@@ -98,6 +103,11 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
 The scene is built so models can be upgraded one at a time without touching
 the simulation:
 
+- **Done so far (detail pass 1):** robots, forklifts (with driver),
+  people, boxes on pallets, roll cages (wire mesh), dock doors (sectional
+  doors, checker plate, seals, lights), day floor and wall cladding.
+  Still plain: loop and belts, chutes, scan tunnels, store rack and lift,
+  projectors, signs, control room, manual sort table.
 - **Where each thing is built:** loop/belts/chutes `buildConveyors`, scan
   tunnels `tunnel()`, store and lift `buildStore`, parcels `buildParcels`,
   hall `buildHall` (night) and `buildDay` (day), people `person()`, signs

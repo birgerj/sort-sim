@@ -1,8 +1,13 @@
-// A forklift model, shared by the roaming store forklift and the box forklifts.
-// The forks point to local +z; `forks.position.y` lifts them (0.15 is on the floor).
+// A counterbalance forklift with a driver, shared by the store forklift and the
+// box forklifts. The forks point to local +z; `forks.position.y` lifts the
+// carriage (0.15 is on the floor). Parts are merged per material to keep the
+// draw calls down.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
+import { buildHuman } from './people';
 
 export interface ForkliftModel {
   g: THREE.Group;
@@ -13,34 +18,110 @@ export interface ForkliftModel {
 /** Fork tips reach this far in front of the forklift centre (where a carried pallet sits). */
 export const FORK_REACH = 1.75;
 
+type G = THREE.BufferGeometry;
+const box = (w: number, h: number, d: number, x: number, y: number, z: number): G => new THREE.BoxGeometry(w, h, d).translate(x, y, z).toNonIndexed();
+const cyl = (r: number, h: number, x: number, y: number, z: number, axis: 'x' | 'y' | 'z' = 'y', seg = 12): G => {
+  const c = new THREE.CylinderGeometry(r, r, h, seg);
+  if (axis === 'x') c.rotateZ(Math.PI / 2);
+  if (axis === 'z') c.rotateX(Math.PI / 2);
+  return c.translate(x, y, z).toNonIndexed();
+};
+const merge = (list: G[]) => mergeGeometries(list)!;
+
+let parts: Record<string, G> | null = null;
+function geometry(): Record<string, G> {
+  if (parts) return parts;
+  const body = [
+    new RoundedBoxGeometry(1.2, 0.55, 1.5, 3, 0.08).translate(0, 0.55, 0.15).toNonIndexed(),
+    // Counterweight at the back, rounded.
+    new RoundedBoxGeometry(1.24, 0.8, 0.55, 3, 0.18).translate(0, 0.72, -0.78).toNonIndexed(),
+    // Step and dashboard.
+    box(1.1, 0.18, 0.45, 0, 0.92, 0.66),
+  ];
+  const dark: G[] = [
+    // Overhead guard: posts, roof frame and slats.
+    ...[-0.52, 0.52].flatMap((sx) => [cyl(0.035, 1.35, sx, 1.52, 0.62), cyl(0.035, 1.35, sx, 1.52, -0.5)]),
+    box(1.12, 0.05, 1.2, 0, 2.2, 0.06),
+    ...[-0.3, -0.1, 0.1, 0.3].map((z) => box(1.0, 0.04, 0.06, 0, 2.24, z)),
+    // Seat.
+    new RoundedBoxGeometry(0.5, 0.12, 0.45, 2, 0.04).translate(0, 0.92, -0.2).toNonIndexed(),
+    new RoundedBoxGeometry(0.5, 0.5, 0.1, 2, 0.04).translate(0, 1.18, -0.42).toNonIndexed(),
+    // Steering column and wheel.
+    cyl(0.025, 0.4, 0, 1.15, 0.55),
+    new THREE.TorusGeometry(0.13, 0.02, 6, 16).rotateX(Math.PI / 2.6).translate(0, 1.36, 0.5).toNonIndexed(),
+    // Mast: two rails, crossbars, lift cylinder.
+    ...[-0.36, 0.36].map((sx) => box(0.08, 2.7, 0.12, sx, 1.4, 1.05)),
+    box(0.8, 0.08, 0.1, 0, 2.7, 1.05),
+    box(0.8, 0.08, 0.1, 0, 0.3, 1.05),
+    cyl(0.05, 1.9, 0, 1.2, 1.0),
+  ];
+  const wheels = [
+    ...[-0.58, 0.58].map((sx) => cyl(0.3, 0.26, sx, 0.3, 0.62, 'x', 18)),
+    ...[-0.56, 0.56].map((sx) => cyl(0.24, 0.22, sx, 0.24, -0.62, 'x', 18)),
+  ];
+  const hubs = [...[-0.72, 0.72].map((sx) => cyl(0.13, 0.02, sx, 0.3, 0.62, 'x')), ...[-0.68, 0.68].map((sx) => cyl(0.1, 0.02, sx, 0.24, -0.62, 'x'))];
+  const forks = [
+    // Carriage plate with a load backrest grille, and two forks.
+    box(0.8, 0.45, 0.06, 0, 0.22, 1.16),
+    ...[-0.3, -0.15, 0, 0.15, 0.3].map((sx) => box(0.03, 0.55, 0.03, sx, 0.72, 1.16)),
+    box(0.8, 0.04, 0.04, 0, 1.0, 1.16),
+    ...[-0.25, 0.25].flatMap((sx) => [box(0.12, 0.05, 1.1, sx, 0, FORK_REACH), box(0.12, 0.4, 0.05, sx, 0.2, 1.2)]),
+  ];
+  const chains = [-0.2, 0.2].map((sx) => box(0.03, 2.3, 0.02, sx, 1.4, 1.12));
+  const lights = [...[-0.4, 0.4].map((sx) => cyl(0.06, 0.04, sx, 2.05, 0.66, 'z'))];
+  const rear = [...[-0.45, 0.45].map((sx) => box(0.12, 0.08, 0.02, sx, 0.9, -1.06))];
+  parts = {
+    body: merge(body),
+    dark: merge(dark),
+    wheels: merge(wheels),
+    hubs: merge(hubs),
+    forks: merge(forks),
+    chains: merge(chains),
+    lights: merge(lights),
+    rear: merge(rear),
+  };
+  return parts;
+}
+
 export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
-  const yellow = k.std(0xe8b400, 0.45, 0.3);
-  const black = k.std(0x1b1c1f, 0.7, 0.3);
+  const p = geometry();
+  const yellow = k.std(0xe8b400, 0.45, 0.3, 0xf2c200);
+  const black = k.std(0x1b1c1f, 0.7, 0.3, 0x2a2c31);
+  const steel = k.std(0x50555e, 0.4, 0.8, 0x9aa0a8);
   const g = new THREE.Group();
-  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = g) => {
+  const add = (geo: G, mat: THREE.Material, parent: THREE.Object3D = g, edge: 'ink' | 'hull' | null = 'ink') => {
     const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
     parent.add(m);
-    if (!(geo instanceof THREE.SphereGeometry)) k.inkify(m, 35);
+    if (edge === 'ink') k.inkify(m, 35);
+    else if (edge === 'hull') k.outline(m, 0.02);
     return m;
   };
-  add(new THREE.BoxGeometry(1.2, 1, 2.2), yellow, 0, 0.8, 0);
-  add(new THREE.BoxGeometry(1.1, 0.08, 1.2), black, 0, 2.2, -0.2);
-  for (const sx of [-0.5, 0.5]) for (const sz of [-0.5, 0.5]) add(new THREE.BoxGeometry(0.06, 1.4, 0.06), black, sx, 1.55, sz - 0.2);
-  for (const sx of [-0.35, 0.35]) add(new THREE.BoxGeometry(0.1, 2.6, 0.1), black, sx, 1.3, 1.2);
+  add(p.body!, yellow);
+  add(p.dark!, black);
+  add(p.wheels!, black, g, null);
+  add(p.hubs!, steel, g, null);
+  add(p.chains!, steel, g, null);
+  add(p.lights!, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.7, 1.4) }), g, null);
+  add(p.rear!, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.1, 0.05) }), g, null);
   const forks = new THREE.Group();
   forks.position.set(0, 0.15, 0);
   g.add(forks);
-  for (const sx of [-0.25, 0.25]) add(new THREE.BoxGeometry(0.12, 0.05, 1.1), black, sx, 0, FORK_REACH, forks);
-  add(new THREE.BoxGeometry(0.8, 0.5, 0.06), black, 0, 0.3, 1.22, forks);
+  add(p.forks!, black, forks);
   if (load !== null) {
-    add(new THREE.BoxGeometry(1.1, 0.12, 1.0), k.std(0x8a6a44, 0.9, 0), 0, 0.1, FORK_REACH, forks);
-    add(new THREE.BoxGeometry(1.0, 0.8, 0.9), k.std(load, 0.6, 0), 0, 0.56, FORK_REACH, forks);
+    add(new THREE.BoxGeometry(1.1, 0.12, 1.0).translate(0, 0.1, FORK_REACH), k.std(0x8a6a44, 0.9, 0, 0xc49a6c), forks);
+    add(new THREE.BoxGeometry(1.0, 0.8, 0.9).translate(0, 0.56, FORK_REACH), k.std(load, 0.6, 0, load), forks);
   }
-  const wg = new THREE.CylinderGeometry(0.3, 0.3, 0.25, 16);
-  for (const sx of [-0.6, 0.6]) for (const sz of [-0.7, 0.7]) add(wg, black, sx, 0.3, sz).rotation.z = Math.PI / 2;
+  // The driver, seated.
+  const d = buildHuman(k, { shirt: 0x2f3b6b, trousers: 0x22283f, vest: 0xc8ff3a, helmet: 0xffffff });
+  d.root.position.set(0, 0.18, -0.2);
+  d.legL.rotation.x = d.legR.rotation.x = -1.4;
+  d.legL.position.y = d.legR.position.y = 0.82;
+  d.armL.rotation.x = d.armR.rotation.x = -0.9;
+  g.add(d.root);
   const beacon = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  add(new THREE.SphereGeometry(0.09, 8, 8), beacon, 0, 2.32, -0.2);
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), beacon);
+  b.position.set(0, 2.32, -0.4);
+  g.add(b);
   k.put(g);
   return { g, forks, beacon };
 }

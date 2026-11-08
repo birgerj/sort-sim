@@ -9,6 +9,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
+import { buildHuman } from './people';
+import { checkerPlate, sectionalDoor, wireMesh } from './textures';
 
 type V3 = THREE.Vector3;
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -69,6 +71,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 export class Docks {
   readonly docks: Dock[] = [];
+  private boardsDay: boolean | null = null;
   private readonly t = new THREE.Vector3();
   private readonly o = new THREE.Object3D();
   private readonly q = new THREE.Quaternion();
@@ -152,6 +155,10 @@ export class Docks {
 
   update(dt: number, bt: number, s: { kick: number; snare: number; dayShown: boolean }): void {
     const ph = bt - Math.floor(bt);
+    if (s.dayShown !== this.boardsDay) {
+      this.boardsDay = s.dayShown;
+      for (const m of boardMats) m.color.setScalar(s.dayShown ? 1 : 0.22);
+    }
     for (const d of this.docks) {
       // Parcels waiting at the belt end.
       d.queue.forEach((p, k) => {
@@ -284,6 +291,30 @@ export class Docks {
     this.docks.push({ x, chute, queue: [], cages, worker, sliding: [] });
   }
 
+  private readonly cageMeshGeo = (() => {
+    const g = new THREE.BoxGeometry(1.36, 1.5, 1.04);
+    // Drop the top and bottom faces (groups 2 and 3), keep the four sides.
+    const idx = g.getIndex()!.array;
+    const keep: number[] = [];
+    for (const grp of g.groups) if (grp.materialIndex !== 2 && grp.materialIndex !== 3) for (let i = grp.start; i < grp.start + grp.count; i++) keep.push(idx[i]!);
+    g.setIndex(keep);
+    g.clearGroups();
+    return g;
+  })();
+  private meshMat: THREE.MeshStandardMaterial | null = null;
+  private cageMeshMat(): THREE.MeshStandardMaterial {
+    if (!this.meshMat) {
+      const t = wireMesh().clone();
+      t.repeat.set(4, 4);
+      t.needsUpdate = true;
+      this.meshMat = this.kit.std(0x5d6670, 0.5, 0.6, 0x2fa58f);
+      this.meshMat.alphaMap = t;
+      this.meshMat.alphaTest = 0.5;
+      this.meshMat.side = THREE.DoubleSide;
+    }
+    return this.meshMat;
+  }
+
   private buildCage(at: V3, ry: number): Cage {
     const k = this.kit;
     const teal = k.std(0x5d6670, 0.5, 0.6, 0x2fa58f);
@@ -301,10 +332,10 @@ export class Docks {
     const frame = new THREE.Mesh(mergeGeometries(parts)!, teal);
     g.add(frame);
     k.inkify(frame);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.36, 1.5, 1.04), new THREE.MeshBasicMaterial({ color: 0x86d3c3, transparent: true, opacity: 0.25, depthWrite: false }));
+    // Wire mesh sides (open top), with a shelf halfway.
+    const mesh = new THREE.Mesh(this.cageMeshGeo, this.cageMeshMat());
     mesh.position.y = 1.1;
     g.add(mesh);
-    k.dayOnly.push(mesh);
     const wheels: THREE.BufferGeometry[] = [];
     for (const sx of [-0.55, 0.55]) for (const sz of [-0.42, 0.42]) wheels.push(new THREE.CylinderGeometry(0.11, 0.11, 0.08, 10).rotateX(Math.PI / 2).translate(sx, 0.12, sz));
     g.add(new THREE.Mesh(mergeGeometries(wheels)!, k.std(0x222222, 0.8, 0.1, 0x333333)));
@@ -320,41 +351,19 @@ export class Docks {
 
   /** A worker with jointed arms, legs and torso, so they can work and dance. */
   private buildWorker(home: V3): Worker {
-    const k = this.kit;
-    const shirt = k.std(0x9a7a10, 0.9, 0, 0xf2c200);
-    const vest = k.std(0x8a6e00, 0.6, 0, 0xc8ff3a);
-    const trousers = k.std(0x22283f, 0.9, 0, 0x2f3b6b);
-    const skin = k.std(0x7a6656, 0.9, 0, 0xf0cfb0);
-    const helmet = k.std(0x8a8a8a, 0.5, 0, 0xffffff);
-    const root = new THREE.Group();
-    root.position.copy(home);
-    k.put(root);
-    const part = (parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z);
-      parent.add(m);
-      k.inkify(m, 40);
-      return m;
-    };
-    const joint = (parent: THREE.Object3D, x: number, y: number, z: number) => {
-      const g = new THREE.Group();
-      g.position.set(x, y, z);
-      parent.add(g);
-      return g;
-    };
-    const legL = joint(root, -0.14, 0.9, 0);
-    const legR = joint(root, 0.14, 0.9, 0);
-    for (const l of [legL, legR]) part(l, new THREE.BoxGeometry(0.2, 0.9, 0.22), trousers, 0, -0.45, 0);
-    const torso = joint(root, 0, 0.9, 0);
-    part(torso, new THREE.BoxGeometry(0.6, 0.78, 0.32), shirt, 0, 0.4, 0);
-    part(torso, new THREE.BoxGeometry(0.62, 0.5, 0.34), vest, 0, 0.45, 0);
-    part(torso, new THREE.SphereGeometry(0.2, 14, 10), skin, 0, 1.05, 0);
-    part(torso, new THREE.CylinderGeometry(0.21, 0.22, 0.14, 14), helmet, 0, 1.2, 0);
-    const armL = joint(torso, -0.38, 0.72, 0);
-    const armR = joint(torso, 0.38, 0.72, 0);
-    for (const a of [armL, armR]) part(a, new THREE.BoxGeometry(0.14, 0.7, 0.16), shirt, 0, -0.33, 0);
-    return { root, torso, armL, armR, legL, legR, home, task: 'idle', taskAt: 0, parcel: null, cage: 0, yaw: Math.PI };
+    const n = this.docks.length;
+    const h = buildHuman(this.kit, {
+      shirt: [0x2f3b6b, 0x2fa58f, 0xf3f4f6, 0x6b7280][n % 4]!,
+      trousers: [0x22283f, 0x3a3d44][n % 2]!,
+      vest: n % 3 === 2 ? 0xf2a51a : 0xc8ff3a,
+      helmet: [0xffffff, 0xf2c200, 0x1755fe][n % 3]!,
+      skin: [0xf0cfb0, 0xd9a77e, 0x8d5a3b, 0xf5d9c4][n % 4]!,
+    });
+    h.root.position.copy(home);
+    this.kit.put(h.root);
+    return { ...h, home, task: 'idle', taskAt: 0, parcel: null, cage: 0, yaw: Math.PI };
   }
+
 }
 
 /**
@@ -363,26 +372,61 @@ export class Docks {
  * door, leveler, bumpers, an amber lamp and a number board. `closed` rolls the
  * door down.
  */
+/** Number boards of all dock doors: paper, not lights, so dimmed by night (in Docks.update). */
+const boardMats: THREE.MeshBasicMaterial[] = [];
+
+const doorMats = new WeakMap<FloorKit, Record<string, THREE.Material>>();
+/** Materials shared by all dock doors (so the box batches stay few). */
+function dockMats(k: FloorKit): Record<string, THREE.Material> {
+  let m = doorMats.get(k);
+  if (!m) {
+    const door = k.std(0x2c3038, 0.6, 0.5, 0xd5dae0);
+    const closedDoor = k.std(0x2c3038, 0.6, 0.4, 0xffffff);
+    closedDoor.map = sectionalDoor();
+    const leveler = k.std(0x3a3d44, 0.6, 0.6, 0xb9c0c8);
+    leveler.map = checkerPlate();
+    m = {
+      dark: k.std(0x0d0e10, 0.9, 0, 0x2a2c31),
+      rubber: k.std(0x15161a, 0.9, 0, 0x26282e),
+      door,
+      closedDoor,
+      leveler,
+      stripes: k.std(0x8a6e00, 0.6, 0.2, 0xf2c200),
+      ampOn: new THREE.MeshBasicMaterial({ color: new THREE.Color(2, 1.1, 0.1) }),
+      ampOff: new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.05, 0.03) }),
+      green: new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.4, 0.4) }),
+    };
+    doorMats.set(k, m);
+  }
+  return m;
+}
+
 export function buildDockDoor(k: FloorKit, x: number, wallZ: number, dir: 1 | -1, number: number, closed = false): void {
   const z = (d: number) => wallZ + dir * d;
-  const dark = k.std(0x0d0e10, 0.9, 0, 0x2a2c31);
-  const rubber = k.std(0x15161a, 0.9, 0, 0x26282e);
-  const door = k.std(0x2c3038, 0.6, 0.5, 0xd5dae0);
-  if (closed) k.box('rolldoor', door, x, 1.9, z(0.08), 3.2, 3.8, 0.1);
+  const M = dockMats(k);
+  const { dark, rubber, door } = M as Record<string, THREE.Material>;
+  if (closed) k.box('rolldoor', M.closedDoor!, x, 1.9, z(0.08), 3.2, 3.8, 0.1);
   else {
-    k.box('trailer', dark, x, 1.9, z(0.06), 3.2, 3.8, 0.1);
-    k.box('rolldoor', door, x, 4.4, z(0.25), 3.6, 0.7, 0.35);
+    k.box('trailer', dark!, x, 1.9, z(0.06), 3.2, 3.8, 0.1);
+    k.box('rolldoor', door!, x, 4.4, z(0.25), 3.6, 0.7, 0.35);
+    // Trailer floor edge and the dock seal's light.
+    k.box('trailerfloor', M.leveler!, x, 1.0, z(-0.4), 3.0, 0.08, 0.8);
   }
-  k.box('shelter', rubber, x - 1.8, 2.0, z(0.2), 0.4, 4.0, 0.3);
-  k.box('shelter', rubber, x + 1.8, 2.0, z(0.2), 0.4, 4.0, 0.3);
-  k.box('shelter', rubber, x, 3.95, z(0.2), 4.0, 0.3, 0.3);
-  const leveler = k.std(0x3a3d44, 0.6, 0.6, 0x9aa0a8);
-  k.box('leveler', leveler, x, 0.03, z(1.1), 3.0, 0.06, 2.2);
-  const stripes = k.std(0x8a6e00, 0.6, 0.2, 0xf2c200);
-  for (const sx of [-1.65, 1.65]) k.box('bumper', stripes, x + sx, 0.5, z(0.3), 0.3, 1.0, 0.3);
-  const amber = new THREE.MeshBasicMaterial({ color: closed ? new THREE.Color(0.25, 0.05, 0.03) : new THREE.Color(2, 1.1, 0.1) });
-  k.box('dockled', amber, x - 2.3, 4.0, z(0.15), 0.3, 0.3, 0.1);
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: numberTex(String(number)) }));
+  k.box('shelter', rubber!, x - 1.8, 2.0, z(0.2), 0.4, 4.0, 0.3);
+  k.box('shelter', rubber!, x + 1.8, 2.0, z(0.2), 0.4, 4.0, 0.3);
+  k.box('shelter', rubber!, x, 3.95, z(0.2), 4.0, 0.3, 0.3);
+  // Yellow guide stripes down the shelter.
+  for (const sx of [-1.8, 1.8]) k.box('sstripe', M.stripes!, x + sx, 2.0, z(0.36), 0.12, 3.6, 0.02);
+  k.box('leveler', M.leveler!, x, 0.03, z(1.1), 3.0, 0.06, 2.2);
+  for (const sx of [-1.65, 1.65]) k.box('bumper', M.stripes!, x + sx, 0.5, z(0.3), 0.3, 1.0, 0.3);
+  // Traffic light for the truck driver: amber when loading, dark red when closed; a green one beside it.
+  k.box('dockled', closed ? M.ampOff! : M.ampOn!, x - 2.3, 4.0, z(0.15), 0.3, 0.3, 0.1);
+  if (!closed) k.box('dockled', M.green!, x - 2.3, 3.6, z(0.15), 0.22, 0.22, 0.1);
+  // Control box with buttons, beside the door.
+  k.box('dockctl', door!, x + 2.35, 1.4, z(0.12), 0.35, 0.5, 0.15);
+  const bm = new THREE.MeshBasicMaterial({ map: numberTex(String(number)) });
+  boardMats.push(bm);
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), bm);
   board.position.set(x, 5.4, z(0.12));
   if (dir < 0) board.rotation.y = Math.PI;
   k.put(board);
