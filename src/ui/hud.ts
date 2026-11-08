@@ -127,7 +127,7 @@ export class Hud {
       if (this.card.where.textContent !== w) this.card.where.textContent = w;
     }
     if (this.stats && performance.now() - this.stats.last > 1000) this.drawStats();
-    for (const pn of [this.panel, this.stats?.el, this.settingsPanel]) {
+    for (const pn of [this.panel, this.stats?.el]) {
       if (!pn) continue;
       // Stay clear of the control bar below.
       const h = `${Math.max(160, window.innerHeight - this.bar.offsetHeight - 48)}px`;
@@ -224,33 +224,14 @@ export class Hud {
       belt.append(b);
       this.speedBtns.set(v, b);
     }
-    const time = this.group('Time');
-    for (const [id, label] of [['day', 'Day'], ['night', 'Night'], ['cycle', 'Day ↔ night']] as const) {
-      const b = el('button', '', label);
-      b.onclick = () => this.setTime(id);
-      time.append(b);
-      this.timeBtns.set(id, b);
-    }
-    const music = this.group('Music');
+    // Time of day and music live in the settings panel; the sound button is kept here so the
+    // keys (M) and the start screen can update it.
     this.soundBtn = el('button', '', 'Sound');
     this.soundBtn.onclick = () => this.toggleSound();
-    const vol = el('input');
-    vol.type = 'range';
-    vol.min = '0';
-    vol.max = '1';
-    vol.step = '0.01';
-    vol.value = String(this.settings.volume);
-    vol.setAttribute('aria-label', 'Volume');
-    vol.oninput = () => {
-      this.settings.volume = Number(vol.value);
-      this.music.setVolume(this.settings.volume);
-      saveSettings(this.settings);
-    };
-    music.append(this.soundBtn, vol);
     // The app: settings, install, full screen (from the PWA helper).
     this.appGroup = this.group('App');
     const set = el('button', '', 'Settings…');
-    set.title = 'Graphics quality and the country the hub serves';
+    set.title = 'Time of day, sound, graphics quality and the country the hub serves';
     set.onclick = () => this.toggleSettings();
     this.appGroup.append(set);
   }
@@ -313,6 +294,7 @@ export class Hud {
       this.settingsPanel.remove();
       this.settingsPanel = null;
       this.qualityBtns.clear();
+      this.timeBtns.clear();
       return;
     }
     if (this.panel) this.togglePanel();
@@ -340,6 +322,33 @@ export class Hud {
       this.qualityBtns.set(id, b);
     }
     q.append(qb, el('span', 'set-help', 'Low is fastest; High and Ultra add shadows, ambient occlusion and sharper lines.'));
+    const t = el('div', 'set-row');
+    t.append(el('span', 'set-label', 'Time of day'));
+    const tb = el('div', 'set-opts');
+    for (const [id, label] of [['day', 'Day'], ['night', 'Night'], ['cycle', 'Day ↔ night']] as const) {
+      const b = el('button', '', label);
+      b.onclick = () => this.setTime(id);
+      tb.append(b);
+      this.timeBtns.set(id, b);
+    }
+    t.append(tb, el('span', 'set-help', 'Day: clean production. Night: the party. Keys D, N, C.'));
+    const m = el('div', 'set-row');
+    m.append(el('span', 'set-label', 'Sound'));
+    const mb = el('div', 'set-opts');
+    const vol = el('input');
+    vol.type = 'range';
+    vol.min = '0';
+    vol.max = '1';
+    vol.step = '0.01';
+    vol.value = String(this.settings.volume);
+    vol.setAttribute('aria-label', 'Volume');
+    vol.oninput = () => {
+      this.settings.volume = Number(vol.value);
+      this.music.setVolume(this.settings.volume);
+      saveSettings(this.settings);
+    };
+    mb.append(this.soundBtn, vol);
+    m.append(mb, el('span', 'set-help', 'Music that follows how busy the hub is, and the sounds of the hall. Key M; Space pauses everything.'));
     const c = el('div', 'set-row');
     c.append(el('span', 'set-label', 'Country'));
     const cb = el('div', 'set-opts');
@@ -359,7 +368,7 @@ export class Hud {
     const close = el('button', '', 'Close');
     close.onclick = () => this.toggleSettings();
     row.append(close);
-    p.append(head, q, c, row);
+    p.append(head, t, m, q, c, row);
     this.root.append(p);
     this.settingsPanel = p;
   }
