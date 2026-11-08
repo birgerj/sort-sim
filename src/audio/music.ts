@@ -50,7 +50,10 @@ export function noteColor(midi: number, light = 0.58): RGB {
   return [f(0), f(8), f(4)];
 }
 
-const now = () => performance.now() / 1000;
+/** Music time in seconds: it stands still while paused. */
+let pausedAt: number | null = null;
+let pausedTotal = 0;
+const now = () => (pausedAt ?? performance.now() / 1000) - pausedTotal;
 
 export class Music {
   private composer = new Composer(Math.floor(Math.random() * 1e6));
@@ -60,6 +63,22 @@ export class Music {
   private bars = new Map<number, { at: number; bpm: number }>();
   private target = BPM;
   private queue: { at: number; ev: NoteEvent; bar: number; step: number }[] = [];
+
+  /** Pauses the music and its clock (everything in the hall runs on it), or carries on. */
+  setPaused(p: boolean): void {
+    if (p === this.paused) return;
+    const real = performance.now() / 1000;
+    if (p) pausedAt = real;
+    else if (pausedAt !== null) {
+      pausedTotal += real - pausedAt;
+      pausedAt = null;
+    }
+    if (this.ctx) void (p ? this.ctx.suspend() : this.ctx.resume());
+  }
+
+  get paused(): boolean {
+    return pausedAt !== null;
+  }
 
   /** The tempo now (of the bar playing). */
   get bpm(): number {
