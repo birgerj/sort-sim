@@ -24,6 +24,8 @@ export interface TruckDoor {
   pc: string;
   /** During cleardown: still loading (the dock workers push the last cages in), so wait. */
   hold?: () => boolean;
+  /** How full the roll cages at this door are (0–1): shown on its screen instead of the trailer. */
+  cages?: () => number;
 }
 
 type State = 'open' | 'cleardown' | 'closing' | 'leaving' | 'away' | 'arriving' | 'opening';
@@ -292,7 +294,7 @@ export class Trucks {
     this.docks.forEach((d, i) => {
       const hhmm = `${String(Math.floor(d.cutoff / 60) % 24).padStart(2, '0')}:${String(Math.floor(d.cutoff % 60)).padStart(2, '0')}`;
       const status =
-        d.state === 'open' ? `dep ${hhmm} · ${Math.round(this.fill(d) * 100)}% full` : d.state === 'cleardown' || d.state === 'closing' ? 'CLEARDOWN' : d.state === 'opening' ? `Opening · dep ${hhmm}` : 'Truck on its way';
+        d.state === 'open' ? `dep ${hhmm} · ${d.cages ? `cages ${Math.round(d.cages() * 100)}%` : `truck ${Math.round(this.fill(d) * 100)}%`}` : d.state === 'cleardown' || d.state === 'closing' ? 'CLEARDOWN' : d.state === 'opening' ? `Opening · dep ${hhmm}` : 'Truck on its way';
       const key = status;
       if (d.shown === key) return;
       d.shown = key;

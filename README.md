@@ -55,7 +55,8 @@ sound is generated in code.
    that postcode (two boxes per city, doors 21–40), tips it in, and parks.
 5. **Boxes and trucks (south wall).** When a box is full, a forklift takes it
    into the truck at its city's door and brings it back empty.
-   Above every door a screen shows the door number, city, postcodes and what
+   Above every door a screen shows the door number, city, postcodes, how
+   full the roll cages (north) or the truck (south) are, and what
    the truck is doing.
 6. **Buffer store (east).** A high-bay rack against the east wall, empty at
    the start. When a parcel's chute is full it goes up the lift into the rack

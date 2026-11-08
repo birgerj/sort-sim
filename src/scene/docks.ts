@@ -8,7 +8,6 @@
 // By day the workers work, one move per beat: pick, carry, drop, step back.
 // By night they dance, and the parcels drop into the cages by themselves.
 import * as THREE from 'three';
-import { pcDigits } from '../sim/countries';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
@@ -206,11 +205,25 @@ export class Docks {
 
   arrive(chute: number, p: DockParcel): void {
     const d = this.docks.find((x) => x.chute === chute);
-    if (!d || d.queue.length >= 5) {
+    if (!d) {
       p.dead = true;
       return;
     }
+    // (No limit here: the sorter only sends what fits on the belt, by length.)
     d.queue.push(p);
+  }
+
+  /** The parcels banked up at the end of a dock's belt, front first (by chute). */
+  queueOf(chute: number): readonly DockParcel[] {
+    return this.docks.find((x) => x.chute === chute)?.queue ?? [];
+  }
+
+  /** How full the roll cages at this dock are together (0–1), for the screen above the door. */
+  cageFill(x: number): number {
+    const d = this.docks.find((k) => k.x === x);
+    if (!d) return 0;
+    const home = d.cages.filter((c) => c.state === 'home');
+    return home.length ? home.reduce((a, c) => a + this.fillOf(c), 0) / d.cages.length : 0;
   }
 
   /** One beat: each worker finishes a step or starts the next job. Day and night alike. */
@@ -267,7 +280,6 @@ export class Docks {
       w.parcel = p;
       w.cage = -1;
       w.pickFrom.copy(p.pos);
-      this.handlers.mark(d.chute, p.pos, pcDigits(p.pc));
       const tote = v(d.x + 0.9, 0, DOCK_BELT_END - 0.4);
       w.steps.push(
         { beats: 1, to: w.home, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'pick' },
@@ -295,7 +307,6 @@ export class Docks {
     const c = d.cages[ci]!;
     const belt = v(d.x, 0, DOCK_BELT_END + 0.35);
     const near = w.home.clone().lerp(c.at, 0.5).setY(0);
-    this.handlers.mark(d.chute, p.pos, pcDigits(p.pc));
     w.steps.push(
       { beats: 1, to: w.home, face: belt, pose: 'pick' },
       { beats: 1, to: near, face: c.at, pose: 'carry' },
