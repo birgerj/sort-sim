@@ -126,8 +126,9 @@ export class Life {
       this.group.add(h.root);
       if (tablet) {
         const t = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.02, 0.2), k.std(0x1d1d1f, 0.4, 0.2, 0x1d1d1f));
-        t.position.set(0, -0.6, 0.12);
-        h.armR.add(t);
+        t.position.set(0, -0.3, 0.1);
+        h.foreR.add(t);
+        h.foreR.rotation.x = -1.2;
         h.armR.userData.hold = true;
       }
       const route = new Route(pts);

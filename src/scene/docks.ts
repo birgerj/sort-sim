@@ -91,6 +91,9 @@ interface Worker {
   torso: THREE.Group;
   armL: THREE.Group;
   armR: THREE.Group;
+  foreL: THREE.Group;
+  foreR: THREE.Group;
+  head: THREE.Group;
   legL: THREE.Group;
   legR: THREE.Group;
   home: V3;
@@ -108,6 +111,13 @@ interface Worker {
   /** Loaders: where they stand to chat with the others of their group when there is no work, and the middle of the group. */
   chat?: V3;
   chatMid?: V3;
+  /** The chat group: its number, the others' spots, and this one's place in it. */
+  group?: number;
+  mates?: V3[];
+  /** Own rhythm and habits (from a seed): talking speed, listening pose, how often it nods. */
+  rate: number;
+  phase: number;
+  style: number;
 }
 
 interface Dock {
@@ -185,6 +195,7 @@ function cageSlot(k: number, out: V3): V3 {
   return out.set((k % 2 ? 0.3 : -0.3), 0.36 + Math.floor(k / 4) * 0.48, (Math.floor(k / 2) % 2 ? 0.22 : -0.22));
 }
 
+const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -216,14 +227,21 @@ export class Docks {
       groups.push(this.docks.slice(i, i + size));
       i += size;
     }
-    for (const g of groups) {
+    groups.forEach((g, gi) => {
       const mid = v(g.reduce((a, d) => a + d.x, 0) / g.length + 0.9, 0, -33.2);
-      g.forEach((d, k) => {
-        const a = (k / g.length) * Math.PI * 2 + 0.6;
-        d.loader.chat = mid.clone().add(v(Math.cos(a) * 0.65, 0, Math.sin(a) * 0.65));
-        d.loader.chatMid = mid;
+      const spots = g.map((_, k) => {
+        const a = (k / g.length) * Math.PI * 2 + 0.6 + gi;
+        // (Not quite a ring: people stand at their own distance.)
+        const r = 0.6 + ((gi * 7 + k * 3) % 4) * 0.06;
+        return mid.clone().add(v(Math.cos(a) * r, 0, Math.sin(a) * r));
       });
-    }
+      g.forEach((d, k) => {
+        d.loader.chat = spots[k]!;
+        d.loader.chatMid = mid;
+        d.loader.group = gi;
+        d.loader.mates = spots;
+      });
+    });
   }
 
   /** City of a dock (by chute), or −1. */
@@ -652,6 +670,14 @@ export class Docks {
     let bounce = 0;
     let step = 0;
     let dance = false;
+    let chat = false;
+    let headTurn = 0;
+    let nod = 0;
+    let sway = 0;
+    let armR2: number | null = null;
+    let foreL = -0.12;
+    let foreR = -0.12;
+    let hipR = 0;
     if (st) {
       const f = Math.min(1, Math.max(0, (bt - w.t0) / st.beats));
       const e = ease(f);
@@ -706,12 +732,47 @@ export class Docks {
       armUpR = beat % 2 ? 0.6 + s.snare : 2.6;
       bend = -0.15 * s.snare;
       step = Math.sin(bt * Math.PI) * 0.4;
-    } else if (w.chat && w.chatMid && w.root.position.distanceTo(w.chat) < 0.4) {
-      // Chatting: face the group, nod, and talk with the hands now and then.
+    } else if (w.chat && w.chatMid && w.mates && w.root.position.distanceTo(w.chat) < 0.4) {
+      chat = true;
+      // Who is talking: it changes every few beats (not on a fixed count), per group.
+      const n = w.mates.length;
+      const turn = Math.floor(bt / 3.3 + Math.sin(bt * 0.37 + (w.group ?? 0)) * 0.8);
+      const speaker = ((Math.imul(turn, 2654435761) + (w.group ?? 0) * 97) >>> 5) % n;
+      const me = w.mates.indexOf(w.chat);
+      const talking = speaker === me;
+      const t = bt * w.rate + w.phase;
+      // Face the middle of the group, turned a little towards whoever talks.
+      const who = w.mates[speaker]!;
       face = Math.atan2(w.chatMid.x - pos.x, w.chatMid.z - pos.z);
-      const talk = Math.floor(bt / 4 + (w.home.x % 3)) % 3 === 0;
-      armF = talk ? 0.5 + 0.35 * Math.abs(Math.sin(bt * Math.PI)) : 0.1;
-      bend = 0.05 * Math.sin(bt * Math.PI * 0.5 + w.home.x);
+      const toWho = Math.atan2(who.x - pos.x, who.z - pos.z);
+      let dh = toWho - face;
+      while (dh > Math.PI) dh -= 2 * Math.PI;
+      while (dh < -Math.PI) dh += 2 * Math.PI;
+      headTurn = talking ? Math.sin(t * 0.7) * 0.35 : clamp(dh, -0.7, 0.7);
+      // Weight on one leg, then the other, at its own slow pace.
+      sway = Math.sin(t * 0.25) * 0.03;
+      if (talking) {
+        // Talking with the hands, each at its own speed.
+        armF = 0.35 + 0.2 * Math.sin(t * 1.3);
+        armR2 = 0.45 + 0.25 * Math.sin(t * 1.7 + 1.1);
+        foreL = -0.9 - 0.5 * Math.max(0, Math.sin(t * 2.1));
+        foreR = -1.0 - 0.6 * Math.max(0, Math.sin(t * 1.6 + 0.7));
+        nod = 0.08 * Math.sin(t * 2.3);
+        bend = 0.04;
+      } else {
+        // Listening in its own way: hands at the sides, clasped in front, or a hand on the hip.
+        nod = Math.max(0, Math.sin(t * 0.9)) ** 8 * 0.25;
+        if (w.style === 1) {
+          armF = 0.28;
+          armR2 = 0.28;
+          foreL = foreR = -1.25;
+        } else if (w.style === 2) {
+          hipR = 0.55;
+          armR2 = -0.1;
+          foreR = -1.7;
+        }
+        bend = 0.03 * Math.sin(t * 0.5);
+      }
     } else bend = 0.04 * Math.sin(bt * Math.PI * 0.5);
     w.root.position.lerp(this.t.copy(pos).setY(bounce), st ? 1 : k);
     let dy = face - w.yaw;
@@ -721,9 +782,19 @@ export class Docks {
     w.root.rotation.y = w.yaw;
     w.torso.rotation.x += (bend - w.torso.rotation.x) * k;
     const armL = dance ? -armUpL : -armF;
-    const armR = dance ? -armUpR : -armF;
+    const armR = dance ? -armUpR : -(armR2 ?? armF);
     w.armL.rotation.x += (armL - w.armL.rotation.x) * k;
     w.armR.rotation.x += (armR - w.armR.rotation.x) * k;
+    // Elbows: bent when carrying or pushing, a little when hanging; while chatting as set above.
+    const carry = st && (st.pose === 'carry' || st.pose === 'push' || st.pose === 'pick' || st.pose === 'drop');
+    const fl = chat ? foreL : carry ? -0.55 : dance ? -0.4 : -0.12;
+    const fr = chat ? foreR : carry ? -0.55 : dance ? -0.4 : -0.12;
+    w.foreL.rotation.x += (fl - w.foreL.rotation.x) * k * 0.6;
+    w.foreR.rotation.x += (fr - w.foreR.rotation.x) * k * 0.6;
+    w.armR.rotation.z += (0.07 + hipR - w.armR.rotation.z) * k * 0.6;
+    w.head.rotation.y += (headTurn - w.head.rotation.y) * k * 0.4;
+    w.head.rotation.x += (nod - w.head.rotation.x) * k * 0.6;
+    w.root.rotation.z = sway;
     w.legL.rotation.x = step;
     w.legR.rotation.x = -step;
   }
@@ -866,7 +937,9 @@ export class Docks {
     });
     h.root.position.copy(home);
     this.kit.put(h.root);
-    return { ...h, home, steps: [], step: null, t0: 0, from: home.clone(), cageFrom: new THREE.Vector3(), parcel: null, pickFrom: new THREE.Vector3(), cage: 0, yaw: Math.PI };
+    const seed = (n * 2654435761) >>> 0;
+    const rnd = (k: number) => ((seed >>> k) & 1023) / 1023;
+    return { ...h, home, steps: [], step: null, t0: 0, from: home.clone(), cageFrom: new THREE.Vector3(), parcel: null, pickFrom: new THREE.Vector3(), cage: 0, yaw: Math.PI, rate: 0.7 + rnd(3) * 0.7, phase: rnd(13) * Math.PI * 2, style: Math.floor(rnd(7) * 3) };
   }
 
 }
