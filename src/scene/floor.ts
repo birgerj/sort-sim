@@ -589,10 +589,28 @@ export class RobotFloor {
       g.fillRect(70, 22, 40, 20);
     });
     const face = new THREE.MeshBasicMaterial({ map: grille });
+    // Housing: a rounded case with cooling fins, a pan-tilt yoke, and the lens pointing down.
+    const housing = mergeGeometries([
+      new RoundedBoxGeometry(0.7, 0.62, 0.55, 3, 0.07).translate(0, 0.3, 0).toNonIndexed(),
+      ...[-0.2, -0.1, 0, 0.1, 0.2].map((x) => new THREE.BoxGeometry(0.04, 0.5, 0.06).translate(x, 0.32, -0.3).toNonIndexed()),
+      new THREE.BoxGeometry(0.08, 0.5, 0.06).translate(-0.4, 0.05, 0).toNonIndexed(),
+      new THREE.BoxGeometry(0.08, 0.5, 0.06).translate(0.4, 0.05, 0).toNonIndexed(),
+      new THREE.BoxGeometry(0.88, 0.06, 0.1).translate(0, 0.66, 0).toNonIndexed(),
+      new THREE.CylinderGeometry(0.06, 0.06, 0.3, 10).translate(0, 0.82, 0).toNonIndexed(),
+      new RoundedBoxGeometry(0.56, 0.38, 0.46, 3, 0.06).translate(0, -0.2, 0).toNonIndexed(),
+      new THREE.CylinderGeometry(0.17, 0.2, 0.12, 20).translate(0, -0.42, 0).toNonIndexed(),
+    ])!;
+    const lensGeo = new THREE.CircleGeometry(0.13, 20).rotateX(Math.PI / 2).translate(0, -0.485, 0);
+    const lensMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 0.55, 1.2) });
     const add = (x: number, z: number, target: THREE.Vector3 | null): number => {
-      k.box('pbody', body, x, PROJ_Y + 0.3, z, 0.7, 0.7, 0.55);
-      k.box('pbody', body, x, PROJ_Y - 0.25, z, 0.6, 0.45, 0.5);
-      const f = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.35), face);
+      const h = new THREE.Mesh(housing, body);
+      h.position.set(x, PROJ_Y, z);
+      k.put(h);
+      k.inkify(h, 35);
+      const lens = new THREE.Mesh(lensGeo, lensMat);
+      lens.position.set(x, PROJ_Y, z);
+      k.put(lens);
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.3), face);
       f.position.set(x, PROJ_Y + 0.35, z + 0.28);
       k.put(f);
       this.projectors.push({ pos: v(x, PROJ_Y - 0.48, z), target, flash: 0, col: new THREE.Color(1, 1, 1) });
