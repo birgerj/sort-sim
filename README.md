@@ -95,7 +95,7 @@ do one move per beat.
 ## Logistics
 
 - **Hub time** starts at 18:00; a beat is 15 seconds of hub time.
-- **Departures:** every door has a truck leaving every hour (the doors' times are spread over the hour). The cleardown starts 6 minutes before; a truck also leaves early when it is full by volume, weight or places. A departure more than 2 minutes after its cutoff counts as late.
+- **Departures:** a roll-cage door has a truck leaving every 4 hours of hub time, a box door every 2 hours; the doors of one city take turns (Amsterdam: one of its four every hour), and the cities are spread over that time. The cleardown starts 6 minutes before; a truck also leaves early when it is full by volume, weight or places. A departure more than 2 minutes after its cutoff counts as late.
 - **Christmas** (Settings, `?xmas=1`): trees with baubles, lights and presents, garlands along the walls, light strings under the roof and along the loop (twinkling on the beat), wreaths on the dock doors, giant candy canes, hanging stars, snowflakes on the floor, presents among the parcels, Christmas hats, Father Christmas walking round, decorated forklifts, a Christmas market (hot-chocolate stall, nativity stable), sleigh bells and bells in the music, and a countdown on the wall boards.
 - **Country** (Settings): the Netherlands, Belgium, France, Germany, Finland, Sweden, Moldova, India or Australia; by default from the browser's language. Its 40 largest towns or municipalities (with their postcode ranges) are the 40 destinations; names, streets and address format follow the country.
 - **Destinations** are weighted by inhabitants (rounded, about 2024); within a city the postcodes are equally likely.
