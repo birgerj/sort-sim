@@ -984,6 +984,8 @@ export class Sorter implements Scene3D {
   private day = 0;
   /** Christmas decorations (Settings → Christmas). */
   private xmas: Xmas | null = null;
+  /** Spots beside the chute tables (for Christmas trees). */
+  private deskTrees: { x: number; z: number }[] = [];
   private dayShown: boolean | null = null;
   private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
@@ -1134,10 +1136,12 @@ export class Sorter implements Scene3D {
         southDoors: SOUTH_DOORS,
         loopEdge: edge,
         trees: [
-          { x: -55.5, z: 21.5, h: 4.2 },
-          { x: -48.8, z: 31.4, h: 3.6 },
-          { x: -19.5, z: -30.8, h: 4.2 },
-          { x: PLATFORM_X - 2.4, z: 2.6, y: PLATFORM_Y, h: 2.2 },
+          { x: -55.8, z: 21.2, h: 7 },
+          { x: -48.6, z: 31.2, h: 6 },
+          { x: -19.5, z: -30.4, h: 7 },
+          { x: PLATFORM_X - 2.2, z: 2.4, y: PLATFORM_Y, h: 3.4 },
+          // Beside every chute table, inside the loop: as tall as fits under the track.
+          ...this.deskTrees.map((t) => ({ ...t, h: 4.6 })),
         ],
         canes: [
           { x: -41.6, z: 1.7, ry: 0 },
@@ -3547,6 +3551,8 @@ export class Sorter implements Scene3D {
         const tx = this.p.x + this.n.x * 0.62;
         const tz = this.p.z + this.n.z * 0.62;
         desk.table(tx, tz, Math.atan2(this.t.x, this.t.z), k * 7919 + 13);
+        // (Christmas: a tree beside each table, further in from the track.)
+        this.deskTrees.push({ x: tx + this.t.x * 1.9 + this.n.x * 1.5, z: tz + this.t.z * 1.9 + this.n.z * 1.5 });
       });
       desk.build();
       shows.flush();

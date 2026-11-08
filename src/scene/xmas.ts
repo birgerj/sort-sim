@@ -100,7 +100,7 @@ export class Xmas {
     this.buildLightStrings();
     this.buildGarlands();
     this.buildWreaths();
-    for (const t of L.trees) this.tree(t.x, t.z, t.h, t.y ?? 0);
+    this.trees(L.trees);
     for (const c of L.canes) this.cane(c.x, c.z, c.ry);
     this.buildStars();
     this.buildSnow();
@@ -211,63 +211,59 @@ export class Xmas {
     mk(b, berries, 0, 0.05);
   }
 
-  /** A Christmas tree: trunk in a pot, three tiers, baubles, a spiral of lights, a star, and presents. */
-  private tree(x: number, z: number, h: number, y0: number): void {
+  /** Christmas trees, all in a few draw calls: trunk in a pot, three tiers, baubles, a spiral of lights, a star, and presents. */
+  private trees(list: { x: number; z: number; h: number; y?: number }[]): void {
     const k = this.k;
-    const green = k.std(0x14532d, 0.85, 0, GREEN);
-    const trunk = k.std(0x4a2f1a, 0.9, 0, 0x7a4a2a);
-    const pot = k.std(0x8a0b1f, 0.6, 0.1, RED);
-    const s = h / 4;
     const tiers: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 3; i++) tiers.push(new THREE.ConeGeometry(s * (1.3 - i * 0.3), s * 1.7, 14).translate(0, s * (1.25 + i * 0.95), 0));
-    const g = new THREE.Mesh(merge(tiers), green);
-    g.position.set(x, y0, z);
-    k.put(g);
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(s * 0.12, s * 0.15, s * 0.6, 8).translate(0, s * 0.45, 0), trunk);
-    t.position.copy(g.position);
-    k.put(t);
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(s * 0.32, s * 0.25, s * 0.42, 12).translate(0, s * 0.21, 0), pot);
-    p.position.copy(g.position);
-    k.put(p);
-    // Baubles on the tiers, and a spiral of lights.
-    const baub: THREE.BufferGeometry[] = [];
+    const trunks: THREE.BufferGeometry[] = [];
+    const pots: THREE.BufferGeometry[] = [];
+    const baubles: THREE.BufferGeometry[] = [];
+    const gold: THREE.BufferGeometry[] = [];
+    const stars: THREE.BufferGeometry[] = [];
     const lights: THREE.Vector3[] = [];
-    for (let i = 0; i < 26; i++) {
-      const u = i / 26;
-      const yy = s * (0.6 + u * 2.9);
-      const r = s * 1.25 * (1 - u * 0.85) * 0.92;
-      const a = i * 2.4;
-      baub.push(new THREE.SphereGeometry(s * 0.09, 8, 6).translate(Math.cos(a) * r, yy, Math.sin(a) * r));
-    }
-    for (let i = 0; i < 60; i++) {
-      const u = i / 60;
-      const yy = s * (0.55 + u * 3.0);
-      const r = s * 1.3 * (1 - u * 0.86);
-      const a = u * Math.PI * 2 * 5;
-      lights.push(new THREE.Vector3(x + Math.cos(a) * r, y0 + yy, z + Math.sin(a) * r));
-    }
-    const bm = new THREE.Mesh(merge(baub), k.std(0x8a0b1f, 0.25, 0.5, RED));
-    bm.position.copy(g.position);
-    k.put(bm);
-    this.bulbs(lights, s * 0.035);
-    const star = new THREE.Mesh(starGeo(s * 0.32, s * 0.08), this.stars);
-    star.position.set(x, y0 + s * 3.75, z);
-    k.put(star);
-    // Presents under the tree (on the floor only).
-    if (y0 === 0) {
-      const wraps = [RED, GOLD, 0x1755fe, 0x2fa58f, 0xffffff];
-      for (let i = 0; i < 5; i++) {
-        const a = i * 1.3 + 0.4;
-        const bx = x + Math.cos(a) * s * 1.35;
-        const bz = z + Math.sin(a) * s * 1.35;
-        const w = 0.25 + (i % 3) * 0.1;
-        const hh = 0.18 + ((i * 7) % 3) * 0.08;
-        k.box('gift', k.std(0x444444, 0.6, 0, wraps[i]!), bx, hh / 2, bz, w, hh, w * 0.9, undefined, a);
-        k.box('giftribbon', k.std(0x8a6a10, 0.4, 0.4, i % 2 ? RED : GOLD), bx, hh / 2 + 0.005, bz, 0.05, hh + 0.01, w * 0.9 + 0.01, undefined, a);
-        k.box('giftribbon', k.std(0x8a6a10, 0.4, 0.4, i % 2 ? RED : GOLD), bx, hh / 2 + 0.005, bz, w + 0.01, hh + 0.01, 0.05, undefined, a);
+    const wraps = [RED, GOLD, 0x1755fe, 0x2fa58f, 0xffffff];
+    list.forEach(({ x, z, h, y }, ti) => {
+      const y0 = y ?? 0;
+      const s = h / 4;
+      const at = (g: THREE.BufferGeometry) => g.translate(x, y0, z);
+      for (let i = 0; i < 3; i++) tiers.push(at(new THREE.ConeGeometry(s * (1.3 - i * 0.3), s * 1.7, 16).translate(0, s * (1.25 + i * 0.95), 0)));
+      trunks.push(at(new THREE.CylinderGeometry(s * 0.12, s * 0.15, s * 0.6, 8).translate(0, s * 0.45, 0)));
+      pots.push(at(new THREE.CylinderGeometry(s * 0.32, s * 0.25, s * 0.42, 12).translate(0, s * 0.21, 0)));
+      for (let i = 0; i < 34; i++) {
+        const u = i / 34;
+        const r = s * 1.25 * (1 - u * 0.85) * 0.94;
+        const a = i * 2.4 + ti;
+        (i % 3 ? baubles : gold).push(at(new THREE.SphereGeometry(s * 0.085, 8, 6).translate(Math.cos(a) * r, s * (0.6 + u * 2.9), Math.sin(a) * r)));
       }
-    }
-    k.blob(x, z, s * 3, s * 3);
+      for (let i = 0; i < 80; i++) {
+        const u = i / 80;
+        const r = s * 1.3 * (1 - u * 0.86);
+        const a = u * Math.PI * 2 * 6;
+        lights.push(new THREE.Vector3(x + Math.cos(a) * r, y0 + s * (0.55 + u * 3.0), z + Math.sin(a) * r));
+      }
+      stars.push(starGeo(s * 0.32, s * 0.08).translate(x, y0 + s * 3.75, z));
+      // Presents under the tree (on the floor only).
+      if (y0 === 0) {
+        for (let i = 0; i < 5; i++) {
+          const a = i * 1.3 + 0.4 + ti;
+          const bx = x + Math.cos(a) * s * 1.4;
+          const bz = z + Math.sin(a) * s * 1.4;
+          const w = 0.25 + (i % 3) * 0.1;
+          const hh = 0.18 + ((i * 7) % 3) * 0.08;
+          k.box('gift', k.std(0x444444, 0.6, 0, 0xffffff), bx, hh / 2, bz, w, hh, w * 0.9, wraps[(i + ti) % wraps.length], a);
+          k.box('giftribbon', k.std(0x8a6a10, 0.4, 0.4, 0xffffff), bx, hh / 2 + 0.005, bz, 0.05, hh + 0.01, w * 0.9 + 0.01, i % 2 ? RED : GOLD, a);
+          k.box('giftribbon', k.std(0x8a6a10, 0.4, 0.4, 0xffffff), bx, hh / 2 + 0.005, bz, w + 0.01, hh + 0.01, 0.05, i % 2 ? RED : GOLD, a);
+        }
+      }
+      k.blob(x, z, s * 3, s * 3);
+    });
+    k.put(new THREE.Mesh(merge(tiers), k.std(0x14532d, 0.85, 0, GREEN)));
+    k.put(new THREE.Mesh(merge(trunks), k.std(0x4a2f1a, 0.9, 0, 0x7a4a2a)));
+    k.put(new THREE.Mesh(merge(pots), k.std(0x8a0b1f, 0.6, 0.1, RED)));
+    k.put(new THREE.Mesh(merge(baubles), k.std(0x8a0b1f, 0.25, 0.5, RED)));
+    k.put(new THREE.Mesh(merge(gold), k.std(0x8a6a10, 0.25, 0.7, GOLD)));
+    k.put(new THREE.Mesh(merge(stars), this.stars));
+    this.bulbs(lights, 0.05);
   }
 
   /** A giant candy cane: a red-and-white striped staff with a hook. */
