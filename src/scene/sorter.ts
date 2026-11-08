@@ -90,22 +90,28 @@ const LABEL_H = 64;
 const LABEL_COLS = 21;
 const LABEL_ROWS = 32;
 
-// Loop positions (metres from the start of the north straight; all even, so on a beat).
+// Loop positions (metres from the start of the north straight; chutes on even marks, so on a beat).
 // s 0–120: north straight, 20 dock chutes · 127–136: east side, to and from the store ·
-// 142–262: south straight, 20 robot station chutes · 263–284: west end, the infeeds.
+// 142–262: south straight, 20 robot station chutes · 263–284: west end.
 /**
- * Infeeds: four lanes from the west wall, two low and two high, each through
- * its own scan tunnel and each joining the west side of the loop on its own,
- * at 30° from the outside. Two join at odd metre marks and two at even ones,
- * so parcels land on every tray (odd and even) on the beat.
+ * Infeeds: four low lanes from the west wall, 4 m apart, each through its own scan
+ * tunnel just inside the wall. They run under the west end of the loop into the
+ * middle, climb to loop height and, one after the other, turn left and join the
+ * north straight from the inside at 30°, 6 m apart (between the chute tables).
+ * The joins are on odd marks: lanes 0 and 2 land on the beat (odd trays), lanes 1
+ * and 3 half a beat later (even trays), so every tray can be filled.
  */
-const INDUCT = [267, 271, 276, 280];
-const LANE_Y = [1.0, 1.0, 7.0, 7.0];
-/** z of the lanes at the wall; lanes 1 and 2 run straight on, 0 and 3 join them. */
-const LANE_Z = [9.8, 7.2, 4.0, 1.4];
-const LANE_TUNNEL_X = -55;
-/** Where parcels queue on an infeed lane (metres along it, just before the scan tunnel). */
-const HOLD_S = 6.6;
+const INDUCT = [13, 19, 25, 31];
+/** Half-beat offset of each lane's landing (see above). */
+const LANE_PHASE = [0, 0.5, 0, 0.5];
+const LANE_Y = 1.2;
+/** z of the lanes (north to south); they keep it until they turn onto the loop. */
+const LANE_Z = [-6, -2, 2, 6];
+const LANE_TUNNEL_X = -58.4;
+/** The mezzanine (the DJ's at night), south of the lanes. */
+const MEZZ_Z = 9.6;
+/** Where parcels queue on an infeed lane (metres along it, after the scan tunnel). */
+const HOLD_S = 15;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
 const LANE_QUEUE = 7;
 /** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
@@ -289,7 +295,8 @@ const outward = (tan: V3, out: V3) => out.set(tan.z, 0, -tan.x);
 /** Beats from loop position a to b going forward (at least one lap if equal). */
 export function beatsAlong(a: number, b: number): number {
   const d = (((b - a) % LOOP_LEN) + LOOP_LEN) % LOOP_LEN;
-  return Math.round((d === 0 ? LOOP_LEN : d) / BEAT_M);
+  // (Exact: a parcel inducted at an odd mark rides to an even chute in a whole beat and a half.)
+  return (d === 0 ? LOOP_LEN : d) / BEAT_M;
 }
 
 /** Which tray sits at loop position s at beat t. */
@@ -1102,7 +1109,7 @@ export class Sorter implements Scene3D {
       columnsNorth: COLUMNS.map((x) => x + 2.4),
       columnsSouth: COLUMNS,
     });
-    this.party = new Party(this, v(-50.2, 6.21, LANE_Z[3]! - 2.4), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
+    this.party = new Party(this, v(-50.2, 6.21, MEZZ_Z), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, LX + 1, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.buildBoards();
@@ -1708,7 +1715,7 @@ export class Sorter implements Scene3D {
   private spawn(k: number, color: RGB | null, lead: boolean): boolean {
     const lane = this.lanes[k]!;
     const bt = this.ct;
-    let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M), lane.lastArrive + 1);
+    let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M) + LANE_PHASE[k]!, lane.lastArrive + 1);
     if (this.waiting[k]! >= LANE_QUEUE) return false;
     const p = this.newParcel();
     if (!p) return false;
@@ -2955,10 +2962,10 @@ export class Sorter implements Scene3D {
     for (let x = WX + 22; x <= EX - 20; x += 20) this.box('strobe', this.strobe, x, HH - 0.3, 0, 2.4, 0.08, 0.5);
     this.only = undefined;
 
-    // Mezzanine for the high infeeds, with stairs.
+    // Mezzanine by the infeeds, with stairs.
     const grate = this.std(0x3a3e45, 0.6, 0.7, 0xc9ced4);
     const rail = this.std(0xd9a400, 0.5, 0.4);
-    const MZ = LANE_Z[3]! - 2.4;
+    const MZ = MEZZ_Z;
     this.box('grate', grate, -55, 6.15, MZ, 14, 0.12, 2.2);
     this.box('rail', rail, -55, 7.2, MZ - 1, 14, 0.06, 0.06);
     for (let x = -62; x <= -48; x += 2) this.box('rail', rail, x, 6.65, MZ - 1, 0.06, 1.1, 0.06);
@@ -3160,17 +3167,18 @@ export class Sorter implements Scene3D {
       }
     };
 
-    // Infeeds: four lanes side by side, two low and two high, each through its own scan tunnel.
+    // Infeeds: four low lanes side by side, each through its own scan tunnel.
     for (let k = 0; k < 4; k++) {
-      const y = LANE_Y[k]!;
+      const y = LANE_Y;
       const z = LANE_Z[k]!;
-      // In from the west wall, through the scan tunnel, ramp to loop height, then turn and
-      // join the loop at 30° from the outside, each lane at its own point.
+      // In from the west wall, under the loop's west end, then climb inside the loop and
+      // turn left onto the north straight at 30°, from the inside.
       loopAt(INDUCT[k]!, this.p, this.t);
       const end = this.p.clone();
-      const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
-      const corner = end.clone().addScaledVector(into, -(z - end.z) / -into.z).setY(LOOP_Y);
-      const path = Path.fillet([v(WX - 1, y, z), v(-42, y, z), v(corner.x - 6, LOOP_Y, z), corner, end], 3);
+      const into = this.t.clone().applyAxisAngle(UP, Math.PI / 6);
+      const corner = end.clone().addScaledVector(into, -(end.z - z) / into.z);
+      corner.y = LOOP_Y - 0.4;
+      const path = Path.fillet([v(WX - 1, y, z), v(-22.4, y, z), v(corner.x, corner.y, z), end], 3);
       belt(path, 0.6, path.len - 1.0, stripIn);
 
       const tunnel = this.tunnel(path, LANE_TUNNEL_X - WX + 1, 1.2);
