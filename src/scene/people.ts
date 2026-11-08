@@ -38,33 +38,55 @@ function shapes(): Record<string, THREE.BufferGeometry> {
   const cap = (r: number, len: number, y: number, seg = 10) => new THREE.CapsuleGeometry(r, len, 4, seg).translate(0, y, 0);
   const ball = (r: number, x: number, y: number, z: number, seg = 10) => new THREE.SphereGeometry(r, seg, Math.max(6, seg - 2)).translate(x, y, z);
   const box = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+  // A body of revolution from a (radius, height) profile, squashed front to back.
+  const lathe = (prof: [number, number][], depth: number, y = 0, seg = 18) =>
+    new THREE.LatheGeometry(prof.map(([r, h]) => new THREE.Vector2(r, h)), seg).scale(1, 1, depth).translate(0, y, 0);
+  const ell = (rx: number, ry: number, rz: number, x: number, y: number, z: number, seg = 14) => new THREE.SphereGeometry(1, seg, Math.max(8, seg - 4)).scale(rx, ry, rz).translate(x, y, z);
+  // An arc over the top of the helmet, front to back, following the dome (the ridge).
+  const ridge = new THREE.TorusGeometry(1, 0.11, 6, 20, Math.PI).rotateY(Math.PI / 2).scale(1, 0.84, 1.08).scale(0.128, 0.128, 0.128).translate(0, 0.79, 0);
   geo = {
-    // Trouser leg: thigh and calf, a knee in between.
-    leg: merge(cap(0.095, 0.28, -0.2), ball(0.085, 0, -0.42, 0.01), cap(0.075, 0.3, -0.62)),
+    // Leg (hip joint at the top): a tapering thigh, the knee, a calf with a bit of shape.
+    leg: lathe([[0, 0.02], [0.082, 0.0], [0.084, -0.08], [0.074, -0.25], [0.06, -0.42], [0.056, -0.46], [0.06, -0.55], [0.057, -0.66], [0.044, -0.8], [0.042, -0.84], [0, -0.84]], 0.95, 0, 14),
     // Safety boot: rounded upper, toe cap, and a thick dark sole (the sole is its own part).
-    boot: merge(new RoundedBoxGeometry(0.15, 0.12, 0.27, 2, 0.04).translate(0, -0.84, 0.04), ball(0.075, 0, -0.85, 0.15)),
-    sole: box(0.165, 0.035, 0.3, 0, -0.9, 0.045),
-    torso: new THREE.CapsuleGeometry(0.21, 0.32, 4, 14).scale(1.18, 1, 0.72).translate(0, 0.38, 0),
-    // Collar, breast pocket flaps and the belt.
-    collar: new THREE.TorusGeometry(0.085, 0.022, 6, 14).rotateX(Math.PI / 2).translate(0, 0.74, 0.01),
-    belt: new THREE.CylinderGeometry(0.235, 0.235, 0.06, 18).scale(1.12, 1, 0.74).translate(0, 0.07, 0),
-    buckle: box(0.07, 0.05, 0.02, 0, 0.07, 0.175),
-    vest: new THREE.CapsuleGeometry(0.215, 0.28, 4, 14).scale(1.2, 1, 0.76).translate(0, 0.4, 0),
+    boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)),
+    sole: box(0.12, 0.03, 0.27, 0, -0.905, 0.04),
+    // Pelvis and torso (waist joint at the bottom): hips, a waist, the chest and sloping shoulders.
+    // Hips (in the trousers' colour) and the torso: a waist, the chest and sloping shoulders.
+    hips: ell(0.152, 0.1, 0.104, 0, 0.0, 0),
+    torso: lathe([[0, 0.02], [0.148, 0.02], [0.142, 0.12], [0.15, 0.25], [0.166, 0.36], [0.172, 0.43], [0.16, 0.49], [0.118, 0.535], [0.06, 0.56], [0, 0.565]], 0.64),
+    collar: new THREE.TorusGeometry(0.058, 0.014, 6, 16).rotateX(Math.PI / 2).scale(1, 1, 0.9).translate(0, 0.555, 0.008),
+    belt: lathe([[0.152, -0.03], [0.152, 0.03]], 0.66, 0.06),
+    buckle: box(0.05, 0.035, 0.015, 0, 0.06, 0.1),
+    vest: lathe([[0.158, 0.08], [0.152, 0.14], [0.16, 0.25], [0.178, 0.38], [0.182, 0.45], [0.168, 0.51], [0.13, 0.545]], 0.68),
     // Two reflective bands round the vest.
-    bands: merge(...[0.28, 0.46].map((y) => new THREE.CylinderGeometry(0.262, 0.262, 0.045, 18, 1, true).scale(1.0, 1, 0.64).translate(0, y, 0))),
-    // Upper arm with a shoulder, elbow, forearm; the hand is a mitten with a thumb.
-    arm: merge(ball(0.066, 0, 0, 0), cap(0.064, 0.22, -0.16), ball(0.058, 0, -0.32, 0), cap(0.054, 0.2, -0.45)),
-    hand: new RoundedBoxGeometry(0.07, 0.12, 0.05, 2, 0.022).translate(0, -0.62, 0.005),
-    neck: new THREE.CylinderGeometry(0.058, 0.066, 0.12, 12).translate(0, 0.79, 0),
-    head: merge(new THREE.SphereGeometry(0.15, 18, 14).scale(0.95, 1.1, 1).translate(0, 0.96, 0), ball(0.032, -0.142, 0.95, 0, 8), ball(0.032, 0.142, 0.95, 0, 8), ball(0.024, 0, 0.94, 0.15, 8)),
+    bands: merge(...[0.22, 0.36].map((y) => new THREE.CylinderGeometry(0.168, 0.164 + (y > 0.3 ? 0.012 : 0), 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, y, 0))),
+    // Arm (shoulder joint at the top): upper arm, elbow, forearm, wrist.
+    arm: lathe([[0, 0.05], [0.04, 0.045], [0.054, 0.0], [0.048, -0.12], [0.04, -0.28], [0.038, -0.3], [0.041, -0.36], [0.032, -0.52], [0.028, -0.55], [0, -0.555]], 0.9, 0, 12),
+    // Hand: a palm and the fingers together, the thumb forward.
+    hand: merge(new RoundedBoxGeometry(0.06, 0.1, 0.03, 2, 0.013).translate(0, -0.6, 0), ell(0.014, 0.03, 0.014, 0, -0.585, 0.022, 6)),
+    neck: new THREE.CylinderGeometry(0.044, 0.05, 0.11, 12).translate(0, 0.62, 0.005),
+    // Head: skull, jaw and chin, ears and a nose.
+    head: merge(
+      ell(0.092, 0.112, 0.102, 0, 0.75, 0, 18),
+      ell(0.072, 0.06, 0.08, 0, 0.69, 0.018, 12),
+      ell(0.016, 0.028, 0.012, -0.092, 0.745, -0.005, 6),
+      ell(0.016, 0.028, 0.012, 0.092, 0.745, -0.005, 6),
+      new THREE.ConeGeometry(0.016, 0.04, 6).rotateX(Math.PI / 2).translate(0, 0.735, 0.105),
+    ),
     // Eyes and eyebrows (dark), and the mouth.
-    face: merge(ball(0.017, -0.05, 0.985, 0.132, 6), ball(0.017, 0.05, 0.985, 0.132, 6), box(0.045, 0.01, 0.01, -0.05, 1.02, 0.135), box(0.045, 0.01, 0.01, 0.05, 1.02, 0.135), box(0.05, 0.008, 0.01, 0, 0.895, 0.135)),
-    // Hair: the back of the head and the crown (the face stays clear).
-    hair: new THREE.SphereGeometry(0.156, 16, 10, Math.PI, Math.PI, 0, Math.PI * 0.6).scale(0.97, 1.1, 1.02).translate(0, 0.965, -0.008),
-    helmet: merge(new THREE.SphereGeometry(0.172, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.95, 1.05).translate(0, 1.0, 0), box(0.03, 0.03, 0.34, 0, 1.165, 0)),
-    brim: new THREE.CylinderGeometry(0.2, 0.2, 0.018, 20).scale(1, 1, 1.12).translate(0, 1.0, 0.025),
-    cap: new THREE.SphereGeometry(0.16, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.3).translate(0, 1.0, 0),
-    peak: new THREE.CylinderGeometry(0.11, 0.11, 0.015, 14, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 1.1).translate(0, 1.01, 0.12),
+    face: merge(
+      ell(0.011, 0.008, 0.006, -0.034, 0.76, 0.093, 6),
+      ell(0.011, 0.008, 0.006, 0.034, 0.76, 0.093, 6),
+      box(0.032, 0.006, 0.008, -0.034, 0.778, 0.094),
+      box(0.032, 0.006, 0.008, 0.034, 0.778, 0.094),
+      box(0.03, 0.005, 0.006, 0, 0.7, 0.093),
+    ),
+    // Hair: the back of the head and the crown, down to the ears (the face stays clear).
+    hair: new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.098, 0.118, 0.108).translate(0, 0.756, -0.004),
+    helmet: merge(new THREE.SphereGeometry(1, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.122, 0.106, 0.134).translate(0, 0.79, 0), ridge),
+    brim: lathe([[0.118, 0.0], [0.15, -0.012], [0.15, -0.024], [0.118, -0.012]], 1.08, 0.795, 20).translate(0, 0, 0.01),
+    cap: new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.3).scale(0.104, 0.1, 0.112).translate(0, 0.79, 0),
+    peak: new THREE.CylinderGeometry(0.08, 0.08, 0.012, 14, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 1.15).translate(0, 0.8, 0.09),
   };
   return geo;
 }
@@ -103,14 +125,15 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     parent.add(j);
     return j;
   };
-  const legL = joint(root, -0.11, 0.92, 0);
-  const legR = joint(root, 0.11, 0.92, 0);
+  const legL = joint(root, -0.085, 0.92, 0);
+  const legR = joint(root, 0.085, 0.92, 0);
   for (const l of [legL, legR]) {
     add(l, g.leg!, M.cloth, look.trousers);
     add(l, g.boot!, M.boots);
     add(l, g.sole!, M.dark);
   }
   const torso = joint(root, 0, 0.92, 0);
+  add(torso, g.hips!, M.cloth, look.trousers);
   add(torso, g.torso!, M.cloth, look.shirt);
   add(torso, g.collar!, M.cloth, look.shirt);
   add(torso, g.belt!, M.dark);
@@ -132,8 +155,11 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(torso, g.cap!, M.cloth, c);
     add(torso, g.peak!, M.cloth, c);
   }
-  const armL = joint(torso, -0.3, 0.66, 0);
-  const armR = joint(torso, 0.3, 0.66, 0);
+  const armL = joint(torso, -0.182, 0.465, 0);
+  const armR = joint(torso, 0.182, 0.465, 0);
+  // Arms hang a little away from the body.
+  armL.rotation.z = -0.07;
+  armR.rotation.z = 0.07;
   for (const a of [armL, armR]) {
     add(a, g.arm!, M.cloth, look.shirt);
     // Workers wear gloves; staff go bare-handed.
