@@ -193,8 +193,8 @@ function wallWithDoors(xs: number[]): THREE.ShapeGeometry {
 }
 
 
-// Lift and high-bay store, east of the loop.
-const STORE_DX = LX + STRAIGHT + LOOP_R - 39;
+// Lift and high-bay buffer store, east of the loop, its back against the east wall.
+const STORE_DX = LX + STRAIGHT + LOOP_R - 29.5;
 const LIFT_X = 49 + STORE_DX;
 const SHUTTLE_X = 50.2 + STORE_DX;
 const SLOT_X = 51.6 + STORE_DX;
@@ -203,7 +203,6 @@ const RACK_X1 = 52.3 + STORE_DX;
 const LEVELS = [0.7, 2.3, 3.9, 5.5, 7.1, 8.7];
 const BAY = 1.6;
 const BAYS = 17; // bays each side of the lift
-const DYN = 8; // bays each side that hold real parcels
 
 const PARCEL_COLS = [0xb08a5e, 0xa07c52, 0xc4a070, 0x8f6c48, 0xb08a5e, 0xc4a070, 0xf2c200, 0xf2c200, 0x4a2f1a, 0x4a2f1a, 0xe6e4de, 0xb3122a, 0x4b1a86, 0x1d4f9a];
 
@@ -662,6 +661,9 @@ export interface Parcel {
   vel: V3;
   dead: boolean;
   slot?: Slot;
+  /** In the buffer store because this chute was full; it goes back there when the chute has room. */
+  buffered?: number;
+  bufferedAt?: number;
   /** At a pickup station, or riding a robot: which one, since when, and the bin it goes to. */
   station?: number;
   bot?: number;
@@ -1106,7 +1108,6 @@ export class Sorter implements Scene3D {
     this.buildBoards();
     this.buildDay();
     this.buildCamera();
-    this.prefill();
     this.batcher.build();
     this.setupShadows();
     this.applyTheme(0);
@@ -1221,8 +1222,8 @@ export class Sorter implements Scene3D {
         ? 'stored'
         : f.dest < 0
           ? f.mode === 'loop' || f.pathKind === 'lane'
-            ? 'to the store'
-            : 'in the store'
+            ? `to the buffer${f.buffered !== undefined ? ` (chute ${f.buffered + 1} full)` : ''}`
+            : `in the buffer${f.buffered !== undefined ? ` (chute ${f.buffered + 1} full)` : ''}`
           : f.pathKind === 'back'
             ? `out of the store → chute ${f.dest + 1}`
             : this.stationOf.has(f.dest)
@@ -1312,10 +1313,10 @@ export class Sorter implements Scene3D {
     if (this.lift.update(bt, liftTrig)) this.bassPending = false;
     if (!this.lift.busy) this.bassPending = false;
     for (const s of this.shuttles) s.runner.update(bt, false);
-    // Without pads, call a parcel back from the store every 8 bars.
-    if (Math.floor(bar / 8) !== this.retrieveShot) {
-      this.retrieveShot = Math.floor(bar / 8);
-      if (bt - this.lastPad > 16) this.requestRetrieve();
+    // Every bar: call a buffered parcel back out of the store if its chute has room again.
+    if (Math.floor(bar) !== this.retrieveShot) {
+      this.retrieveShot = Math.floor(bar);
+      this.requestRetrieve();
     }
 
     // Time of day: "dusk" (0) is the day look, "night" (1) the club.
@@ -1574,11 +1575,38 @@ export class Sorter implements Scene3D {
     }
   }
 
+  /** Calls a buffered parcel back out of the store once its chute has room again (oldest first). */
   private requestRetrieve(): void {
-    if (this.retrieving >= 2 || this.lift.steps.length > 8) return;
-    const full = this.slots.filter((s) => s.parcel && !s.reserved && s.parcel.mode === 'fixed');
-    if (!full.length) return;
-    this.retrieve(pick(full));
+    if (this.retrieving >= 3 || this.lift.steps.length > 10) return;
+    let best: Slot | null = null;
+    for (const s of this.slots) {
+      const p = s.parcel;
+      if (!p || s.reserved || p.mode !== 'fixed') continue;
+      const d = p.buffered ?? -1;
+      if (d >= 0 && this.room(d) < 2) continue;
+      if (!best || (p.bufferedAt ?? 0) < (best.parcel!.bufferedAt ?? 0)) best = s;
+    }
+    if (best) this.retrieve(best);
+  }
+
+  /** Sends a parcel whose chute is full to the buffer store, if a rack slot is free. */
+  private buffer(p: Parcel): boolean {
+    if (p.d >= 1.1 || p.tray2 !== undefined) return false;
+    const inFlight = this.parcels.reduce((n, x) => n + (x.slot && x.mode !== 'fixed' && x.pathKind !== 'back' ? 1 : 0), 0);
+    if (inFlight >= 6 || this.lift.steps.length > 10) return false;
+    const free = this.slots.filter((s) => !s.parcel && !s.reserved);
+    if (!free.length) return false;
+    // Nearest the lift first (short shuttle trips), low levels a little before high ones.
+    free.sort((a, b) => Math.abs(a.z) + a.level * 0.3 - (Math.abs(b.z) + b.level * 0.3));
+    const slot = free[0]!;
+    slot.reserved = true;
+    p.slot = slot;
+    p.buffered = p.dest;
+    p.bufferedAt = this.bt;
+    p.dest = -1;
+    this.kpi.recirculated();
+    this.retarget(p);
+    return true;
   }
 
   // ---------- parcels ----------
@@ -1707,14 +1735,6 @@ export class Sorter implements Scene3D {
     p.lane = k;
     p.lead = lead;
     if (lead && color) p.glow.setRGB(...color);
-    const freeSlots = this.slots.filter((s) => !s.parcel && !s.reserved);
-    const toStore = this.parcels.filter((x) => x.dest < 0 && x.mode !== 'fixed' && x.pathKind !== 'back').length;
-    if (freeSlots.length > 4 && toStore < 3 && this.lift.steps.length < 6 && Math.random() < 0.14 && !p.manual && p.d < 1.1) {
-      const slot = pick(freeSlots);
-      slot.reserved = true;
-      p.slot = slot;
-      p.dest = -1;
-    }
     if (!lead) p.glow.copy(p.dest >= 0 ? this.chutes[p.dest]!.col : this.white);
     this.onPath(p, lane.path, 'lane', bt, arrive, 0);
     return true;
@@ -1973,7 +1993,7 @@ export class Sorter implements Scene3D {
     t.col.copy(p.glow);
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     for (const side of [0, 1]) {
-      if (t.read) this.scanLabels.set(t.screen * 2 + side, `${p.pc} ${city}`, `${String(p.id).padStart(8, '0')} · chute ${p.dest >= 0 ? p.dest + 1 : 'store'}`, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+      if (t.read) this.scanLabels.set(t.screen * 2 + side, `${p.pc} ${city}`, `${String(p.id).padStart(8, '0')} · chute ${p.dest >= 0 ? p.dest + 1 : p.buffered !== undefined ? `${p.buffered + 1} → buffer` : 'store'}`, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
       else this.scanLabels.set(t.screen * 2 + side, 'NO READ', String(p.id).padStart(8, '0'), { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
     }
     this.scanDirty = true;
@@ -2078,8 +2098,10 @@ export class Sorter implements Scene3D {
       return;
     }
     if (p.dest >= 0 && this.room(p.dest) <= 0) {
-      // Destination full: the parcel stays on its tray and goes round again (recirculation);
-      // after MAX_LAPS rounds it is put aside to manual sorting (overflow).
+      // Destination full: into the buffer store if it has room (it comes back out when the
+      // chute has room again); otherwise it stays on its tray and goes round again
+      // (recirculation), and after MAX_LAPS rounds it is put aside to manual sorting (overflow).
+      if (this.buffer(p)) return;
       p.laps = (p.laps ?? 0) + 1;
       this.kpi.recirculated();
       if (p.laps >= MAX_LAPS) {
@@ -2189,8 +2211,13 @@ export class Sorter implements Scene3D {
     slot.reserved = true;
     this.retrieving++;
     this.lastRetrieve = this.bt;
-    this.assign(p);
-    if (p.labelCell) this.drawLabel(p.labelCell, p);
+    if (p.buffered !== undefined) {
+      p.dest = p.buffered;
+      p.buffered = undefined;
+    } else {
+      this.assign(p);
+      if (p.labelCell) this.drawLabel(p.labelCell, p);
+    }
     p.glow.copy(this.chutes[p.dest]!.col);
     p.pathKind = 'back';
     sh.runner.steps.push(
@@ -2258,19 +2285,6 @@ export class Sorter implements Scene3D {
     const moving = bt < this.liftAnim.t1;
     this.liftLamp.color.setRGB(3, 1.4, 0.2).multiplyScalar(moving ? (Math.sin(this.time * 18) > 0 ? 1 : 0.15) : 0.12 + this.bassEnv * 0.6);
     this.shuttles.forEach((s) => (s.mesh.position.z = animAt(s.anim, bt)));
-  }
-
-  /** Fills part of the store at the start so pads have something to call back. */
-  private prefill(): void {
-    for (const s of this.slots) {
-      if (Math.random() > 0.45) continue;
-      const p = this.newParcel();
-      if (!p) return;
-      p.mode = 'fixed';
-      p.pos.set(SLOT_X, LEVELS[s.level]!, s.z);
-      this.orient(p, this.t.set(1, 0, 0));
-      s.parcel = p;
-    }
   }
 
   // ---------- per-frame drawing ----------
@@ -3016,7 +3030,7 @@ export class Sorter implements Scene3D {
     };
     place(-40, 7.2, -HZ + 0.12, 0);
     place(-45, 7.2, HZ - 0.12, Math.PI);
-    place(EX - 0.12, 7.2, -14, -Math.PI / 2);
+    place(EX - 6, 7.2, -HZ + 0.12, 0);
     const clock = new THREE.MeshBasicMaterial({ map: this.screens.clock, transparent: true });
     const clk = (x: number, y: number, z: number, ry: number) => {
       const m = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), clock);
@@ -3484,13 +3498,7 @@ export class Sorter implements Scene3D {
     for (let b = -BAYS; b <= BAYS; b++) {
       const z = b * BAY;
       for (let k = 0; k < LEVELS.length; k++) {
-        if (Math.abs(b) <= DYN && b !== 0) {
-          this.slots.push({ level: k, z, parcel: null, reserved: false });
-          continue;
-        }
-        if (b === 0 || Math.random() < 0.15) continue;
-        const h = rnd(0.5, 1.3);
-        this.box('carton', carton, SLOT_X, LEVELS[k]! + h / 2, z + rnd(-0.1, 0.1), rnd(0.9, 1.2), h, rnd(0.9, 1.3), pick([0xb08860, 0x9c7650, 0xc49a6c, 0x8a6a48, 0xd8d4cc]));
+        if (b !== 0) this.slots.push({ level: k, z, parcel: null, reserved: false });
       }
     }
     // Shuttles, one per level.
@@ -4155,7 +4163,7 @@ export class Sorter implements Scene3D {
       case 'manual':
         return 'At manual sorting';
       default:
-        return 'In the store';
+        return p.buffered !== undefined ? `In the buffer store: chute ${p.buffered + 1} is full; it comes back out when there is room` : 'In the store';
     }
   }
 

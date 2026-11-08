@@ -52,7 +52,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/people.ts` | `buildHuman`: jointed people (workers with hi-vis vest and helmet, staff with cap). |
 | `src/scene/post.ts` | `InkPass` (screen-space outlines), `toonify`/`TOON` (flat day shading), blob texture. |
 | `src/scene/screens.ts` | Live canvases: dashboard, wall KPI boards, clocks (real time). Fed by `HubStats` from the scene. |
-| `src/scene/life.ts` | Walkers (day), ride-on scrubber, reach truck at the rack, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |
+| `src/scene/life.ts` | Walkers (day), ride-on scrubber, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |
 | `src/scene/crowd.ts` | Night crowd inside the loop (instanced body parts, a few draw calls for 520 dancers) on an LED tile floor. |
 | `src/ui/walk.ts` | Walk-mode input: keyboard, mouse drag, touch stick and look; feeds `Sorter.walkInput`. |
 | `src/scene/party.ts` | Night party: DJ booth on the mezzanine, laser fans, mirror-ball floor spots, confetti on the drop. |
@@ -107,7 +107,9 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).
 - Hall: `WX`/`EX` west/east wall, `HZ` half depth, `HH` height; `HCX`/`HW`
   centre and width.
-- Store: `STORE_DX` shifts the whole store east of the loop.
+- Store: `STORE_DX` puts the rack against the east wall (no aisle behind it).
+  It is a buffer: `buffer(p)` when a chute is full (sets `p.buffered`),
+  `requestRetrieve()` every bar calls the oldest back whose chute has room.
 - Robot floor: `FLOOR` in `robotFleet.ts` (x0, z0, cell size, columns, rows).
   Boxes are in the last row (every other column). All parking is one block
   at the west end (`PARK_COLS` columns, rows 0, 2, 3, 6; columns 0 and 1 are

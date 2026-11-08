@@ -53,8 +53,11 @@ sound is generated in code.
    into the truck at its city's door and brings it back empty.
    Above every door a screen shows the door number, city, postcodes and what
    the truck is doing.
-6. **Storage (east).** Parcels go up a lift into a high-bay rack (a buffer)
-   and come back out onto the loop later.
+6. **Buffer store (east).** A high-bay rack against the east wall, empty at
+   the start. When a parcel's chute is full it goes up the lift into the rack
+   instead of going round again; once that chute has room it comes back out
+   onto the loop (oldest first). Only when the rack is full do parcels go
+   round, and after 3 rounds to manual sorting.
 7. Around it: robot parking in one block at the west end, manual sorting
    at the east end (robots bring the exceptions to a drop; a belt
    takes them to the table; a worker puts them in pigeonholes), the control

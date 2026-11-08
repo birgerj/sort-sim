@@ -1,5 +1,5 @@
 // Life around the machines: people walking their rounds, a cleaner on a
-// scrubber, a reach truck working the high-bay rack, a forklift charging
+// scrubber, a forklift charging
 // station, safety details (exit signs, extinguishers, first aid, walkway),
 // a break area and painted zone names on the floor.
 //
@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 import type { FloorKit } from './floor';
-import { buildForklift, FORK_REACH, type ForkliftModel } from './forklift';
+import { buildForklift } from './forklift';
 import { buildHuman, type Human } from './people';
 
 type V2 = [number, number];
@@ -49,13 +49,6 @@ interface Walker {
   seated?: THREE.Group;
 }
 
-interface ReachStop {
-  z: number;
-  level: number;
-}
-
-const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
-
 export interface LifeLayout {
   /** Hall walls. */
   wx: number;
@@ -74,11 +67,6 @@ export interface LifeLayout {
 
 export class Life {
   private walkers: Walker[] = [];
-  private reach: ForkliftModel & { mast: THREE.Mesh };
-  private reachStops: ReachStop[] = [];
-  private reachStop = 0;
-  private reachT0 = 0;
-  private reachZ = 0;
   private group = new THREE.Group();
 
   constructor(
@@ -87,7 +75,6 @@ export class Life {
   ) {
     k.put(this.group, 'day');
     this.buildWalkers();
-    this.reach = this.buildReachTruck();
     this.buildCharging();
     this.buildSafety();
     this.buildBreakArea();
@@ -119,45 +106,6 @@ export class Life {
       w.h.armR.rotation.x = w.h.armR.userData.hold ? -0.9 : swing * 0.7;
       w.h.root.position.y = Math.abs(Math.cos(bt * Math.PI * 2)) * 0.03;
     }
-    this.updateReach(bt);
-  }
-
-  // ---------- reach truck: drives along the rack, lifts a carton in or out, on the beat ----------
-
-  private updateReach(bt: number): void {
-    const r = this.reach;
-    const st = this.reachStops[this.reachStop]!;
-    // A visit takes 16 beats: drive 4, lift 4, put 2, lower 4, wait 2.
-    const t = bt - this.reachT0;
-    if (t >= 16) {
-      this.reachT0 = Math.floor(bt);
-      this.reachZ = st.z;
-      this.reachStop = (this.reachStop + 1) % this.reachStops.length;
-      return;
-    }
-    const z = t < 4 ? this.reachZ + (st.z - this.reachZ) * ease(t / 4) : st.z;
-    const lift = t < 4 ? 0.15 : t < 8 ? 0.15 + (st.level - 0.15) * ease((t - 4) / 4) : t < 10 ? st.level : t < 14 ? st.level + (0.15 - st.level) * ease((t - 10) / 4) : 0.15;
-    r.g.position.set(this.L.rackEastX + 0.35 + FORK_REACH, 0, z);
-    r.forks.position.y = lift;
-    // The inner mast rises with the forks once they pass the outer mast.
-    r.mast.position.y = Math.max(0, lift - 2.2);
-    r.beacon.color.setRGB(3, 1.3, 0.1).multiplyScalar(t < 4 || (t > 4 && t < 14) ? 0.1 + (1 - (bt % 1)) ** 4 : 0.05);
-  }
-
-  private buildReachTruck(): ForkliftModel & { mast: THREE.Mesh } {
-    const m = buildForklift(this.k, 0xd8b080);
-    this.group.add(m.g);
-    m.g.rotation.y = -Math.PI / 2;
-    const steel = this.k.std(0x1b1c1f, 0.6, 0.3, 0x2a2c31);
-    const mast = new THREE.Mesh(
-      new THREE.BoxGeometry(0.9, 2.8, 0.1).translate(0, 1.4, 1.12),
-      steel,
-    );
-    m.g.add(mast);
-    const half = this.L.rackHalf - 2;
-    for (let k = 0; k < 10; k++) this.reachStops.push({ z: -half + ((k * 7) % 10) * ((2 * half) / 9), level: this.L.levels[1 + (k % (this.L.levels.length - 1))]! - 0.25 });
-    this.reachZ = this.reachStops[0]!.z;
-    return { ...m, mast };
   }
 
   // ---------- people and the scrubber ----------
