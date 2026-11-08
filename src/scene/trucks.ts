@@ -59,6 +59,11 @@ const CAP: Record<Cargo, number> = { cage: 10, box: 4 };
 const SLOTS: Record<Cargo, number> = { cage: 10, box: 8 };
 const TRAILER_M3: Record<Cargo, number> = { cage: 11.5, box: 4.5 };
 const TRAILER_KG: Record<Cargo, number> = { cage: 3200, box: 2400 };
+/**
+ * Minutes of hub time between two departures from the same door: long enough for a
+ * trailer of ten roll cages to fill (it leaves earlier when full).
+ */
+const EVERY: Record<Cargo, number> = { cage: 240, box: 120 };
 /** Minutes of hub time before the departure that the cleardown starts. */
 const CLEARDOWN_LEAD = 6;
 const DUR: Record<Exclude<State, 'open'>, number> = { cleardown: 4, closing: 2, leaving: 4, away: 6, arriving: 4, opening: 2 };
@@ -236,11 +241,11 @@ export class Trucks {
   update(bt: number): void {
     const now = this.clock();
     if (!this.scheduled) {
-      // Every door has a truck leaving every hour; the doors' departures are spread over the hour.
+      // Every door has a truck leaving every EVERY minutes; the doors' departures are spread over that time.
       this.scheduled = true;
-      // Doors of the same city take turns: a city with n doors has a departure every 60/n
+      // Doors of the same city take turns: a city with n doors has a departure every EVERY/n
       // minutes, one door after the other, and the cities are spread over the hour too.
-      const base = Math.ceil(now / 60) * 60 + 30;
+      const base = Math.ceil(now / 60) * 60 + 60;
       for (const side of ['cage', 'box'] as const) {
         const list = this.docks.filter((d) => d.cargo === side);
         const cities = [...new Set(list.map((d) => d.city))];
@@ -248,7 +253,7 @@ export class Trucks {
           const group = list.filter((x) => x.city === d.city);
           const c = cities.indexOf(d.city);
           const off = (c / cities.length + group.indexOf(d) / group.length) % 1;
-          d.cutoff = base + Math.round(off * 60) + (side === 'box' ? 1 : 0);
+          d.cutoff = base + Math.round(off * EVERY[d.cargo]) + (side === 'box' ? 1 : 0);
         }
       }
     }
@@ -276,7 +281,7 @@ export class Trucks {
         if (d.state === 'leaving') {
           this.onDepart({ door: d.number, city: d.city, at: now, cutoff: d.cutoff, load: +d.vol.toFixed(2), room: TRAILER_M3[d.cargo], onTime: now <= d.cutoff + 2, full: d.full });
           // The next truck takes the next hour's departure (a full one that left early keeps this hour's).
-          if (!d.full || now >= d.cutoff - CLEARDOWN_LEAD) while (d.cutoff <= now + CLEARDOWN_LEAD + 10) d.cutoff += 60;
+          if (!d.full || now >= d.cutoff - CLEARDOWN_LEAD) while (d.cutoff <= now + CLEARDOWN_LEAD + 10) d.cutoff += EVERY[d.cargo];
         }
         if (d.state === 'arriving') {
           d.load = 0;
