@@ -78,6 +78,10 @@ do one move per beat.
 - **Fill by volume:** roll cages, boxes and trailers are full by volume (or weight, or places), not by count. Dock belts are full when the parcels reach back about 4 m.
 - **Figures** (button in the Hub group): parcels in and out per hour, dwell time, recirculation, no-reads, to manual, missorts, chutes full, robots busy, infeed queue, trucks on time, load factor; a chart, the last departures, and a CSV download of the timeline and all departures.
 
+## As an app
+
+Sort sim is a progressive web app: install it from the browser (the **Install app** button, or on iPhone/iPad Share → Add to Home Screen) and it opens in its own window, full screen, and works offline (a service worker keeps every file). A new version shows an **Update** prompt instead of interrupting the hall. While it is on screen it keeps the screen awake; the music can be played and paused from the lock screen and media keys. **Full screen** button or key `Z`. Shortcuts from the app icon: night party, truck docks, control room, walk around.
+
 ## Controls
 
 | Control | Keys |

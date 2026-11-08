@@ -65,6 +65,8 @@ export class Hud {
   private card: { el: HTMLElement; p: Parcel; where: HTMLElement } | null = null;
   private hideTimer = 0;
   private menuBtn!: HTMLButtonElement;
+  /** Group for the app buttons (install, full screen). */
+  appGroup!: HTMLElement;
   private hidden = false;
 
   constructor(
@@ -259,6 +261,8 @@ export class Hud {
       saveSettings(this.settings);
     };
     music.append(this.soundBtn, vol);
+    // The app: install, full screen (from the PWA helper).
+    this.appGroup = this.group('App');
   }
 
   /** The cleardown panel: doors 1–40 with their destinations; pick some and start. */
