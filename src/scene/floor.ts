@@ -274,10 +274,10 @@ export class RobotFloor {
     return r.g.rotation.y;
   }
 
-  /** Slot n of the parcel queue on station s. */
-  tableSlot(s: number, n: number, out: THREE.Vector3): void {
+  /** A place on station s's roller table, `dist` metres back from the pickup end (the parcel's centre). */
+  tableSlot(s: number, dist: number, out: THREE.Vector3): void {
     const st = this.stations[s]!;
-    out.set(st.x, 1.06, st.z - 0.75 - n * 0.55);
+    out.set(st.x, 1.06, st.z - 0.75 - dist);
   }
 
   binPos(b: number, out: THREE.Vector3): void {
@@ -286,8 +286,17 @@ export class RobotFloor {
       return;
     }
     const bin = this.bins[b]!;
-    out.set(bin.g.position.x, bin.g.position.y + 0.35 + Math.min(bin.n, BOX_FULL) * 0.09, bin.g.position.z);
+    bin.g.updateMatrixWorld();
+    this.binSlot(bin.n, out).applyMatrix4(bin.g.matrixWorld);
   }
+
+  /** Place k in a box (local to the box): two by two, in layers. */
+  binSlot(k: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.set(k % 2 ? 0.27 : -0.27, 0.19 + Math.floor(k / 4) * 0.3, Math.floor(k / 2) % 2 ? 0.27 : -0.27);
+  }
+
+  /** Called when a box is emptied into a truck (its parcels leave with it). */
+  onEmptied: (b: number) => void = () => {};
 
   robotNumber(k: number): number {
     return this.robots[k]!.num;
@@ -328,6 +337,7 @@ export class RobotFloor {
     const bin = this.bins[b]!;
     bin.n = 0;
     this.writeFill(b);
+    this.onEmptied(b);
   }
 
   /** The box stands at its place again: robots may use it. */
@@ -513,7 +523,8 @@ export class RobotFloor {
   private writeFill(b: number): void {
     const bin = this.bins[b]!;
     const h = 0.02 + bin.n * 0.09;
-    bin.fill.visible = bin.n > 0;
+    // (The parcels themselves lie in the box now; the fill block is not shown.)
+    bin.fill.visible = false;
     bin.fill.scale.set(1, h, 1);
     bin.fill.position.y = 0.2 + h / 2;
   }

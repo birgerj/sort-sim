@@ -79,7 +79,7 @@ const HCX = (WX + EX) / 2;
 const HW = EX - WX;
 const HZ = 34;
 const HH = 11;
-const MAX_PARCELS = 600;
+const MAX_PARCELS = 1500;
 
 // Loop positions (metres from the start of the north straight; all even, so on a beat).
 // s 0–120: north straight, 20 dock chutes · 127–136: east side, to and from the store ·
@@ -100,6 +100,10 @@ const LANE_TUNNEL_X = -55;
 const HOLD_S = 6.6;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
 const LANE_QUEUE = 7;
+/** Gap between parcels banked up on a belt or table (metres). */
+const GAP = 0.06;
+/** Length of a pickup table the queue may use. */
+const TABLE_ROOM = 4.2;
 const LOOP_TUNNELS = [2, 148];
 const STORE_OUT = 128;
 const STORE_BACK = 134;
@@ -555,7 +559,7 @@ function noise(g: CanvasRenderingContext2D, w: number, h: number, base: number, 
 }
 
 /** 'dock': at a truck dock, moved by the Docks (worker or slide into a roll cage). */
-type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual';
+type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual' | 'held';
 
 interface Parcel {
   id: number;
@@ -572,8 +576,15 @@ interface Parcel {
   flash: number;
   /** Chute index, or −1 for the store. */
   dest: number;
+  /** In a cage or box: what holds it. */
+  holder?: THREE.Object3D;
   /** Place in the queue at its infeed lane's hold point (0 = next to go). */
   rank?: number;
+  /** Distance of its centre from the front of the queue it is in (infeed hold, pickup table). */
+  queueAt?: number;
+  /** On a dock belt: how far it may run (behind the parcel ahead), and whether that is the queue at the end. */
+  limit?: number;
+  limitIsQueue?: boolean;
   /** Postcode (four digits): which city, and which cage or box there. */
   pc: number;
   /** An exception for the manual sort table (by robot, from a west station). */
@@ -972,6 +983,11 @@ export class Sorter implements Scene3D {
       full: (b) => this.yard.request(b),
     });
     const pcs = (c: (typeof CITIES)[number]) => rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]);
+    // A box emptied into a truck: its parcels leave with the truck.
+    this.floor.onEmptied = (b) => {
+      const g = this.floor.bins[b]!.g;
+      for (const p of this.parcels) if (p.mode === 'held' && p.holder === g) p.dead = true;
+    };
     this.trucks = new Trucks(this, [
       ...NORTH_DOORS.map((x, k) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[k]!.name, pc: pcs(NORTH_CITIES[k]!), hold: () => this.docks.pending(x) })),
       ...SOUTH_DOORS.map((x, k) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const, number: 21 + k, city: SOUTH_CITIES[k]!.name, pc: pcs(SOUTH_CITIES[k]!) })),
@@ -990,6 +1006,7 @@ export class Sorter implements Scene3D {
           this.floor.flashCage(chute, this.chutes[chute]!.col, target, code, (p?.h ?? 0.3) + 0.01);
         },
         shipped: (chute) => (this.chutes[chute]!.flash = 1),
+        hold: (p, holder, local) => this.hold(p as Parcel, holder, local),
         truck: {
           open: (x) => this.trucks.isOpen(NORTH_DOORS.indexOf(x)),
           reserve: (x, n) => this.trucks.reserve(NORTH_DOORS.indexOf(x), n),
@@ -1194,6 +1211,7 @@ export class Sorter implements Scene3D {
     const bt = this.bt;
     const prevCt = this.ct;
     this.ct = Number.isNaN(this.lastCt) ? bt : this.ct + (bt - prev) * this.speed;
+    this.dct = this.ct - prevCt;
     this.due = Math.min(this.due + ((bt - prev) * this.rate) / BPM, 4);
     this.lastCt = this.ct;
     const crossed = Math.floor(bt) !== Math.floor(prev);
@@ -1312,6 +1330,17 @@ export class Sorter implements Scene3D {
   /** Parcels due but not yet on a lane (the queue outside the infeed doors). */
   backlog = 0;
   private due = 0;
+  private readonly hq = new THREE.Quaternion();
+
+  /** Put a parcel in a cage or box (local position): it keeps its shape and colour and moves with it. */
+  private hold(p: Parcel, holder: THREE.Object3D, local: V3): void {
+    p.mode = 'held';
+    p.holder = holder;
+    p.off.copy(local);
+    p.flash = 0;
+  }
+  /** Conveyor beats since the last frame. */
+  private dct = 0;
   /** Parcels waiting at each lane's hold point. */
   private waiting = [0, 0, 0, 0];
 
@@ -1384,11 +1413,14 @@ export class Sorter implements Scene3D {
     } else if (e.t === 'dropped') {
       this.stats.toRobots++;
       const p = this.botParcel.get(e.bot);
-      // Into a box (it leaves with the box, in a truck), or into the drop to the manual sort table.
+      // Into a box (it stays there and leaves with the box, in a truck), or into the drop to the manual sort table.
       if (p && e.bin === this.floor.tableBin) {
         p.mode = 'manual';
         this.manual.arrive(p, this.bt);
-      } else if (p) p.dead = true;
+      } else if (p) {
+        const bin = this.floor.bins[e.bin]!;
+        this.hold(p, bin.g, this.floor.binSlot(Math.max(0, bin.n - 1), new THREE.Vector3()));
+      }
       this.botParcel.delete(e.bot);
     }
   }
@@ -1563,9 +1595,41 @@ export class Sorter implements Scene3D {
       if (p.mode === 'path' && p.pathKind === 'lane' && ct < p.t1 - (p.path!.len - HOLD_S) / BEAT_M) queued[p.lane]!.push(p);
     }
     queued.forEach((q, k) => {
-      q.sort((a, b) => a.t1 - b.t1).forEach((p, n) => (p.rank = n));
+      let at = 0;
+      q.sort((a, b) => a.t1 - b.t1).forEach((p, n) => {
+        p.rank = n;
+        p.queueAt = at;
+        at += p.d + GAP;
+      });
       this.waiting[k] = q.length;
     });
+    // Pickup tables: nose to tail by length.
+    for (const q of this.stationQueue) {
+      let at = 0;
+      for (const p of q) {
+        p.queueAt = at + p.d / 2;
+        at += p.d + GAP;
+      }
+    }
+    // Dock belts: each parcel may run up to the one ahead, the first up to the queue at the end.
+    const onBelt = new Map<Path, Parcel[]>();
+    for (const p of this.parcels) {
+      if (p.mode !== 'path' || p.pathKind !== 'dock') continue;
+      const l = onBelt.get(p.path!) ?? [];
+      l.push(p);
+      onBelt.set(p.path!, l);
+    }
+    for (const [path, l] of onBelt) {
+      l.sort((a, b) => b.sPrev - a.sPrev);
+      let limit = path.len - this.docks.depth(l[0]!.dest);
+      let prev: Parcel | null = null;
+      for (const p of l) {
+        p.limit = prev ? Math.min(limit, prev.sPrev - prev.d / 2 - p.d / 2 - GAP) : limit - p.d / 2;
+        p.limitIsQueue = !prev;
+        limit = p.limit;
+        prev = p;
+      }
+    }
     this.backlog = Math.min(this.backlog, 5000);
     for (const p of this.parcels) {
       const before = this.p.copy(p.pos);
@@ -1579,8 +1643,19 @@ export class Sorter implements Scene3D {
             // Lanes run at belt speed into a hold point before the scan tunnel, queue there
             // (an accumulating belt) and are let go so they land on their tray on the beat.
             const go = p.t1 - (path.len - HOLD_S) / BEAT_M;
-            s = ct >= go ? HOLD_S + (ct - go) * BEAT_M : Math.min((ct - p.t0) * BEAT_M, HOLD_S - (p.rank ?? 0) * 0.85);
+            s = ct >= go ? HOLD_S + (ct - go) * BEAT_M : Math.min((ct - p.t0) * BEAT_M, HOLD_S - (p.queueAt ?? 0));
             s = clamp(s, 0, path.len);
+          } else if (p.pathKind === 'dock') {
+            // Roller belt to the dock: run at belt speed, but stop behind the parcel ahead
+            // (or the queue at the end), so parcels bank up instead of running into each other.
+            s = Math.min(p.sPrev + this.dct * BEAT_M, p.limit ?? path.len);
+            if (s >= (p.limit ?? path.len) - 0.01 && p.limitIsQueue) {
+              path.at(s, p.pos, this.t);
+              this.orient(p, this.t);
+              p.sPrev = s;
+              this.pathEnd(p);
+              break;
+            }
           }
           path.at(s, p.pos, this.t);
           this.orient(p, this.t);
@@ -1589,7 +1664,7 @@ export class Sorter implements Scene3D {
             if (p.sPrev < lane.tunnelS && s >= lane.tunnelS) this.scan(p, lane.tunnel);
           }
           p.sPrev = s;
-          if (ct >= p.t1) this.pathEnd(p);
+          if (ct >= p.t1 && p.pathKind !== 'dock') this.pathEnd(p);
           break;
         }
         case 'loop': {
@@ -1630,8 +1705,8 @@ export class Sorter implements Scene3D {
           break;
         }
         case 'table': {
-          const q = this.stationQueue[p.station!]!;
-          this.floor.tableSlot(p.station!, Math.max(0, q.indexOf(p)), this.p);
+          // Parcels queue nose to tail, each by its own length.
+          this.floor.tableSlot(p.station!, p.queueAt ?? 0, this.p);
           // Roll along the table to its place in the queue (rollers: about 3 m/s at most).
           this.n.subVectors(this.p, p.pos);
           const gap = this.n.length();
@@ -1647,7 +1722,7 @@ export class Sorter implements Scene3D {
             this.floor.binPos(p.bin!, this.n);
             p.pos.lerpVectors(this.p, this.n, f * f);
           } else if (bt - p.rideAt! < 1) {
-            this.floor.tableSlot(p.station!, 0, this.n);
+            this.floor.tableSlot(p.station!, p.d / 2 - 0.2, this.n);
             p.pos.lerpVectors(this.n, this.p, easeIO(clamp(bt - p.rideAt!, 0, 1)));
           } else p.pos.copy(this.p);
           this.orient(p, this.t.set(Math.sin(yaw), 0, Math.cos(yaw)));
@@ -1659,6 +1734,14 @@ export class Sorter implements Scene3D {
         case 'manual':
           this.manual.place(p, bt);
           break;
+        case 'held': {
+          // In a cage or a box: rides along with it.
+          const h = p.holder!;
+          p.pos.copy(p.off).applyMatrix4(h.matrixWorld);
+          h.getWorldQuaternion(this.hq);
+          p.q.copy(this.hq).multiply(p.yawQ);
+          break;
+        }
       }
       if (dt > 0) p.vel.subVectors(p.pos, before).divideScalar(dt);
       p.flash = Math.max(0, p.flash - dt * 2.5);
@@ -1732,7 +1815,9 @@ export class Sorter implements Scene3D {
   /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
   private room(dest: number): number {
     const st = this.stationOf.get(dest);
-    const free = st !== undefined ? STATION_CAP - this.stationQueue[st]!.length : this.docks.space(dest);
+    // A pickup table holds as many as fit by length (about 0.8 m kept per parcel on its way).
+    const used = st !== undefined ? this.stationQueue[st]!.reduce((a, p) => a + p.d + GAP, 0) : 0;
+    const free = st !== undefined ? Math.min(STATION_CAP - this.stationQueue[st]!.length, Math.floor((TABLE_ROOM - used) / 0.8)) : this.docks.space(dest);
     return free - (this.inbound.get(dest) ?? 0);
   }
 

@@ -28,6 +28,8 @@ export interface DockParcel {
   pos: V3;
   q: THREE.Quaternion;
   h: number;
+  /** Length along the belt. */
+  d: number;
   dead: boolean;
   /** Postcode (four digits). */
   pc: number;
@@ -41,6 +43,8 @@ interface Cage {
   n: number;
   g: THREE.Group;
   pile: THREE.Object3D[];
+  /** The parcels in it. */
+  items: DockParcel[];
   /** By the belt; being pushed or pulled by the worker; in the trailer (gone with the truck). */
   state: 'home' | 'moving' | 'gone';
   /** Full: waiting to go into the trailer. */
@@ -88,6 +92,8 @@ interface Worker {
   from: V3;
   cageFrom: V3;
   parcel: DockParcel | null;
+  /** Where the parcel lay on the belt when picked. */
+  pickFrom: V3;
   cage: number;
   yaw: number;
 }
@@ -106,6 +112,8 @@ export interface DockHandlers {
   mark(chute: number, target: V3, code: string): void;
   /** A parcel left in a cage (for the dock lamp). */
   shipped(chute: number): void;
+  /** Keep a parcel inside a moving thing (a cage), at a local position. */
+  hold(p: DockParcel, holder: THREE.Object3D, local: V3): void;
   truck: TruckLink;
 }
 
@@ -113,6 +121,8 @@ export interface DockHandlers {
 const CAGE_FULL = 6;
 /** Roll cages per dock. */
 const CAGES = 5;
+/** The front parcel stops this far before the end of the belt. */
+const QUEUE_FRONT = 0.1;
 
 let cageGeo: Record<'frame' | 'wheels' | 'parcel', THREE.BufferGeometry> | null = null;
 /** Roll cage geometry, built once: frame and wheels merged, and a parcel for the pile. */
@@ -128,6 +138,11 @@ function cageGeometry(): Record<'frame' | 'wheels' | 'parcel', THREE.BufferGeome
   for (const sx of [-0.55, 0.55]) for (const sz of [-0.42, 0.42]) wheels.push(new THREE.CylinderGeometry(0.11, 0.11, 0.08, 10).rotateX(Math.PI / 2).translate(sx, 0.12, sz));
   cageGeo = { frame: mergeGeometries(parts)!, wheels: mergeGeometries(wheels)!, parcel: new THREE.BoxGeometry(0.5, 0.28, 0.42) };
   return cageGeo;
+}
+
+/** Place k in a roll cage (local): two by two, in layers. */
+function cageSlot(k: number, out: V3): V3 {
+  return out.set((k % 2 ? 0.3 : -0.3), 0.36 + Math.floor(k / 4) * 0.42, (Math.floor(k / 2) % 2 ? 0.22 : -0.22));
 }
 
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
@@ -161,6 +176,12 @@ export class Docks {
   /** Projector position and default target for each dock (for the projector rig). */
   static projectorAt(x: number): V3 {
     return v(x, 0, DOCK_BELT_END - 1.4);
+  }
+
+  /** Belt length taken by the queue at a dock's belt end (by chute). */
+  depth(chute: number): number {
+    const d = this.docks.find((x) => x.chute === chute);
+    return QUEUE_FRONT + (d ? d.queue.reduce((a, p) => a + p.d + 0.06, 0) : 0);
   }
 
   /** Room left on a dock's belt end (the sorter holds parcels back when it is full). */
@@ -237,6 +258,7 @@ export class Docks {
     // A parcel: pick it off the belt (the projector shows its postcode), walk to its cage, put it in, step back.
     d.queue.shift();
     w.parcel = p;
+    w.pickFrom.copy(p.pos);
     w.cage = ci;
     const c = d.cages[ci]!;
     const belt = v(d.x, 0, DOCK_BELT_END + 0.35);
@@ -279,7 +301,9 @@ export class Docks {
         c.state = 'gone';
         c.g.visible = false;
         c.n = 0;
-        this.writePile(c);
+        // Its parcels leave with the truck.
+        for (const p of c.items) p.dead = true;
+        c.items = [];
         T.load(d.x);
         T.reserve(d.x, -1);
       },
@@ -330,10 +354,13 @@ export class Docks {
     const ph = bt - Math.floor(bt);
     for (const d of this.docks) {
       // Parcels waiting at the belt end.
-      d.queue.forEach((p, k) => {
-        this.t.set(d.x, 1.02, DOCK_BELT_END + 0.35 + k * 0.6);
+      // Parcels banked up at the belt end, nose to tail.
+      let at = QUEUE_FRONT;
+      for (const p of d.queue) {
+        this.t.set(d.x, 1.02, DOCK_BELT_END + at + p.d / 2);
+        at += p.d + 0.06;
         p.pos.lerp(this.t, Math.min(1, dt * 8));
-      });
+      }
       this.animateWorker(d, dt, bt, ph, s);
     }
     // Cage boards ride on top of the cage, back to back, facing the hall (south) and the wall.
@@ -360,15 +387,18 @@ export class Docks {
     c.pile.forEach((p, k) => (p.visible = k < c.n));
   }
 
+  /** Where the next parcel goes in this cage (world). */
   private cageTop(c: Cage): V3 {
-    return v(c.at.x, 0.45 + Math.min(c.n, 6) * 0.22, c.at.z);
+    c.g.updateMatrixWorld();
+    return cageSlot(c.n, new THREE.Vector3()).setY(cageSlot(c.n, this.t).y + 0.3).applyMatrix4(c.g.matrixWorld);
   }
 
   private put(d: Dock, cage: number, p: DockParcel): void {
     const c = d.cages[cage]!;
-    p.dead = true;
+    // The parcel itself stays in the cage (same shape and colour), stacked, and rides along with it.
+    this.handlers.hold(p, c.g, cageSlot(c.n, new THREE.Vector3()));
+    c.items.push(p);
     c.n = Math.min(CAGE_FULL, c.n + 1);
-    this.writePile(c);
     this.handlers.shipped(d.chute);
   }
 
@@ -412,7 +442,7 @@ export class Docks {
       // The parcel follows the hands.
       if (w.parcel && (st.pose === 'pick' || st.pose === 'carry' || st.pose === 'drop')) {
         const hands = this.t.set(Math.sin(w.yaw) * 0.55, 0.95, Math.cos(w.yaw) * 0.55).add(w.root.position).setY(0.95);
-        if (st.pose === 'pick') w.parcel.pos.lerpVectors(v(d.x, 1.02, DOCK_BELT_END + 0.35), hands, ease(ph));
+        if (st.pose === 'pick') w.parcel.pos.lerpVectors(w.pickFrom, hands, ease(ph));
         else if (st.pose === 'drop') w.parcel.pos.lerpVectors(hands, this.cageTop(d.cages[w.cage]!), ease(ph));
         else w.parcel.pos.copy(hands);
         this.q.setFromAxisAngle(UP, w.yaw);
@@ -518,7 +548,7 @@ export class Docks {
       p.visible = false;
       pile.push(p);
     }
-    return { at, range, n: 0, g, pile, state: 'home', ry };
+    return { at, range, n: 0, g, pile, items: [], state: 'home', ry };
   }
 
   private cageMats: Record<'teal' | 'wheel' | 'card', THREE.MeshStandardMaterial> | null = null;
@@ -536,7 +566,7 @@ export class Docks {
     });
     h.root.position.copy(home);
     this.kit.put(h.root);
-    return { ...h, home, steps: [], step: null, t0: 0, from: home.clone(), cageFrom: new THREE.Vector3(), parcel: null, cage: 0, yaw: Math.PI };
+    return { ...h, home, steps: [], step: null, t0: 0, from: home.clone(), cageFrom: new THREE.Vector3(), parcel: null, pickFrom: new THREE.Vector3(), cage: 0, yaw: Math.PI };
   }
 
 }
