@@ -581,6 +581,7 @@ input[type='range'] {
 
 .panel.settings {
   width: min(620px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
   overflow: auto;
 }
 

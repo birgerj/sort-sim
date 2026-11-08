@@ -99,12 +99,12 @@ Sort sim is a progressive web app: install it from the browser (the **Install ap
 | Go to a department | `1`–`9`, `0` |
 | Camera: Auto / Fly / Follow a parcel | `A` / `F` / `P` (next parcel) |
 | Walk around on foot | `V`, then `W A S D` / arrows, drag to look, `Shift` run, `Esc` stop; touch: left thumb walks, right thumb looks |
-| Time: Day / Night / Day ↔ night cycle | `D` / `N` / `C` |
+| Time: Day / Night / Day ↔ night cycle (in Settings) | `D` / `N` / `C` |
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |
-| Sound on/off | `M` |
+| Sound on/off and volume (in Settings) | `M` |
 | Hide the controls | `H` |
-| Settings…: graphics quality (Low / Normal / High / Ultra) and country | button (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
+| Settings…: time of day, sound, graphics quality (Low / Normal / High / Ultra) and country | button (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
 
 Click or tap a parcel to see its shipping label (a made-up recipient: a common surname of the country with a first name, or initials in the Netherlands, at a street in the parcel's town, real ones in the Netherlands; written the way that country writes addresses) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
 
