@@ -119,6 +119,8 @@ export interface DockHandlers {
 
 /** Parcels in a full roll cage. */
 const CAGE_FULL = 6;
+/** Card colours on the cages (pastel, for black print). */
+const CARD_COLS = ['#ffe45c', '#9fd8ff', '#a6e8a0', '#ffb877', '#f6a6d6'];
 /** Roll cages per dock. */
 const CAGES = 5;
 /** The front parcel stops this far before the end of the belt. */
@@ -164,7 +166,7 @@ export class Docks {
     lines: { x: number; chute: number }[],
     private handlers: DockHandlers,
   ) {
-    this.boards = new Labels(lines.length * CAGES * 2, 1.0, 0.47, 192, 90);
+    this.boards = new Labels(lines.length * CAGES * 2, 0.34, 0.24, 170, 120);
     kit.put(this.boards.mesh);
     for (const [n, l] of lines.entries()) this.buildDock(l.x, l.chute, n + 1, n);
   }
@@ -364,12 +366,13 @@ export class Docks {
       }
       this.animateWorker(d, dt, bt, ph, s);
     }
-    // Cage boards ride on top of the cage, back to back, facing the hall (south) and the wall.
+    // Cage cards hang on the outside of the mesh, on the side facing the worker and on the back.
     this.docks.forEach((d, n) =>
       d.cages.forEach((c, i) => {
+        c.g.updateMatrix();
         for (const side of [0, 1]) {
           if (c.state === 'gone') this.m.makeScale(0, 0, 0);
-          else this.m.makeRotationY(side * Math.PI).setPosition(c.g.position.x, 2.22, c.g.position.z + (side ? -0.02 : 0.02));
+          else this.m.makeRotationY(side * Math.PI).setPosition(0, 1.25, side ? -0.565 : 0.565).premultiply(c.g.matrix);
           this.boards.place((n * CAGES + i) * 2 + side, this.m);
         }
       }),
@@ -496,7 +499,9 @@ export class Docks {
     const cages: Cage[] = cageAt.map(([at, ry], i) => this.buildCage(at, ry, ranges[i]!));
     const n0 = this.docks.length * CAGES;
     cages.forEach((c, i) => {
-      for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), NORTH_CITIES[city]!.name, { bg: '#ffffff', fg: '#1d1d1f', sub: '#2fa58f', border: '#1d1d1f' });
+      // A coloured card about A4 size, black print: postcodes and city.
+      const bg = CARD_COLS[i % CARD_COLS.length]!;
+      for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), NORTH_CITIES[city]!.name, { bg, fg: '#111111', sub: '#111111', border: '#111111' });
     });
     const worker = this.buildWorker(v(x, 0, E - 1.1));
     this.docks.push({ x, chute, city, queue: [], cages, worker });

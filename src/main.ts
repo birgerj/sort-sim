@@ -98,6 +98,9 @@ function frame(now: number): void {
   // Hall sounds: effects near the camera, and the belts' hum.
   for (const sd of scene.takeSounds()) music.sfx(sd.kind, sd.vol);
   music.setHum(scene.humLevel());
+  // The music follows how busy the hub is: relaxed, steady, driving, acid.
+  const r = scene.rate;
+  music.setMood(r <= 100 ? 0 : r <= 260 ? 1 : r <= 480 ? 2 : 3);
   hud.update();
   requestAnimationFrame(frame);
 }

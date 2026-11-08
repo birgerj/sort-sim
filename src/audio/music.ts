@@ -7,7 +7,7 @@
  * audio yet. Audio is scheduled a little ahead on the AudioContext, and the
  * visual events are released when they are heard (output latency included).
  */
-import { BPM, chordOf, Composer, energyOf, STEPS_PER_BAR, type NoteEvent } from './composer';
+import { BPM, chordOf, Composer, energyOf, STEPS_PER_BAR, type Mood, type NoteEvent } from './composer';
 import type { NoteRole, RGB } from '../scene/types';
 
 const SPB = 60 / BPM; // seconds per beat
@@ -126,6 +126,15 @@ export class Music {
     else tone('sawtooth', 220, 0.3, 0.25);
   }
 
+  /** How busy the music is (from the hub's parcels per minute); it changes from the next bar. */
+  setMood(m: Mood): void {
+    this.composer.mood = m;
+  }
+
+  get mood(): Mood {
+    return this.composer.mood;
+  }
+
   /** The hall's background: belts and rollers humming, 0 (silent) to 1. */
   setHum(level: number): void {
     if (!this.ctx || !this.out) return;
@@ -157,6 +166,7 @@ export class Music {
   }
 
   private hum: GainNode | null = null;
+  private acidLast = 0;
 
   dispose(): void {
     clearInterval(this.timer);
@@ -172,7 +182,10 @@ export class Music {
       const { ev, at } = this.queue.shift()!;
       if (t - at > 0.25) continue; // stale (tab was hidden)
       if (ev.voice === 'kick' || ev.voice === 'snare' || ev.voice === 'hat') this.last[ev.voice] = at;
-      else {
+      else if (ev.voice === 'acid') {
+        // The acid line pulses the bass light on its accents (it brings no parcels of its own).
+        if (ev.accent) this.last.bass = at;
+      } else {
         if (ev.voice === 'bass' || ev.voice === 'pad') this.last[ev.voice] = at;
         const midi = ev.midi ?? ev.chord?.[0] ?? 60;
         notes.push({
@@ -194,7 +207,7 @@ export class Music {
       kick: env(this.last.kick, 9),
       snare: env(this.last.snare, 8),
       hat: env(this.last.hat, 14),
-      energy: energyOf(Math.floor(bar)),
+      energy: Math.min(1, energyOf(Math.floor(bar)) * (0.75 + this.composer.mood * 0.15)),
       bass: env(this.last.bass, 3),
       pad: env(this.last.pad, 0.5),
       cols: [noteColor(chord[0]!), noteColor(chord[1]!), noteColor(chord[2]!)],
@@ -309,6 +322,35 @@ export class Music {
         if (snare) g.connect(this.reverb!);
         s.start(at);
         s.stop(at + len + 0.02);
+        break;
+      }
+      case 'acid': {
+        // A 303-style line: sawtooth into a resonant low-pass whose envelope opens on each note;
+        // accents open it further and louder, slides glide in from the last note.
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        const f = mtof(ev.midi!);
+        if (ev.slide && this.acidLast) {
+          o.frequency.setValueAtTime(this.acidLast, at);
+          o.frequency.exponentialRampToValueAtTime(f, at + STEP * 0.6);
+        } else o.frequency.setValueAtTime(f, at);
+        this.acidLast = f;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.Q.value = 14;
+        const top = ev.accent ? 3200 : 1500;
+        lp.frequency.setValueAtTime(top, at);
+        lp.frequency.exponentialRampToValueAtTime(260, at + (ev.accent ? 0.22 : 0.14));
+        const g = ctx.createGain();
+        const lvl = (ev.accent ? 0.13 : 0.085) * ev.vel;
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(lvl, at + 0.005);
+        g.gain.setValueAtTime(lvl, at + dur * 0.8);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + dur + 0.04);
+        o.connect(lp).connect(g).connect(this.out!);
+        g.connect(this.delay!);
+        o.start(at);
+        o.stop(at + dur + 0.08);
         break;
       }
       case 'bass': {

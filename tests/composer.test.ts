@@ -34,4 +34,23 @@ describe('composer', () => {
       }
     }
   });
+
+  it('changes with the mood: no kick when relaxed, an acid line only at the top', () => {
+    for (const mood of [0, 1, 2, 3] as const) {
+      const c = new Composer(5);
+      c.mood = mood;
+      let kicks = 0;
+      let acid = 0;
+      for (let bar = 0; bar < FORM_BARS; bar++) {
+        const ev = c.bar(bar);
+        kicks += ev.filter((e) => e.voice === 'kick').length;
+        acid += ev.filter((e) => e.voice === 'acid').length;
+        for (const e of ev) if (e.voice === 'acid') expect(e.midi).toBeGreaterThan(20);
+      }
+      if (mood === 0) expect(kicks).toBe(0);
+      else expect(kicks).toBeGreaterThan(0);
+      if (mood === 3) expect(acid).toBeGreaterThan(50);
+      else expect(acid).toBe(0);
+    }
+  });
 });

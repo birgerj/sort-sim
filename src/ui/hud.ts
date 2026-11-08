@@ -3,6 +3,7 @@
  * caption, department buttons, camera, time of day and music. Settings are
  * remembered in localStorage; URL parameters override them for one visit.
  */
+import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Quality } from '../scene/sorter';
 
@@ -59,6 +60,7 @@ export class Hud {
   private rateOut!: HTMLElement;
   private panel: HTMLElement | null = null;
   private hideTimer = 0;
+  private menuBtn!: HTMLButtonElement;
   private hidden = false;
 
   constructor(
@@ -67,15 +69,27 @@ export class Hud {
     readonly settings: Settings,
     private opts: { showStart: boolean; showUi: boolean; onQuality: () => void },
   ) {
-    this.root.append(this.caption, this.bar);
+    // A menu button (top right): on touch screens the bar only comes up with it, so swiping to
+    // look around does not bring the menu up by accident.
+    this.menuBtn = el('button', 'menu', '☰ Menu');
+    this.menuBtn.onclick = () => {
+      if (this.hidden) this.wake(true);
+      else this.hide();
+    };
+    this.root.append(this.caption, this.bar, this.menuBtn);
     if (!opts.showUi) this.root.classList.add('off');
     this.buildBar();
     if (opts.showStart) this.root.append(this.startScreen());
     this.bindKeys();
-    const wake = () => this.wake();
+    // Mouse movement brings the bar back; touches on the hall do not (use the menu button).
+    const wake = (e: PointerEvent) => {
+      if (e.pointerType === 'touch' && !this.bar.contains(e.target as Node)) return;
+      this.wake();
+    };
     window.addEventListener('pointermove', wake);
     window.addEventListener('pointerdown', wake);
     this.wake();
+    this.bindLook();
   }
 
   /** Refresh the active states and the caption (call every frame; cheap). */
@@ -92,7 +106,7 @@ export class Hud {
     for (const [v, b] of this.qualityBtns) b.classList.toggle('on', v === this.settings.quality);
     const most = this.scene.infeedCapacity();
     const q = this.scene.backlog;
-    const txt = `${this.settings.rate}/min${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
+    const txt = `${this.settings.rate}/min · ${MOODS[this.music.mood]}${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
     if (this.rateOut.textContent !== txt) this.rateOut.textContent = txt;
     if (this.panel) {
       this.refreshPanel();
@@ -353,8 +367,37 @@ export class Hud {
     });
   }
 
-  /** Show the bar, and hide it again after three quiet seconds. */
-  private wake(): void {
+  /** Drag (mouse) or swipe (touch) on the hall to look around, outside walk mode. */
+  private bindLook(): void {
+    const canvas = document.querySelector('#app canvas') ?? document.querySelector('canvas');
+    let drag: { id: number; x: number; y: number } | null = null;
+    const target = (canvas ?? window) as HTMLElement;
+    target.addEventListener('pointerdown', (e: PointerEvent) => {
+      if (this.scene.cameraMode() === 'walk' || (e.target as HTMLElement).closest?.('.bar,.panel,.menu')) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!drag || drag.id !== e.pointerId) return;
+      const k = 0.005;
+      this.scene.lookAround((e.clientX - drag.x) * k, (e.clientY - drag.y) * k);
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+    });
+    const end = (e: PointerEvent) => {
+      if (drag?.id === e.pointerId) drag = null;
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  }
+
+  private hide(): void {
+    clearTimeout(this.hideTimer);
+    this.hidden = true;
+    this.root.classList.add('idle');
+  }
+
+  /** Show the bar, and hide it again after three quiet seconds (a bit longer when opened with the menu button). */
+  private wake(long = false): void {
     if (this.hidden) {
       this.hidden = false;
       this.root.classList.remove('idle');
@@ -370,6 +413,6 @@ export class Hud {
       this.hidden = true;
       this.root.classList.add('idle');
       (document.activeElement as HTMLElement | null)?.blur?.();
-    }, 3000);
+    }, long ? 8000 : 3000);
   }
 }
