@@ -58,7 +58,7 @@ do one move per beat.
 | Sound on/off | `M` |
 | Hide the controls | `H` |
 
-The control bar hides after a few seconds without mouse movement.
+The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
 
 URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow`,
 `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
