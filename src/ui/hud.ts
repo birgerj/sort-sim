@@ -110,7 +110,7 @@ export class Hud {
     };
     quiet.onclick = () => s.remove();
     row.append(go, quiet);
-    card.append(row, el('p', 'keys', 'Keys: 1–9, 0 departments · A auto · F fly · P follow · [ ] belt speed · D day · N night · C cycle · M sound · H hide'));
+    card.append(row, el('p', 'keys', 'Keys: 1–9, 0 departments · A auto · F fly · P follow · V walk (WASD, drag to look, Shift run, Esc stop) · [ ] belt speed · D day · N night · C cycle · M sound · H hide'));
     s.append(card);
     return s;
   }
@@ -133,7 +133,7 @@ export class Hud {
       this.deptBtns.set(d.id, b);
     });
     const cam = this.group('Camera');
-    for (const [id, label] of [['auto', 'Auto'], ['fly', 'Fly'], ['follow', 'Follow']] as const) {
+    for (const [id, label] of [['auto', 'Auto'], ['fly', 'Fly'], ['follow', 'Follow'], ['walk', 'Walk']] as const) {
       const b = el('button', '', label);
       b.onclick = () => this.scene.setControl('cam', id);
       cam.append(b);
@@ -222,10 +222,13 @@ export class Hud {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement)?.tagName === 'INPUT') return;
       const depts = this.scene.departments();
       const k = e.key.toLowerCase();
+      // Walking uses W A S D and the arrows itself.
+      if (this.scene.cameraMode() === 'walk' && ['w', 'a', 's', 'd', 'escape', 'shift'].includes(k)) return;
       if (/^[0-9]$/.test(k)) {
         const d = depts[(Number(k) + 9) % 10];
         if (d) this.scene.visit(d.id);
       } else if (k === 'a') this.scene.setControl('cam', 'auto');
+      else if (k === 'v') this.scene.setControl('cam', this.scene.cameraMode() === 'walk' ? 'auto' : 'walk');
       else if (k === 'f') this.scene.setControl('cam', 'fly');
       else if (k === 'p') this.scene.setControl('next', true);
       else if (k === 'd') this.setTime('day');

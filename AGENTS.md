@@ -46,6 +46,8 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/post.ts` | `InkPass` (screen-space outlines), `toonify`/`TOON` (flat day shading), blob texture. |
 | `src/scene/screens.ts` | Live canvases: dashboard, wall KPI boards, clocks (real time). Fed by `HubStats` from the scene. |
 | `src/scene/life.ts` | Walkers (day), ride-on scrubber, reach truck at the rack, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |
+| `src/scene/crowd.ts` | Night crowd inside the loop (instanced body parts, a few draw calls for 520 dancers) on an LED tile floor. |
+| `src/ui/walk.ts` | Walk-mode input: keyboard, mouse drag, touch stick and look; feeds `Sorter.walkInput`. |
 | `src/scene/party.ts` | Night party: DJ booth on the mezzanine, laser fans, mirror-ball floor spots, confetti on the drop. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |

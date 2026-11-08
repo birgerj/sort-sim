@@ -33,6 +33,7 @@ import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
 import { Life } from './life';
 import { Party } from './party';
+import { Crowd } from './crowd';
 import { Screens } from './screens';
 import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -740,7 +741,7 @@ function animAt(an: Anim, bt: number): number {
 }
 
 /** auto: switch fly/follow every 8 bars; fly: random tour; follow: a parcel; visit: hover at one department. */
-type CamMode = 'auto' | 'fly' | 'follow' | 'visit';
+type CamMode = 'auto' | 'fly' | 'follow' | 'visit' | 'walk';
 const CAM_KEY = 'sortsim.cam';
 
 export class Sorter implements Scene3D {
@@ -832,6 +833,7 @@ export class Sorter implements Scene3D {
   private docks!: Docks;
   private life!: Life;
   private party!: Party;
+  private crowd!: Crowd;
   private screens = new Screens();
   /** Counters for the screens. */
   private stats = { inducted: 0, toDocks: 0, toRobots: 0 };
@@ -939,6 +941,8 @@ export class Sorter implements Scene3D {
       columnsSouth: COLUMNS,
     });
     this.party = new Party(this, v(-50.2, 6.21, LANE_Z[3]! - 2.4), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
+    // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
+    this.crowd = new Crowd(this, LX + 1, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.buildBoards();
     this.buildDay();
     this.buildCamera();
@@ -1042,6 +1046,7 @@ export class Sorter implements Scene3D {
 
   caption(): string {
     if (this.camMode === 'visit') return this.pois[this.visitPoi]!.dept ?? '';
+    if (this.camMode === 'walk') return matchMedia('(pointer: coarse)').matches ? 'Walking · left thumb to walk, right thumb to look' : 'Walking · W A S D to move, drag to look, Shift to run, Esc to stop';
     const f = this.follow;
     if (!f || this.camMode === 'fly' || (this.camMode === 'auto' && !this.autoFollow)) return '';
     if (f.mode === 'dock') return `Parcel ${f.id} · at truck dock ${DOCK_X.indexOf(this.dockOf.get(f.dest) ?? 0) + 1}`;
@@ -1084,7 +1089,9 @@ export class Sorter implements Scene3D {
   }
 
   setControl(id: string, value: boolean | string): void {
-    if (id === 'cam' && (value === 'auto' || value === 'fly' || value === 'follow')) {
+    if (id === 'cam' && value === 'walk') {
+      this.startWalk();
+    } else if (id === 'cam' && (value === 'auto' || value === 'fly' || value === 'follow')) {
       this.camMode = value;
       this.follow = null;
       this.autoFollow = false;
@@ -1167,6 +1174,7 @@ export class Sorter implements Scene3D {
     this.updateForklifts(dt, prev);
     this.yard.update(bt);
     this.life.update(dt, bt);
+    this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown });
     this.party.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
     const bots = this.floor.fleet.bots;
     this.screens.update(this.time, {
@@ -1942,7 +1950,63 @@ export class Sorter implements Scene3D {
     this.follow = (r < 0.35 && stores.length ? pick(stores) : leads.length && r < 0.7 ? pick(leads) : pool.length ? pick(pool) : null) ?? null;
   }
 
+  // ---------- walking ----------
+
+  /** First person on foot: position on the floor, heading and up/down look. */
+  private walk = { x: 0, z: 0, yaw: 0, pitch: 0, speed: 0, step: 0 };
+  /** Movement input for this frame: forward/back and sideways (−1…1), and running. */
+  private walkIn = { fwd: 0, side: 0, run: false };
+
+  /** Start walking from where the camera is now, on the floor, looking the same way. */
+  private startWalk(): void {
+    this.camMode = 'walk';
+    this.follow = null;
+    this.tour = null;
+    const d = this.t.subVectors(this.look, this.camera.position);
+    this.walk.x = clamp(this.camera.position.x, WX + 1, EX - 1);
+    this.walk.z = clamp(this.camera.position.z, -HZ + 1, HZ - 1);
+    this.walk.yaw = Math.atan2(d.x, d.z);
+    this.walk.pitch = 0;
+  }
+
+  /** Walking input (from the keyboard, mouse or touch). Look deltas in radians. */
+  walkInput(fwd: number, side: number, run: boolean, dYaw: number, dPitch: number): void {
+    this.walkIn.fwd = clamp(fwd, -1, 1);
+    this.walkIn.side = clamp(side, -1, 1);
+    this.walkIn.run = run;
+    this.walk.yaw -= dYaw;
+    this.walk.pitch = clamp(this.walk.pitch - dPitch, -1.2, 1.2);
+  }
+
+  private updateWalk(dt: number): void {
+    const w = this.walk;
+    const i = this.walkIn;
+    const want = (i.run ? 4.2 : 1.6) * Math.min(1, Math.hypot(i.fwd, i.side));
+    w.speed += (want - w.speed) * Math.min(1, dt * 6);
+    const len = Math.hypot(i.fwd, i.side) || 1;
+    const fx = Math.sin(w.yaw);
+    const fz = Math.cos(w.yaw);
+    // Forward along the heading, sideways to the right of it.
+    const mx = (fx * i.fwd - fz * i.side) / len;
+    const mz = (fz * i.fwd + fx * i.side) / len;
+    w.x = clamp(w.x + mx * w.speed * dt, WX + 0.6, EX - 0.6);
+    w.z = clamp(w.z + mz * w.speed * dt, -HZ + 0.6, HZ - 0.6);
+    // Footsteps bob the view, two steps per beat when walking to the music.
+    w.step += w.speed * dt * 1.6;
+    const bob = Math.sin(w.step * Math.PI) * 0.035 * Math.min(1, w.speed);
+    this.camera.position.set(w.x, 1.7 + bob, w.z);
+    const cp = Math.cos(w.pitch);
+    this.look.set(w.x + fx * cp, 1.7 + bob + Math.sin(w.pitch), w.z + fz * cp);
+    this.want.copy(this.camera.position);
+    this.wantLook.copy(this.look);
+    this.camera.lookAt(this.look);
+  }
+
   private updateCamera(dt: number, bar: number, travel: number): void {
+    if (this.camMode === 'walk') {
+      this.updateWalk(dt);
+      return;
+    }
     const shot = Math.floor(bar / 8);
     if (this.camMode === 'auto' && shot !== this.lastShotBar) {
       this.lastShotBar = shot;
@@ -1961,8 +2025,8 @@ export class Sorter implements Scene3D {
       this.tour = null;
       const c = this.p.copy(p.pos);
       c.y += p.h / 2;
-      if (p.mode === 'carriage' || p.mode === 'shuttle' || p.mode === 'fixed' || (p.mode === 'tween' && p.pos.x > 44)) {
-        this.want.set(43.5, clamp(c.y + 1.6, 2, 10), c.z - 5);
+      if (p.mode === 'carriage' || p.mode === 'shuttle' || p.mode === 'fixed' || (p.mode === 'tween' && p.pos.x > LIFT_X - 5)) {
+        this.want.set(LIFT_X - 5.5, clamp(c.y + 1.6, 2, 10), c.z - 5);
         this.wantLook.copy(c);
       } else {
         const h = this.n.set(p.vel.x, 0, p.vel.z);
@@ -3251,6 +3315,7 @@ export class Sorter implements Scene3D {
       fixed('control room', v(-42, 4, 16.5), v(-54, 2, 26), 'Control room'),
       fixed('boxes', v(28, 4.2, 25.5), v(32, 0.8, 32), 'Boxes & trucks'),
       fixed('dj', v(-40, 7.5, 2), v(-50, 7, -4.5)),
+      fixed('dance floor', v(LCX - 30, 6.5, -5), v(LCX - 10, 1.2, 1), 'Dance floor'),
       fixed('break', v(-30, 3.6, 22), v(-37, 0.8, 29.5)),
       {
         name: 'loop ride',

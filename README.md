@@ -47,7 +47,7 @@ sound is generated in code.
 8. Life: people walking their rounds, a ride-on scrubber, a reach truck at
    the rack, a forklift charging station, live screens with the hub's
    numbers, wall clocks, exit signs, extinguishers, a break area.
-9. At night: a DJ on the mezzanine, laser fans, mirror-ball spots, dancing
+9. At night: a crowd of 520 dancing inside the loop on an LED dance floor, a DJ on the mezzanine, laser fans, mirror-ball spots, dancing
    dock workers and confetti when the groove drops in.
 
 Everything moves on the beat of the music: belts move 2 m per beat, parcels
@@ -60,6 +60,7 @@ do one move per beat.
 |---|---|
 | Go to a department | `1`–`9`, `0` |
 | Camera: Auto / Fly / Follow a parcel | `A` / `F` / `P` (next parcel) |
+| Walk around on foot | `V`, then `W A S D` / arrows, drag to look, `Shift` run, `Esc` stop; touch: left thumb walks, right thumb looks |
 | Time: Day / Night / Day ↔ night cycle | `D` / `N` / `C` |
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Sound on/off | `M` |
@@ -68,7 +69,7 @@ do one move per beat.
 
 The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
 
-URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow`,
+URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow|walk`,
 `?speed=0.5|1|2|4`, `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
 (no controls: for recordings), `?quality=low|high`.
 
