@@ -105,7 +105,7 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   apart. Infeeds: `INDUCT` (four join points on the west end, from the
   outside, s 268, 272, 276, 280; `LANE_PHASE` lands lanes 1 and 3 half a beat
   later so they fill the odd trays; one parcel per lane per beat; `LANE_Z`;
-  the belt stops at the loop's edge and parcels slide onto the tray), `HOLD_S` (queue point), `LANE_QUEUE`.
+  the belt reaches over the tray edge, so there is no gap), `HOLD_S` (queue point), `LANE_QUEUE`.
   Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).
 - Hall: `WX`/`EX` west/east wall, `HZ` half depth, `HH` height; `HCX`/`HW`
   centre and width.
