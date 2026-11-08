@@ -112,6 +112,12 @@ const LANE_QUEUE = 7;
 const ROBOT_SHARE = 0.12;
 /** Rounds on the sorter before a parcel whose chute stays full is put aside (overflow). */
 const MAX_LAPS = 3;
+/** Service marks on labels, and how often each comes up. */
+export type Tag = 'fragile' | 'cod' | 'express' | 'registered';
+const TAGS: Tag[] = ['fragile', 'cod', 'express', 'registered'];
+const TAG_ODDS: Record<Tag, number> = { fragile: 0.06, cod: 0.02, express: 0.08, registered: 0.03 };
+/** On the printed label: a letter in a coloured box. */
+const TAG_MARK: Record<Tag, [string, string]> = { fragile: ['F', '#e2231a'], cod: ['€', '#2fa58f'], express: ['X', '#f2a51a'], registered: ['R', '#1755fe'] };
 /** Chance a parcel lands in the next dock chute by mistake. */
 const MISSORT = 0.002;
 /** Hub time: minutes per beat, and the time the simulation starts at. */
@@ -624,6 +630,8 @@ export interface Parcel {
   reason?: 'noread' | 'oversize' | 'overflow';
   /** Weight in kg (measured at the infeed). */
   kg: number;
+  /** Service marks on the label (only shown, nothing handles them differently). */
+  tags: Tag[];
   /** Hub time it came in (minutes), for the dwell time. */
   born: number;
   /** A long parcel takes the tray behind too. */
@@ -1439,6 +1447,17 @@ export class Sorter implements Scene3D {
       g.fillStyle = '#fff';
       g.font = '700 11px system-ui, sans-serif';
       g.fillText(String((p.dest >= 0 ? p.dest + 1 : 0)).padStart(2, '0'), x + LABEL_W - 22, y + 6);
+      // Service marks: small coloured boxes with a letter, under the sorting code.
+      p.tags.forEach((t, i) => {
+        const [ch, col] = TAG_MARK[t];
+        const bx = x + LABEL_W - 26 + (i % 2) * 11;
+        const by = y + 22 + Math.floor(i / 2) * 11;
+        g.fillStyle = col;
+        g.fillRect(bx, by, 10, 10);
+        g.fillStyle = '#fff';
+        g.font = '700 8px system-ui, sans-serif';
+        g.fillText(ch, bx + 2, by + 1);
+      });
     }
     if (!this.labelsDirty) this.labelsDirty = this.time || 0.001;
   }
@@ -1618,6 +1637,7 @@ export class Sorter implements Scene3D {
       h,
       d,
       kg,
+      tags: TAGS.filter((t) => Math.random() < TAG_ODDS[t]),
       born: this.hubTime(),
       col: new THREE.Color(
         env ? pick([0xe8e6e0, 0xd6d3cc, 0xbfc4cc]) : bag ? pick([0xf3f4f6, 0x9aa0a8, 0x1d1d1f, 0x2c62c8, 0xd6339a, 0x6b3fd1]) : tube ? pick([0xb08a5e, 0xc4a070, 0xe6e4de]) : pick(PARCEL_COLS),
@@ -4104,7 +4124,7 @@ export class Sorter implements Scene3D {
   }
 
   /** What its label says, and where it is now. */
-  parcelInfo(p: Parcel): { id: string; address: Address; route: string; where: string; kg: string; size: string; noread: boolean; note: string } {
+  parcelInfo(p: Parcel): { id: string; address: Address; route: string; where: string; kg: string; size: string; noread: boolean; note: string; tags: Tag[] } {
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     const north = NORTH_CITIES.findIndex((c) => c.name === city);
     const south = SOUTH_CITIES.findIndex((c) => c.name === city);
@@ -4124,6 +4144,7 @@ export class Sorter implements Scene3D {
       size: `L ${cm(p.d)} × B ${cm(p.w)} × H ${cm(p.h)} cm`,
       noread: !!p.noread,
       note,
+      tags: p.tags,
     };
   }
 

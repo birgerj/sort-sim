@@ -533,7 +533,10 @@ export class Hud {
     const meta = el_('div', 'lc-meta');
     meta.append(el_('span', '', info.route), el_('span', '', info.kg), el_('span', '', info.size));
     const where = el_('div', 'lc-where', info.where);
-    el.append(head, to, bars, el_('div', 'lc-id', info.id), meta, where);
+    const tags = el_('div', 'lc-tags');
+    const TAG_TEXT = { fragile: 'Fragile', cod: 'Cash on delivery', express: 'Express', registered: 'Registered' } as const;
+    for (const t of info.tags) tags.append(el_('span', `lc-tag ${t}`, TAG_TEXT[t]));
+    el.append(head, ...(info.tags.length ? [tags] : []), to, bars, el_('div', 'lc-id', info.id), meta, where);
     if (info.note) el.append(el_('div', 'lc-noread', info.note));
     this.root.append(el);
     this.card = { el, p, where };
