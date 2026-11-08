@@ -1997,11 +1997,7 @@ export class Sorter implements Scene3D {
     for (let k = 0; k < 20; k++) this.box('grate', grate, -47.7 + k * 0.6, 6.0 - k * 0.3, MZ - 0.5, 0.6, 0.08, 1.2);
     for (let x = -60; x <= -50; x += 5) this.box('steel', steel, x, 3.05, MZ - 0.9, 0.2, 6.1, 0.2);
     // Control room with lit windows.
-    this.box('room', this.std(0x30343b, 0.6, 0.4, DAY.wall), -48, 1.7, 26, 10, 3.4, 5);
-    const win = new THREE.Mesh(new THREE.PlaneGeometry(8.6, 1.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.55, 1.1) }));
-    win.position.set(-48, 2.2, 23.48);
-    win.rotation.y = Math.PI;
-    this.put(win);
+    this.buildControlRoom(-48, 26);
     // Pallets with wrapped goods along the walls.
     const pal = this.std(0x8a6a44, 0.9, 0);
     const wrap = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.35, metalness: 0 });
@@ -2014,6 +2010,45 @@ export class Sorter implements Scene3D {
     for (let x = -58; x < -18; x += 1.6) if (Math.random() < 0.65) stack(x, -32.6);
     for (let k = 0; k < 18; k++) stack(rnd(-58, -32), rnd(-28, -12));
     for (let x = -40; x < -25; x += 1.6) if (Math.random() < 0.5) stack(x, 32.6);
+  }
+
+  /** Control room: a cabin with a window band, door, roof plant and a stair to the roof. Front faces −z. */
+  private buildControlRoom(cx: number, cz: number): void {
+    const W = 10;
+    const D = 5;
+    const H = 3.4;
+    const front = cz - D / 2;
+    const wall = this.std(0x30343b, 0.6, 0.4, 0xf3f4f6);
+    const trim = this.std(0x22252b, 0.5, 0.5, DAY.purple);
+    const dark = this.std(0x1b1c20, 0.6, 0.4, 0x3a3d44);
+    this.outline(this.mesh(new RoundedBoxGeometry(W, H, D, 3, 0.12), wall, cx, H / 2, cz), 0.03);
+    // Plinth and roof edge in the monitoring purple.
+    this.box('roomtrim', trim, cx, 0.12, front - 0.01, W, 0.24, 0.04);
+    this.box('roomtrim', trim, cx, H + 0.06, cz, W + 0.2, 0.12, D + 0.2);
+    // Window band with mullions and a sill, lit from inside.
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 1.3), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.55, 1.1) }));
+    win.position.set(cx - 1, 2.2, front - 0.02);
+    win.rotation.y = Math.PI;
+    this.put(win);
+    for (let k = 0; k <= 6; k++) this.box('mullion', dark, cx - 4.6 + k * 1.2, 2.2, front - 0.05, 0.06, 1.36, 0.06);
+    this.box('mullion', dark, cx - 1, 2.88, front - 0.05, 7.26, 0.06, 0.06);
+    this.box('sill', this.std(0x8a9099, 0.4, 0.7, 0xdfe3e8), cx - 1, 1.5, front - 0.12, 7.4, 0.06, 0.24);
+    // Door with a handle, a light above it and a small plate.
+    this.box('door', dark, cx + 3.9, 1.05, front - 0.03, 1.0, 2.1, 0.06);
+    this.box('handle', this.std(0x8a9099, 0.3, 0.9, 0xc3c8ce), cx + 3.55, 1.05, front - 0.09, 0.04, 0.3, 0.04);
+    this.box('doorlamp', new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.3, 1.0) }), cx + 3.9, 2.3, front - 0.08, 0.5, 0.08, 0.12);
+    // Roof plant: two cooling units with fans, a cable duct and a railing.
+    const unit = this.std(0x6b7280, 0.5, 0.6, 0xdfe3e8);
+    for (const ux of [cx - 2.5, cx + 1]) {
+      this.box('acunit', unit, ux, H + 0.55, cz + 0.6, 1.8, 0.8, 1.2);
+      const fan = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.04, 20), dark);
+      fan.position.set(ux, H + 0.97, cz + 0.6);
+      this.put(fan);
+    }
+    this.box('duct', unit, cx - 0.75, H + 0.25, cz - 0.6, 5, 0.3, 0.3);
+    const rail = this.std(0xd9a400, 0.5, 0.4, 0xf2c200);
+    for (const zz of [cz - D / 2 + 0.1, cz + D / 2 - 0.1]) this.box('roomrail', rail, cx, H + 1.1, zz, W - 0.2, 0.05, 0.05);
+    for (let x = cx - W / 2 + 0.1; x <= cx + W / 2; x += 1.6) for (const zz of [cz - D / 2 + 0.1, cz + D / 2 - 0.1]) this.box('roomrail', rail, x, H + 0.6, zz, 0.05, 1.0, 0.05);
   }
 
   private buildConveyors(): void {
@@ -2425,7 +2460,8 @@ export class Sorter implements Scene3D {
         .replace('#include <common>', '#include <common>\nvarying vec3 vGlow;')
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow;');
     };
-    const geo = new THREE.BoxGeometry(1, 1, 1);
+    // Slightly rounded boxes: a softer, more real silhouette than sharp cubes.
+    const geo = new RoundedBoxGeometry(1, 1, 1, 2, 0.06);
     this.glowAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS * 3), 3);
     this.glowAttr.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aGlow', this.glowAttr);
@@ -2582,6 +2618,22 @@ export class Sorter implements Scene3D {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, 0);
     this.put(ceil);
+    // Rows of linear LED fixtures between the skylights, and cable trays along the hall.
+    const led = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const housing = this.std(0xb9c0c8, 0.5, 0.6, 0xb9c0c8);
+    for (let x = WX + 10; x <= EX - 10; x += 10) {
+      for (const z of [-28, -10, 10, 28]) {
+        this.box('ledhouse', housing, x, HH - 1.0, z, 2.4, 0.1, 0.3);
+        this.box('led', led, x, HH - 1.06, z, 2.3, 0.02, 0.22);
+        for (const d of [-1, 1]) this.box('ledwire', housing, x + d, HH - 0.5, z, 0.01, 0.9, 0.01);
+      }
+    }
+    const trayMat = this.std(0x9aa0a8, 0.5, 0.6, 0xc3c8ce);
+    for (const z of [-16, 16]) {
+      this.box('ctray', trayMat, HCX, HH - 1.6, z, HW - 4, 0.02, 0.6);
+      for (const side of [-0.3, 0.3]) this.box('ctray', trayMat, HCX, HH - 1.55, z + side, HW - 4, 0.1, 0.02);
+      for (let x = WX + 4; x < EX - 2; x += 6) this.box('ctrayrod', trayMat, x, HH - 0.8, z, 0.02, 1.6, 0.02);
+    }
     const sky = new THREE.MeshBasicMaterial({ color: 0xffffff });
     for (let x = WX + 7; x <= EX - 12; x += 10) for (const z of [-20, 0, 20]) this.box('sky', sky, x + 5, HH - 0.03, z, 6, 0.04, 4);
 
@@ -2591,12 +2643,33 @@ export class Sorter implements Scene3D {
     const dz = 20.6;
     this.box('desk', purple, dx, 1.2, dz, 3.2, 0.12, 1.6);
     for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('desk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
-    this.box('desk', purple, dx, 2.0, dz + 0.5, 1.8, 1.1, 0.12);
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), new THREE.MeshBasicMaterial({ map: this.dashTex() }));
-    screen.position.set(dx, 2.0, dz + 0.43);
-    screen.rotation.y = Math.PI;
-    this.put(screen);
-    this.person(dx, dz - 1.1, 0);
+    // Three screens on arms, curved slightly around the operator.
+    const dash = new THREE.MeshBasicMaterial({ map: this.dashTex() });
+    const ink = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
+    for (const [ox, a] of [[-1.05, 0.35], [0, 0], [1.05, -0.35]] as const) {
+      const g = new THREE.Group();
+      g.position.set(dx + ox, 1.85, dz + 0.45 - Math.abs(ox) * 0.15);
+      g.rotation.y = Math.PI + a;
+      this.put(g);
+      const bezel = new THREE.Mesh(new RoundedBoxGeometry(1.0, 0.62, 0.05, 2, 0.02), ink);
+      g.add(bezel);
+      this.outline(bezel, 0.012);
+      const sc = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.54), dash);
+      sc.position.z = 0.03;
+      g.add(sc);
+    }
+    this.box('arm', ink, dx, 1.5, dz + 0.55, 0.06, 0.6, 0.06);
+    this.box('arm', ink, dx, 1.8, dz + 0.55, 2.1, 0.05, 0.05);
+    this.box('kbd', ink, dx, 1.27, dz - 0.25, 0.7, 0.03, 0.22);
+    this.box('kbd', ink, dx + 0.55, 1.27, dz - 0.25, 0.1, 0.03, 0.14);
+    this.box('mug', this.std(0xffffff, 0.5, 0, 0xffffff), dx - 1.1, 1.32, dz - 0.3, 0.1, 0.12, 0.1);
+    // Office chair: star base, pole, seat and back.
+    const cz2 = dz - 1.0;
+    for (let k = 0; k < 5; k++) this.box('chair', ink, dx + Math.cos((k * 2 * Math.PI) / 5) * 0.2, 0.06, cz2 + Math.sin((k * 2 * Math.PI) / 5) * 0.2, 0.4, 0.04, 0.05, undefined, (k * 2 * Math.PI) / 5);
+    this.box('chair', ink, dx, 0.3, cz2, 0.06, 0.45, 0.06);
+    this.box('chair', purple, dx, 0.58, cz2, 0.55, 0.1, 0.5);
+    this.box('chair', purple, dx, 0.95, cz2 - 0.26, 0.5, 0.65, 0.08);
+    this.person(dx + 0.3, dz - 1.5, 0.2);
 
     // Computing: magenta GPU racks next to the control room.
     const magenta = this.std(DAY.magenta, 0.7, 0.1);
@@ -2703,25 +2776,46 @@ export class Sorter implements Scene3D {
   }
 
   private people = 0;
+  private signEdge: THREE.MeshBasicMaterial | null = null;
 
 
   /** A white parcel trolley with a few boxes on it. */
   private trolley(x: number, z: number): void {
+    // A platform trolley with mesh sides, a push handle and swivel casters.
     const white = this.std(0xffffff, 0.8, 0.05);
-    const card = this.std(0xd9b07a, 0.9, 0);
-    this.box('trolley', white, x, 0.4, z, 2.2, 0.15, 1.6);
-    for (const sx of [-1.1, 1.1]) this.box('trolley', white, x + sx, 1.1, z, 0.1, 1.4, 1.6);
-    for (let k = 0; k < 5; k++) this.box('tbox', card, x - 0.6 + Math.random() * 1.2, 0.68 + Math.floor(k / 3) * 0.42, z - 0.4 + Math.random() * 0.8, rnd(0.55, 0.85), 0.4, 0.5, undefined, rnd(0, 1));
+    const card = this.std(0xffffff, 0.9, 0);
+    card.map = cardboardSide();
+    const black = this.std(0x1d1d1f, 0.6, 0.2);
+    this.box('trolley', white, x, 0.32, z, 2.2, 0.08, 1.4);
+    for (const sx of [-1.0, 1.0]) for (const sz of [-0.6, 0.6]) {
+      this.box('caster', black, x + sx, 0.12, z + sz, 0.08, 0.2, 0.16);
+      this.box('caster', white, x + sx, 0.25, z + sz, 0.14, 0.06, 0.14);
+    }
+    for (const sz of [-0.68, 0.68]) {
+      this.box('trolley', white, x, 0.9, z + sz, 2.2, 0.04, 0.04);
+      for (let k = -1; k <= 1; k += 0.25) this.box('trolley', white, x + k * 1.05, 0.62, z + sz, 0.025, 0.56, 0.025);
+    }
+    this.box('trolley', white, x - 1.1, 0.75, z, 0.05, 0.9, 1.4);
+    this.box('trolley', black, x - 1.1, 1.2, z, 0.06, 0.06, 1.2);
+    for (let k = 0; k < 5; k++) this.box('tbox', card, x - 0.6 + Math.random() * 1.2, 0.56 + Math.floor(k / 3) * 0.42, z - 0.3 + Math.random() * 0.6, rnd(0.55, 0.85), 0.4, 0.5, pick([0xe0b882, 0xd6a870, 0xf3e6cc]), rnd(0, 1));
   }
+
 
   /** A sign hanging from the ceiling on two red cables. */
   sign(text: string, color: string, x: number, y: number, z: number, ry: number, icon: (g: CanvasRenderingContext2D) => void): void {
-    const mat = new THREE.MeshBasicMaterial({ map: signTex(text, color, icon) });
-    for (const flip of [0, Math.PI]) {
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 1.2), mat);
-      p.position.set(x, y, z);
-      p.rotation.y = ry + flip;
-      this.put(p);
+    // A framed sign: printed faces on both sides, an aluminium edge and two hanging eyes.
+    const face = new THREE.MeshBasicMaterial({ map: signTex(text, color, icon) });
+    const edge = this.signEdge ?? (this.signEdge = new THREE.MeshBasicMaterial({ color: 0xc3c8ce }));
+    const board = new THREE.Mesh(new THREE.BoxGeometry(4.9, 1.3, 0.08), [edge, edge, edge, edge, face, face]);
+    board.position.set(x, y, z);
+    board.rotation.y = ry;
+    this.put(board);
+    this.inkify(board);
+    for (const d of [-2, 2]) {
+      const eye = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.02, 6, 12), edge);
+      eye.position.set(x + Math.cos(ry) * d, y + 0.72, z - Math.sin(ry) * d);
+      eye.rotation.y = ry;
+      this.put(eye);
     }
     const pts: number[] = [];
     for (const d of [-2, 2]) {

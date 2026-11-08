@@ -111,8 +111,14 @@ the simulation:
   shell, camera pods, light stack, vents), store rack (bracing, guards,
   cardboard cartons), lift (mast bracing, cable chain, mesh fence),
   projectors (finned housing, yoke, lens).
-  Still plain: signs, control room, monitoring desk, manual sort table,
-  trolleys, parcels' shapes (all boxes), ceiling and lights.
+  Pass 3: framed signs, control room (`buildControlRoom`: window band,
+  door, roof plant, railing), monitoring desk (three screens, chair),
+  manual sort table (pigeonhole shelf, scale, printer, mat), trolleys
+  (mesh sides, casters, handle), rounded parcels, day ceiling (LED
+  fixtures, cable trays).
+  Ideas for later: parcel variety (polybags, tubes) as a second instanced
+  mesh, pallets of wrapped goods, safety signs on columns, floor markings
+  per zone, night-only details (haze lasers through the loop).
 - **Where each thing is built:** loop/belts/chutes `buildConveyors`, scan
   tunnels `tunnel()`, store and lift `buildStore`, parcels `buildParcels`,
   hall `buildHall` (night) and `buildDay` (day), people `person()`, signs
