@@ -50,7 +50,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/manualSort.ts` | `ManualSort`: robots tip envelopes into a hopper west of row 2; a roller belt takes them to the table; a worker puts them in pigeonholes and empties full ones into the crates. Day only, few parcels. |
 | `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
 | `src/scene/forklift.ts` | Forklift with driver (forks point to local +z); parts merged per material. |
-| `src/scene/people.ts` | `buildHuman`: jointed people (workers with hi-vis vest and helmet, staff with cap). |
+| `src/scene/people.ts` | `buildHuman`: jointed people (hips, waist, neck `head`, shoulders, elbows `foreL`/`foreR`): workers with hi-vis vest, helmet, gloves and radio; staff with cap, short sleeves and badge; three hair styles. |
 | `src/scene/post.ts` | `InkPass` (screen-space outlines), `toonify`/`TOON` (flat day shading), blob texture. |
 | `src/scene/screens.ts` | Live canvases: dashboard, wall KPI boards, clocks (real time). Fed by `HubStats` from the scene. |
 | `src/scene/life.ts` | Walkers (day), ride-on scrubber, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |

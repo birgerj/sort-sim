@@ -1,5 +1,7 @@
 // People: dock workers (hi-vis vest, helmet) and staff (shirt, cap). Jointed at
-// hips, waist and shoulders, so they can walk, carry, bend and dance. Facing +z.
+// hips, waist, neck, shoulders and elbows, so they can walk, carry, bend, talk and
+// dance. Facing +z. Each person gets one of a few hair styles, and staff wear short
+// sleeves and a badge on a lanyard; workers long sleeves, gloves and a radio.
 import * as THREE from 'three';
 
 import type { FloorKit } from './floor';
@@ -14,6 +16,11 @@ export interface Human {
   torso: THREE.Group;
   armL: THREE.Group;
   armR: THREE.Group;
+  /** Elbows (bend forward with negative x). */
+  foreL: THREE.Group;
+  foreR: THREE.Group;
+  /** Neck: turn (y) and nod (x). */
+  head: THREE.Group;
   legL: THREE.Group;
   legR: THREE.Group;
 }
@@ -64,28 +71,60 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     // Two reflective bands round the vest.
     bands: merge(...[0.22, 0.36].map((y) => new THREE.CylinderGeometry(0.168, 0.164 + (y > 0.3 ? 0.012 : 0), 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, y, 0))),
     // Arm (shoulder joint at the top): upper arm, elbow, forearm, wrist.
-    arm: lathe([[0, 0.05], [0.04, 0.045], [0.054, 0.0], [0.048, -0.12], [0.04, -0.28], [0.038, -0.3], [0.041, -0.36], [0.032, -0.52], [0.028, -0.55], [0, -0.555]], 0.9, 0, 12),
-    // Hand: a palm and the fingers together, the thumb forward.
-    hand: merge(new RoundedBoxGeometry(0.06, 0.1, 0.03, 2, 0.013).translate(0, -0.6, 0), ell(0.014, 0.03, 0.014, 0, -0.585, 0.022, 6)),
+    // Upper arm (shoulder joint at the top), down to the elbow; a short sleeve's hem for staff.
+    upper: lathe([[0, 0.05], [0.04, 0.045], [0.054, 0.0], [0.05, -0.1], [0.042, -0.24], [0.039, -0.29], [0, -0.3]], 0.9, 0, 12),
+    sleeve: lathe([[0.056, -0.1], [0.058, -0.14], [0.05, -0.15]], 0.9, 0, 12),
+    // Forearm (elbow joint at the top) and the wrist.
+    fore: lathe([[0, 0.03], [0.038, 0.02], [0.04, -0.05], [0.031, -0.22], [0.027, -0.26], [0, -0.265]], 0.88, 0, 12),
+    // Hand: palm, four fingers slightly curled, and the thumb forward.
+    hand: merge(
+      new RoundedBoxGeometry(0.055, 0.065, 0.026, 2, 0.01).translate(0, -0.3, 0),
+      ...[-0.019, -0.006, 0.007, 0.019].map((x, i) => new THREE.CapsuleGeometry(0.0068, 0.04 - Math.abs(i - 1.5) * 0.006, 2, 6).rotateX(0.25).translate(x, -0.355, 0.006)),
+      new THREE.CapsuleGeometry(0.008, 0.03, 2, 6).rotateZ(0.5).rotateX(-0.4).translate(-0.028, -0.3, 0.016),
+    ),
+    // Workers: a cuff where the glove starts; and a radio on the belt.
+    cuff: lathe([[0.03, -0.235], [0.033, -0.255], [0.03, -0.27]], 0.88, 0, 10),
+    radio: merge(box(0.05, 0.1, 0.03, 0.12, 0.08, 0.09), box(0.008, 0.06, 0.008, 0.135, 0.16, 0.09)),
+    // Staff: a lanyard round the neck and a badge on the chest; a row of shirt buttons.
+    lanyard: new THREE.TorusGeometry(0.075, 0.004, 4, 16, Math.PI).rotateZ(Math.PI).scale(0.9, 1.9, 1).translate(0, 0.53, 0.105),
+    badge: box(0.05, 0.07, 0.006, 0, 0.375, 0.112),
+    buttons: merge(...[0.27, 0.34, 0.41, 0.48].map((y) => ball(0.006, 0, y, 0.106 - (y - 0.27) * 0.05, 5))),
+    // Trousers: back pockets and a crease down the front of each leg.
+    pockets: merge(box(0.075, 0.08, 0.008, -0.075, -0.03, -0.1), box(0.075, 0.08, 0.008, 0.075, -0.03, -0.1)),
+    crease: box(0.006, 0.7, 0.006, 0, -0.42, 0.072),
     neck: new THREE.CylinderGeometry(0.044, 0.05, 0.11, 12).translate(0, 0.62, 0.005),
-    // Head: skull, jaw and chin, ears and a nose.
+    // Head: skull, jaw and chin, cheeks, ears and a nose.
     head: merge(
+      ell(0.03, 0.022, 0.02, -0.04, 0.715, 0.078, 8),
+      ell(0.03, 0.022, 0.02, 0.04, 0.715, 0.078, 8),
       ell(0.092, 0.112, 0.102, 0, 0.75, 0, 18),
       ell(0.072, 0.06, 0.08, 0, 0.69, 0.018, 12),
       ell(0.016, 0.028, 0.012, -0.092, 0.745, -0.005, 6),
       ell(0.016, 0.028, 0.012, 0.092, 0.745, -0.005, 6),
       new THREE.ConeGeometry(0.016, 0.04, 6).rotateX(Math.PI / 2).translate(0, 0.735, 0.105),
     ),
-    // Eyes and eyebrows (dark), and the mouth.
+    // The whites of the eyes.
+    eyes: merge(ell(0.014, 0.0095, 0.006, -0.034, 0.76, 0.091, 8), ell(0.014, 0.0095, 0.006, 0.034, 0.76, 0.091, 8)),
+    // Pupils and eyebrows (dark), and the mouth.
     face: merge(
-      ell(0.011, 0.008, 0.006, -0.034, 0.76, 0.093, 6),
-      ell(0.011, 0.008, 0.006, 0.034, 0.76, 0.093, 6),
+      ell(0.0065, 0.0075, 0.004, -0.034, 0.76, 0.0965, 6),
+      ell(0.0065, 0.0075, 0.004, 0.034, 0.76, 0.0965, 6),
       box(0.032, 0.006, 0.008, -0.034, 0.778, 0.094),
       box(0.032, 0.006, 0.008, 0.034, 0.778, 0.094),
       box(0.03, 0.005, 0.006, 0, 0.7, 0.093),
     ),
     // Hair: the back of the head and the crown, down to the ears (the face stays clear).
     hair: new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.098, 0.118, 0.108).translate(0, 0.756, -0.004),
+    // Longer hair: down over the neck at the back, with a side fringe.
+    hairLong: merge(
+      new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.85, Math.PI * 1.3, 0, Math.PI * 0.75).scale(0.104, 0.13, 0.112).translate(0, 0.745, -0.006),
+      ell(0.07, 0.022, 0.03, 0.02, 0.83, 0.07, 8),
+    ),
+    // A ponytail at the back.
+    hairTail: merge(
+      new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.1, 0.12, 0.11).translate(0, 0.756, -0.004),
+      new THREE.CapsuleGeometry(0.026, 0.12, 3, 8).rotateX(0.35).translate(0, 0.69, -0.12),
+    ),
     helmet: merge(new THREE.SphereGeometry(1, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.122, 0.106, 0.134).translate(0, 0.79, 0), ridge),
     brim: lathe([[0.118, 0.0], [0.15, -0.012], [0.15, -0.024], [0.118, -0.012]], 1.08, 0.795, 20).translate(0, 0, 0.01),
     cap: new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.3).scale(0.104, 0.1, 0.112).translate(0, 0.79, 0),
@@ -99,8 +138,13 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     beard: merge(ell(0.085, 0.1, 0.06, 0, 0.66, 0.06, 12), ell(0.05, 0.018, 0.02, 0, 0.715, 0.1, 8)),
     sack: ell(0.2, 0.26, 0.17, 0.06, 0.48, -0.24, 12),
   };
+  // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
+  for (const key of ['head', 'eyes', 'face', 'hair', 'hairLong', 'hairTail', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
   return geo;
 }
+
+/** Height of the neck joint in the torso. */
+const NECK_Y = 0.6;
 
 /** A floppy hat: a cone that bends back, the tip lower down behind. */
 function santaHat(r: number, y: number): THREE.BufferGeometry {
@@ -171,38 +215,58 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(torso, g.bands!, M.reflect);
   }
   add(torso, g.neck!, M.skin, skin);
-  add(torso, g.head!, M.skin, skin);
-  add(torso, g.face!, M.dark);
-  const hair = look.hair ?? HAIR[(look.shirt * 7 + (look.skin ?? 0)) % HAIR.length]!;
-  add(torso, g.hair!, M.cloth, hair);
+  const worker = look.vest !== undefined;
+  if (worker) add(torso, g.radio!, M.dark);
+  else {
+    add(torso, g.lanyard!, M.cloth, 0x1755fe);
+    add(torso, g.badge!, M.cloth, 0xffffff);
+    add(torso, g.buttons!, M.cloth, 0xf3f4f6);
+  }
+  add(torso, g.pockets!, M.cloth, look.trousers);
+  const head = joint(torso, 0, NECK_Y, 0);
+  add(head, g.head!, M.skin, skin);
+  add(head, g.eyes!, M.cloth, 0xf6f6f2);
+  add(head, g.face!, M.dark);
+  const seed = Math.abs((look.shirt * 7 + (look.skin ?? 0) * 13 + HUMANS.length * 31) | 0);
+  const hair = look.hair ?? HAIR[seed % HAIR.length]!;
+  add(head, [g.hair!, g.hairLong!, g.hairTail!][Math.floor(seed / 7) % 3]!, M.cloth, hair);
   if (look.santa) {
-    add(torso, g.beard!, M.cloth, 0xffffff);
+    add(head, g.beard!, M.cloth, 0xffffff);
     add(torso, g.sack!, M.cloth, 0x8a5a2a);
   }
   if (XMAS || look.santa) {
     // Christmas hats for everyone (over the helmet for workers).
     const h = look.helmet !== undefined;
-    if (h) add(torso, g.helmet!, M.hard, look.helmet);
-    add(torso, h ? g.hatH! : g.hat!, M.cloth, 0xc8102e);
-    add(torso, h ? g.brimH! : g.brimS!, M.cloth, 0xffffff);
+    if (h) add(head, g.helmet!, M.hard, look.helmet);
+    add(head, h ? g.hatH! : g.hat!, M.cloth, 0xc8102e);
+    add(head, h ? g.brimH! : g.brimS!, M.cloth, 0xffffff);
   } else if (look.helmet !== undefined) {
-    add(torso, g.helmet!, M.hard, look.helmet);
-    add(torso, g.brim!, M.hard, look.helmet);
+    add(head, g.helmet!, M.hard, look.helmet);
+    add(head, g.brim!, M.hard, look.helmet);
   } else {
     const c = look.cap ?? 0x2f3b6b;
-    add(torso, g.cap!, M.cloth, c);
-    add(torso, g.peak!, M.cloth, c);
+    add(head, g.cap!, M.cloth, c);
+    add(head, g.peak!, M.cloth, c);
   }
   const armL = joint(torso, -0.182, 0.465, 0);
   const armR = joint(torso, 0.182, 0.465, 0);
   // Arms hang a little away from the body.
   armL.rotation.z = -0.07;
   armR.rotation.z = 0.07;
+  const fores: THREE.Group[] = [];
   for (const a of [armL, armR]) {
-    add(a, g.arm!, M.cloth, look.shirt);
-    // Workers wear gloves; staff go bare-handed.
-    add(a, g.hand!, look.vest !== undefined ? M.cloth : M.skin, look.vest !== undefined ? 0x3a3d44 : skin);
+    add(a, g.upper!, M.cloth, look.shirt);
+    if (!worker) add(a, g.sleeve!, M.cloth, look.shirt);
+    const f = joint(a, 0, -0.29, 0);
+    // A little bend at the elbow when the arm hangs.
+    f.rotation.x = -0.12;
+    fores.push(f);
+    // Workers: long sleeves and gloves; staff: bare forearms and hands.
+    add(f, g.fore!, worker ? M.cloth : M.skin, worker ? look.shirt : skin);
+    if (worker) add(f, g.cuff!, M.cloth, 0x3a3d44);
+    add(f, g.hand!, worker ? M.cloth : M.skin, worker ? 0x3a3d44 : skin);
   }
+  for (const l of [legL, legR]) add(l, g.crease!, M.cloth, look.trousers);
   k.blobUnder(root, 0.8, 0.6);
   HUMANS.push(root);
   if (at) {
@@ -210,5 +274,5 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     root.rotation.y = at.ry;
     k.put(root);
   }
-  return { root, torso, armL, armR, legL, legR };
+  return { root, torso, armL, armR, foreL: fores[0]!, foreR: fores[1]!, head, legL, legR };
 }
