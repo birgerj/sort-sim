@@ -238,7 +238,19 @@ export class Trucks {
     if (!this.scheduled) {
       // Every door has a truck leaving every hour; the doors' departures are spread over the hour.
       this.scheduled = true;
-      this.docks.forEach((d, i) => (d.cutoff = Math.ceil(now / 60) * 60 + 30 + i * (60 / this.docks.length)));
+      // Doors of the same city take turns: a city with n doors has a departure every 60/n
+      // minutes, one door after the other, and the cities are spread over the hour too.
+      const base = Math.ceil(now / 60) * 60 + 30;
+      for (const side of ['cage', 'box'] as const) {
+        const list = this.docks.filter((d) => d.cargo === side);
+        const cities = [...new Set(list.map((d) => d.city))];
+        for (const d of list) {
+          const group = list.filter((x) => x.city === d.city);
+          const c = cities.indexOf(d.city);
+          const off = (c / cities.length + group.indexOf(d) / group.length) % 1;
+          d.cutoff = base + Math.round(off * 60) + (side === 'box' ? 1 : 0);
+        }
+      }
     }
     // The cleardown buzzer sounds on every other beat at a door in cleardown.
     const beat = Math.floor(bt);
