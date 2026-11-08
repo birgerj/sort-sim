@@ -58,6 +58,7 @@ describe('dock doors by volume', () => {
       expect(n.reduce((a, b) => a + b, 0)).toBe(20);
       for (let i = 1; i < n.length; i++) expect(n[i]!).toBeLessThanOrEqual(n[i - 1]! + 1);
       expect(Math.min(...n)).toBeGreaterThanOrEqual(1);
+      expect(Math.max(...n)).toBeLessThanOrEqual(4);
     }
   });
 });

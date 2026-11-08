@@ -82,46 +82,46 @@ export const COUNTRIES: Country[] = [
     name: 'Belgium',
     native: 'België / Belgique',
     cities: towns(`
-      Antwerpen|530|2000, 2018, 2020, 2030, 2040, 2050, 2060, 2100, 2140, 2170, 2180, 2600, 2610, 2660;
-      Gent|265|9000, 9030-9032, 9040-9042, 9050-9052;
-      *Charleroi|203|6000-6001, 6010, 6020, 6030-6032, 6040-6044, 6060-6061;
+      Antwerpen|562|2000, 2018, 2020, 2030, 2040, 2050, 2060, 2100, 2140, 2170, 2180, 2600, 2610, 2660;
+      Gent|273|9000, 9030-9032, 9040-9042, 9050-9052;
+      *Charleroi|206|6000-6001, 6010, 6020, 6030-6032, 6040-6044, 6060-6061;
+      Brussel|198|1000, 1020, 1120, 1130;
       *Liège|197|4000, 4020, 4030-4032;
-      Brussel|196|1000, 1020, 1120, 1130;
-      *Schaerbeek|133|1030;
-      *Anderlecht|125|1070;
-      Brugge|119|8000, 8200, 8310, 8380;
-      *Namur|113|5000-5004, 5020-5022, 5024, 5100-5101;
-      Leuven|103|3000-3001, 3010, 3012, 3018;
-      *Molenbeek|98|1080;
-      *Mons|96|7000, 7010-7012, 7020-7022, 7024, 7030-7034;
-      Aalst|89|9300, 9308, 9310, 9320;
-      Mechelen|89|2800-2801, 2811-2812;
-      *Ixelles|87|1050;
-      *Uccle|84|1180;
-      *La Louvière|81|7100, 7110;
-      Hasselt|80|3500-3501, 3510-3512;
-      Sint-Niklaas|80|9100, 9111-9112;
-      Kortrijk|79|8500-8501, 8510-8511;
-      Oostende|72|8400;
+      *Schaerbeek|130|1030;
+      *Anderlecht|129|1070;
+      Brugge|120|8000, 8200, 8310, 8380;
+      *Namur|115|5000-5004, 5020-5022, 5024, 5100-5101;
+      Leuven|105|3000-3001, 3010, 3012, 3018;
+      *Molenbeek|99|1080;
+      *Mons|97|7000, 7010-7012, 7020-7022, 7024, 7030-7034;
+      Aalst|92|9300, 9308, 9310, 9320;
+      Mechelen|90|2800-2801, 2811-2812;
+      Hasselt|90|3500-3501, 3510-3512;
+      *Ixelles|88|1050;
+      Beveren|88|9120, 9130;
+      *Uccle|87|1180;
+      Sint-Niklaas|83|9100, 9111-9112;
+      *La Louvière|82|7100, 7110;
+      Kortrijk|81|8500-8501, 8510-8511;
+      Oostende|73|8400;
       *Tournai|69|7500-7504, 7506, 7520-7522, 7530-7534, 7536, 7538, 7540, 7542-7543, 7548;
-      Genk|67|3600;
-      *Seraing|64|4100-4102;
-      Roeselare|64|8800;
-      *Mouscron|59|7700, 7711-7712;
-      *Woluwe-Saint-Lambert|58|1200;
-      *Forest|56|1190;
-      *Verviers|55|4800-4802;
-      *Jette|53|1090;
-      Beveren|50|9120, 9130;
-      *Saint-Gilles|50|1060;
-      *Etterbeek|48|1040;
-      Beringen|47|3580-3583;
-      Dendermonde|46|9200;
-      Turnhout|46|2300;
-      Vilvoorde|46|1800;
-      Dilbeek|43|1700-1703;
-      Lokeren|42|9160;
-      Sint-Truiden|41|3800, 3803, 3806`),
+      Genk|68|3600;
+      Roeselare|67|8800;
+      *Seraing|65|4100-4102;
+      *Woluwe-Saint-Lambert|61|1200;
+      *Mouscron|60|7700, 7711-7712;
+      *Forest|59|1190;
+      *Verviers|56|4800-4802;
+      *Jette|54|1090;
+      Lokeren|51|9160;
+      *Saint-Gilles|49|1060;
+      *Etterbeek|49|1040;
+      Beringen|49|3580-3583;
+      Dendermonde|48|9200;
+      Turnhout|48|2300;
+      Vilvoorde|48|1800;
+      Dilbeek|45|1700-1703;
+      Sint-Truiden|42|3800, 3803, 3806`),
     digits: 4,
     step: 1,
     surnames: words(
@@ -136,45 +136,45 @@ export const COUNTRIES: Country[] = [
     name: 'France',
     native: 'France',
     cities: towns(`
-      Paris|2103|75001-75020, 75116;
-      Marseille|873|13001-13016;
-      Lyon|522|69001-69009;
-      Toulouse|504|31000, 31100, 31200, 31300, 31400, 31500;
-      Nice|342|6000, 6100, 6200, 6300;
-      Nantes|320|44000, 44100, 44200, 44300;
-      Montpellier|302|34000, 34070, 34080, 34090;
-      Strasbourg|291|67000, 67100, 67200;
-      Bordeaux|261|33000, 33100, 33200, 33300, 33800;
-      Lille|236|59000, 59160, 59260, 59777, 59800;
-      Rennes|225|35000, 35200, 35700;
-      Toulon|180|83000, 83100, 83200;
-      Reims|180|51100;
+      Paris|2104|75001-75020, 75116;
+      Marseille|886|13001-13016;
+      Lyon|519|69001-69009;
+      Toulouse|515|31000, 31100, 31200, 31300, 31400, 31500;
+      Nice|358|6000, 6100, 6200, 6300;
+      Nantes|328|44000, 44100, 44200, 44300;
+      Montpellier|310|34000, 34070, 34080, 34090;
+      Strasbourg|294|67000, 67100, 67200;
+      Bordeaux|268|33000, 33100, 33200, 33300, 33800;
+      Lille|238|59000, 59160, 59260, 59777, 59800;
+      Rennes|231|35000, 35200, 35700;
+      Toulon|179|83000, 83100, 83200;
+      Reims|178|51100;
       Saint-Étienne|173|42000, 42100;
-      Le Havre|166|76600, 76610, 76620;
-      Dijon|159|21000;
-      Angers|157|49000, 49100;
-      Grenoble|157|38000, 38100;
-      Villeurbanne|156|69100;
-      Nîmes|148|30000, 30900;
-      Clermont-Ferrand|147|63000, 63100;
-      Aix-en-Provence|145|13080, 13090, 13100, 13290, 13540;
-      Le Mans|145|72000, 72100;
-      Brest|140|29200;
-      Tours|136|37000, 37100, 37200;
-      Amiens|133|80000, 80080, 80090;
+      Le Havre|167|76600, 76610, 76620;
+      Villeurbanne|164|69100;
+      Dijon|162|21000;
+      Angers|159|49000, 49100;
+      Grenoble|156|38000, 38100;
+      Nîmes|152|30000, 30900;
+      Aix-en-Provence|150|13080, 13090, 13100, 13290, 13540;
+      Saint-Denis|149|93200, 93210;
+      Clermont-Ferrand|146|63000, 63100;
+      Le Mans|146|72000, 72100;
+      Brest|142|29200;
+      Tours|139|37000, 37100, 37200;
+      Amiens|136|80000, 80080, 80090;
+      Annecy|132|74000, 74370, 74600, 74940, 74960;
       Limoges|130|87000, 87100, 87280;
-      Annecy|130|74000, 74370, 74600, 74940, 74960;
-      Boulogne-Billancourt|121|92100;
-      Metz|120|57000, 57050, 57070;
-      Perpignan|119|66000, 66100;
-      Besançon|119|25000;
-      Orléans|117|45000, 45100;
-      Rouen|114|76000, 76100;
-      Saint-Denis|113|93200, 93210;
-      Argenteuil|111|95100;
-      Montreuil|111|93100;
-      Mulhouse|108|68100, 68200;
-      Caen|106|14000;
+      Metz|123|57000, 57050, 57070;
+      Perpignan|122|66000, 66100;
+      Boulogne-Billancourt|119|92100;
+      Besançon|118|25000;
+      Rouen|118|76000, 76100;
+      Orléans|116|45000, 45100;
+      Montreuil|112|93100;
+      Caen|109|14000;
+      Argenteuil|106|95100;
+      Mulhouse|105|68100, 68200;
       Nancy|104|54000, 54100`),
     digits: 5,
     step: 1,
@@ -189,46 +189,46 @@ export const COUNTRIES: Country[] = [
     name: 'Germany',
     native: 'Deutschland',
     cities: towns(`
-      Berlin|3755|10115-10999, 12043-12689, 13051-13629, 14050-14199;
-      Hamburg|1892|20095-22769;
-      München|1512|80331-81929;
-      Köln|1084|50667-51149;
-      Frankfurt am Main|773|60306-60599, 65929-65936;
-      Stuttgart|633|70173-70629;
-      Düsseldorf|629|40210-40629;
-      Leipzig|616|4103-4357;
-      Dortmund|595|44135-44388;
-      Essen|584|45127-45359;
-      Bremen|577|28195-28779;
-      Dresden|563|1067-1328;
-      Hannover|548|30159-30669;
-      Nürnberg|526|90402-90491;
-      Duisburg|503|47051-47279;
-      Bochum|366|44787-44894;
-      Wuppertal|358|42103-42399;
-      Bielefeld|338|33602-33739;
-      Bonn|335|53111-53229;
-      Münster|320|48143-48167;
-      Mannheim|315|68159-68309;
-      Karlsruhe|308|76131-76229;
-      Augsburg|300|86150-86199;
-      Wiesbaden|283|65183-65207;
-      Mönchengladbach|268|41061-41239;
-      Gelsenkirchen|263|45879-45899;
-      Aachen|252|52062-52080;
-      Braunschweig|251|38100-38126;
-      Kiel|248|24103-24159;
-      Chemnitz|248|9111-9247;
-      Magdeburg|240|39104-39130;
-      Halle (Saale)|239|6108-6132;
-      Freiburg im Breisgau|237|79098-79117;
-      Krefeld|228|47798-47839;
-      Mainz|220|55116-55131;
-      Lübeck|218|23552-23570;
-      Erfurt|216|99084-99099;
+      Berlin|3677|10115-10999, 12043-12689, 13051-13629, 14050-14199;
+      Hamburg|1906|20095-22769;
+      München|1488|80331-81929;
+      Köln|1073|50667-51149;
+      Frankfurt am Main|759|60306-60599, 65929-65936;
+      Stuttgart|626|70173-70629;
+      Düsseldorf|619|40210-40629;
+      Leipzig|602|4103-4357;
+      Dortmund|587|44135-44388;
+      Essen|579|45127-45359;
+      Bremen|563|28195-28779;
+      Dresden|555|1067-1328;
+      Hannover|536|30159-30669;
+      Nürnberg|511|90402-90491;
+      Duisburg|495|47051-47279;
+      Bochum|363|44787-44894;
+      Wuppertal|355|42103-42399;
+      Bielefeld|334|33602-33739;
+      Bonn|332|53111-53229;
+      Münster|318|48143-48167;
+      Mannheim|312|68159-68309;
+      Karlsruhe|307|76131-76229;
+      Augsburg|296|86150-86199;
+      Wiesbaden|279|65183-65207;
+      Mönchengladbach|261|41061-41239;
+      Gelsenkirchen|260|45879-45899;
+      Aachen|249|52062-52080;
+      Braunschweig|249|38100-38126;
+      Kiel|246|24103-24159;
+      Chemnitz|243|9111-9247;
+      Halle (Saale)|238|6108-6132;
+      Magdeburg|236|39104-39130;
+      Freiburg im Breisgau|232|79098-79117;
+      Krefeld|227|47798-47839;
+      Mainz|218|55116-55131;
+      Lübeck|216|23552-23570;
+      Erfurt|213|99084-99099;
       Oberhausen|209|46045-46149;
-      Rostock|209|18055-18147;
-      Kassel|202|34117-34134`),
+      Rostock|208|18055-18147;
+      Kassel|200|34117-34134`),
     digits: 5,
     step: 1,
     surnames: words(
@@ -242,46 +242,46 @@ export const COUNTRIES: Country[] = [
     name: 'Finland',
     native: 'Suomi',
     cities: towns(`
-      Helsinki|674|100-990;
-      Espoo|314|2100-2380, 2600-2980;
-      Tampere|255|33100-33450, 33500-33960;
-      Vantaa|249|1200-1770;
-      Oulu|215|90100-90940;
-      Turku|202|20100-20960;
-      Jyväskylä|147|40100-40950;
-      Kuopio|125|70100-70940;
+      Helsinki|687|100-990;
+      Espoo|322|2100-2380, 2600-2980;
+      Tampere|260|33100-33450, 33500-33960;
+      Vantaa|252|1200-1770;
+      Oulu|216|90100-90940;
+      Turku|206|20100-20960;
+      Jyväskylä|149|40100-40950;
+      Kuopio|126|70100-70940;
       Lahti|121|15100-15980;
       Pori|83|28100-28900;
-      Kouvola|79|45100-47910;
-      Joensuu|78|80100-82730;
+      Joensuu|79|80100-82730;
+      Kouvola|78|45100-47910;
       Lappeenranta|73|53100-54920;
+      Vaasa|70|65100-65380;
       Hämeenlinna|68|13100-14840;
-      Vaasa|68|65100-65380;
-      Seinäjoki|65|60100-60800;
-      Rovaniemi|65|96100-97890;
+      Seinäjoki|67|60100-60800;
+      Rovaniemi|66|96100-97890;
       Mikkeli|52|50100-50970;
-      Kotka|51|48100-48910;
+      Porvoo|52|6100-6850;
       Salo|51|24100-25870;
-      Porvoo|51|6100-6850;
+      Kotka|50|48100-48910;
       Kokkola|48|67100-67800;
       Hyvinkää|47|5800-5880;
+      Järvenpää|47|4400-4480;
       Lohja|46|8100-8700;
-      Järvenpää|45|4400-4480;
-      Nurmijärvi|44|1900-1940;
+      Nurmijärvi|45|1900-1940;
       Kirkkonummi|42|2400-2490;
+      Tuusula|42|4300-4380;
       Rauma|39|26100-26930;
-      Tuusula|39|4300-4380;
       Kerava|38|4200-4260;
-      Kajaani|36|87100-88900;
-      Nokia|35|37100-37150;
+      Kajaani|37|87100-88900;
+      Nokia|36|37100-37150;
       Ylöjärvi|34|33470-33480, 34240-34300;
-      Kangasala|33|36200-36280;
-      Savonlinna|32|57100-58900;
+      Kangasala|34|36200-36280;
+      Savonlinna|31|57100-58900;
       Vihti|29|3100-3790;
-      Riihimäki|28|11100-11910;
+      Riihimäki|29|11100-11910;
       Raasepori|27|10300-10820;
       Imatra|25|55100-55920;
-      Sastamala|24|38200-38300`),
+      Sastamala|23|38200-38300`),
     digits: 5,
     step: 10,
     surnames: words(
@@ -295,46 +295,46 @@ export const COUNTRIES: Country[] = [
     name: 'Sweden',
     native: 'Sverige',
     cities: towns(`
-      Stockholm|984|11120-11799, 12030-12999;
-      Göteborg|604|41101-41879;
-      Malmö|362|21111-21779;
-      Uppsala|245|75217-75758;
-      Linköping|167|58183-58758;
-      Västerås|160|72130-72598;
-      Örebro|158|70210-70382;
-      Helsingborg|152|25220-25669;
+      Stockholm|999|11120-11799, 12030-12999;
+      Göteborg|613|41101-41879;
+      Malmö|368|21111-21779;
+      Uppsala|250|75217-75758;
+      Linköping|169|58183-58758;
+      Västerås|161|72130-72598;
+      Örebro|161|70210-70382;
+      Helsingborg|153|25220-25669;
+      Jönköping|148|55302-55628;
       Norrköping|145|60002-60597;
-      Jönköping|145|55302-55628;
-      Umeå|132|90325-90790;
-      Lund|129|22100-22738;
+      Huddinge|145|14100-14199;
+      Umeå|135|90325-90790;
+      Lund|132|22100-22738;
       Borås|115|50330-50764;
-      Huddinge|115|14100-14199;
-      Nacka|108|13130-13169;
+      Nacka|114|13130-13169;
       Eskilstuna|107|63002-63549;
-      Halmstad|104|30230-30296;
-      Gävle|103|80250-80649;
-      Södertälje|101|15130-15259;
+      Halmstad|106|30230-30296;
+      Gävle|104|80250-80649;
+      Södertälje|103|15130-15259;
+      Haninge|101|13630-13699;
       Sundsvall|99|85230-85753;
-      Växjö|97|35230-35596;
-      Botkyrka|96|14530-14799;
-      Karlstad|96|65219-65639;
-      Haninge|95|13630-13699;
-      Kristianstad|87|29130-29199;
-      Kungsbacka|85|43430-43499;
-      Solna|85|16929-17199;
-      Järfälla|85|17530-17777;
-      Luleå|79|97231-97598;
-      Sollentuna|76|19130-19287;
+      Växjö|99|35230-35596;
+      Karlstad|99|65219-65639;
+      Botkyrka|97|14530-14799;
+      Järfälla|90|17530-17777;
+      Kristianstad|86|29130-29199;
+      Kungsbacka|86|43430-43499;
+      Solna|86|16929-17199;
+      Luleå|80|97231-97598;
+      Täby|79|18311-18779;
+      Sollentuna|78|19130-19287;
       Skellefteå|75|93130-93199;
-      Täby|74|18311-18779;
-      Kalmar|71|39231-39365;
-      Mölndal|70|43130-43199;
-      Varberg|67|43220-43299;
-      Östersund|64|83130-83599;
-      Norrtälje|63|76130-76199;
+      Kalmar|73|39231-39365;
+      Mölndal|72|43130-43199;
+      Varberg|69|43220-43299;
+      Norrtälje|67|76130-76199;
+      Östersund|65|83130-83599;
       Gotland|61|62140-62199;
-      Trollhättan|59|46130-46199;
-      Falun|59|79130-79199`),
+      Falun|60|79130-79199;
+      Trollhättan|59|46130-46199`),
     digits: 5,
     step: 1,
     surnames: words(
@@ -348,46 +348,46 @@ export const COUNTRIES: Country[] = [
     name: 'Moldova',
     native: 'Moldova',
     cities: towns(`
-      Chișinău|640|2001-2075;
+      Chișinău|567|2001-2075;
       Tiraspol|133|3300-3305;
-      Bălți|102|3100-3121;
+      Bălți|91|3100-3121;
       Bender|91|3200-3204;
       Rîbnița|47|5500-5502;
-      Cahul|30|3900-3909;
-      Ungheni|30|3600-3602;
+      Ungheni|26|3600-3602;
       Dubăsari|25|4500-4502;
-      Soroca|22|3000-3006;
-      Orhei|21|3500-3506;
-      Comrat|20|3800-3807;
-      Strășeni|18|3700-3705;
-      Ceadîr-Lunga|16|6100-6102;
-      Căușeni|15|4300-4302;
-      Edineț|15|4600-4602;
-      Ialoveni|15|6800-6802;
+      Cahul|22|3900-3909;
+      Orhei|22|3500-3506;
+      Soroca|21|3000-3006;
+      Comrat|19|3800-3807;
+      Ialoveni|14.7|6800-6802;
+      Strășeni|14.5|3700-3705;
+      Ceadîr-Lunga|14.3|6100-6102;
       Slobozia|14|5700-5701;
-      Drochia|13|5200-5202;
-      Hîncești|12|3400-3402;
-      Taraclia|12|7400-7401;
-      Fălești|12|5900-5902;
-      Călărași|12|4400-4402;
-      Vulcănești|12|5300-5301;
-      Florești|11|5000-5002;
-      Sîngerei|11|6200-6202;
-      Nisporeni|11|6400-6402;
-      Cimișlia|10|4100-4102;
-      Rîșcani|10|5600-5601;
-      Rezina|9|5400-5401;
-      Glodeni|9|4900-4901;
-      Leova|9|6300-6301;
-      Dondușeni|9|5100-5101;
-      Basarabeasca|8|7600-7601;
-      Ocnița|8|7100-7101;
-      Anenii Noi|8|6500-6501;
-      Briceni|7|4700-4701;
-      Ștefan Vodă|7|4200-4201;
-      Telenești|7|5800-5801;
-      Criuleni|6|4800-4801;
-      Șoldănești|6|7200-7201`),
+      Căușeni|13.5|4300-4302;
+      Drochia|12.9|5200-5202;
+      Edineț|12.4|4600-4602;
+      Fălești|11.9|5900-5902;
+      Hîncești|11.4|3400-3402;
+      Vulcănești|10.9|5300-5301;
+      Florești|10.9|5000-5002;
+      Taraclia|10|7400-7401;
+      Sîngerei|10|6200-6202;
+      Călărași|9.5|4400-4402;
+      Rezina|9.4|5400-5401;
+      Nisporeni|9.1|6400-6402;
+      Anenii Noi|8.9|6500-6501;
+      Cimișlia|8.8|4100-4102;
+      Rîșcani|8.6|5600-5601;
+      Glodeni|7.3|4900-4901;
+      Leova|6.4|6300-6301;
+      Basarabeasca|6.3|7600-7601;
+      Dondușeni|6|5100-5101;
+      Briceni|5.8|4700-4701;
+      Criuleni|5.8|4800-4801;
+      Telenești|5.7|5800-5801;
+      Ocnița|5.5|7100-7101;
+      Ștefan Vodă|5.4|4200-4201;
+      Șoldănești|5|7200-7201`),
     digits: 4,
     step: 1,
     surnames: words(
@@ -402,45 +402,45 @@ export const COUNTRIES: Country[] = [
     native: 'भारत / India',
     cities: towns(`
       Mumbai|12442|400001-400104;
-      Delhi|11034|110001-110096;
-      Bengaluru|8443|560001-560103;
+      Delhi|11035|110001-110096;
+      Bengaluru|8444|560001-560103;
       Hyderabad|6993|500001-500098;
-      Ahmedabad|5577|380001-380061;
-      Chennai|4646|600001-600119;
-      Kolkata|4496|700001-700160;
-      Surat|4467|395001-395023;
+      Chennai|6748|600001-600119;
+      Ahmedabad|5578|380001-380061;
+      Kolkata|4497|700001-700160;
+      Surat|4468|395001-395023;
       Pune|3124|411001-411062;
       Jaipur|3046|302001-302040;
       Lucknow|2817|226001-226031;
-      Kanpur|2767|208001-208027;
-      Nagpur|2405|440001-440037;
+      Kanpur|2765|208001-208027;
+      Nagpur|2406|440001-440037;
       Indore|1964|452001-452020;
       Thane|1841|400601-400615;
       Bhopal|1798|462001-462046;
       Visakhapatnam|1728|530001-530053;
       Patna|1684|800001-800030;
-      Vadodara|1670|390001-390025;
-      Ghaziabad|1648|201001-201017;
-      Ludhiana|1618|141001-141017;
-      Agra|1585|282001-282010;
+      Vadodara|1671|390001-390025;
+      Ghaziabad|1649|201001-201017;
+      Ludhiana|1619|141001-141017;
+      Agra|1586|282001-282010;
       Nashik|1486|422001-422013;
       Faridabad|1414|121001-121013;
       Meerut|1305|250001-250006;
-      Rajkot|1286|360001-360007;
+      Rajkot|1287|360001-360007;
       Varanasi|1198|221001-221011;
-      Srinagar|1180|190001-190025;
+      Srinagar|1181|190001-190025;
       Aurangabad|1175|431001-431010;
       Dhanbad|1162|826001-826015;
       Amritsar|1132|143001-143008;
-      Navi Mumbai|1120|400701-400710;
-      Prayagraj|1112|211001-211019;
+      Navi Mumbai|1121|400701-400710;
+      Prayagraj|1113|211001-211019;
+      Howrah|1077|711101-711114;
       Ranchi|1073|834001-834012;
-      Howrah|1072|711101-711114;
-      Coimbatore|1061|641001-641050;
-      Jabalpur|1055|482001-482011;
+      Jabalpur|1056|482001-482011;
       Gwalior|1054|474001-474012;
-      Vijayawada|1048|520001-520015;
-      Jodhpur|1033|342001-342015`),
+      Coimbatore|1051|641001-641050;
+      Vijayawada|1034|520001-520015;
+      Jodhpur|1034|342001-342015`),
     digits: 6,
     step: 1,
     surnames: words(
@@ -454,46 +454,46 @@ export const COUNTRIES: Country[] = [
     name: 'Australia',
     native: 'Australia',
     cities: towns(`
-      Sydney|5450|2000-2234, 2745-2770|NSW;
-      Melbourne|5200|3000-3207, 3750-3810|VIC;
-      Brisbane|2600|4000-4179, 4500-4519|QLD;
-      Perth|2300|6000-6199|WA;
-      Adelaide|1400|5000-5199|SA;
-      Gold Coast|720|4207-4230|QLD;
-      Newcastle|480|2280-2320|NSW;
-      Canberra|470|2600-2620, 2900-2914|ACT;
-      Sunshine Coast|380|4550-4575|QLD;
-      Central Coast|345|2250-2263|NSW;
-      Wollongong|310|2500-2530|NSW;
-      Geelong|290|3211-3227|VIC;
-      Hobart|255|7000-7055|TAS;
-      Townsville|185|4810-4818|QLD;
-      Cairns|160|4868-4879|QLD;
-      Darwin|150|800-832|NT;
-      Toowoomba|145|4350|QLD;
-      Ballarat|115|3350-3357|VIC;
-      Bendigo|105|3550-3556|VIC;
-      Albury-Wodonga|100|2640-2641, 3689-3691|NSW;
-      Launceston|92|7248-7250|TAS;
-      Mackay|85|4740|QLD;
-      Rockhampton|80|4700-4702|QLD;
-      Bunbury|78|6230|WA;
-      Bundaberg|73|4670|QLD;
-      Coffs Harbour|73|2450|NSW;
-      Wagga Wagga|57|2650|NSW;
-      Hervey Bay|57|4655|QLD;
-      Mildura|52|3500|VIC;
-      Shepparton|52|3630|VIC;
-      Port Macquarie|50|2444|NSW;
-      Gladstone|45|4680|QLD;
-      Tamworth|43|2340|NSW;
-      Traralgon|42|3844|VIC;
-      Orange|41|2800|NSW;
-      Bowral|40|2575-2576|NSW;
-      Busselton|40|6280|WA;
-      Dubbo|39|2830|NSW;
-      Geraldton|38|6530|WA;
-      Nowra|37|2541|NSW`),
+      Melbourne|5328|3000-3207, 3750-3810|VIC;
+      Sydney|5220|2000-2234, 2745-2770|NSW;
+      Brisbane|2745|4000-4179, 4500-4519|QLD;
+      Perth|2431|6000-6199|WA;
+      Adelaide|1471|5000-5199|SA;
+      Gold Coast|762|4207-4230|QLD;
+      Newcastle|542|2280-2320|NSW;
+      Canberra|521|2600-2620, 2900-2914|ACT;
+      Sunshine Coast|425|4550-4575|QLD;
+      Central Coast|354|2250-2263|NSW;
+      Wollongong|322|2500-2530|NSW;
+      Geelong|314|3211-3227|VIC;
+      Hobart|234|7000-7055|TAS;
+      Townsville|191|4810-4818|QLD;
+      Cairns|164|4868-4879|QLD;
+      Toowoomba|154|4350|QLD;
+      Darwin|145|800-832|NT;
+      Ballarat|121|3350-3357|VIC;
+      Bendigo|106|3550-3556|VIC;
+      Albury-Wodonga|102|2640-2641, 3689-3691|NSW;
+      Launceston|93|7248-7250|TAS;
+      Mackay|90|4740|QLD;
+      Rockhampton|84|4700-4702|QLD;
+      Bunbury|84|6230|WA;
+      Bundaberg|79|4670|QLD;
+      Coffs Harbour|77|2450|NSW;
+      Hervey Bay|63|4655|QLD;
+      Wagga Wagga|58|2650|NSW;
+      Shepparton|55|3630|VIC;
+      Mildura|54|3500|VIC;
+      Port Macquarie|53|2444|NSW;
+      Gladstone|49|4680|QLD;
+      Tamworth|46|2340|NSW;
+      Busselton|46|6280|WA;
+      Traralgon|44|3844|VIC;
+      Orange|43|2800|NSW;
+      Bowral|43|2575-2576|NSW;
+      Dubbo|42|2830|NSW;
+      Geraldton|42|6530|WA;
+      Nowra|40|2541|NSW`),
     digits: 4,
     step: 1,
     surnames: words(
