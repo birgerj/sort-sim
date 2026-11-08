@@ -1050,9 +1050,9 @@ export const STATION_TABLE = 4.8;
 export const STATION_START_Z = FLOOR.z0 - 0.7 - STATION_TABLE;
 
 /** Where the manual sort table stands. */
-export const TABLE = { x: -33, z: 22 };
-/** The hopper robots tip small parcels into (west of cell (0, 2)), at the start of the belt to the table. */
-export const DROP = { x: FLOOR.x0 - 1.15, z: FLOOR.z0 + 2 * FLOOR.cs };
+export const TABLE = { x: 109, z: 22 };
+/** The hopper robots tip small parcels into (east of the last cell of row 2), at the start of the belt to the table. */
+export const DROP = { x: FLOOR.x0 + (FLOOR.ni - 1) * FLOOR.cs + 1.15, z: FLOOR.z0 + 2 * FLOOR.cs };
 
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
 

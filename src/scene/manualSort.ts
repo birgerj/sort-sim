@@ -40,10 +40,12 @@ interface Move {
 
 const BELT_Y = 1.1;
 const BELT_Z = DROP.z;
-const BELT_X0 = DROP.x - 0.4;
-const BELT_X1 = TABLE.x + 2.2;
+/** Which way the belt runs from the drop to the table (+1: east). */
+const DIR = Math.sign(TABLE.x - DROP.x) || 1;
+const BELT_X0 = DROP.x + DIR * 0.4;
+const BELT_X1 = TABLE.x - DIR * 2.2;
 /** Where parcels wait on the table, nearest first. */
-const SPOT = (n: number) => new THREE.Vector3(TABLE.x + 1.6 - n * 0.75, 1.02, TABLE.z + 0.7);
+const SPOT = (n: number) => new THREE.Vector3(TABLE.x - DIR * (1.6 - n * 0.75), 1.02, TABLE.z + 0.7);
 const SHELF_Z = TABLE.z + 2.7;
 const COLS = 6;
 const ROWS = 4;
@@ -77,12 +79,14 @@ export class ManualSort {
     const frame = k.std(0x50545b, 0.5, 0.5, 0xdfe3e8);
     const roller = k.std(0x2a2c31, 0.4, 0.7, 0x9aa0a8);
     const teal = k.std(0x1f6e60, 0.6, 0.2, 0x2fa58f);
-    const len = BELT_X0 - BELT_X1;
+    const len = Math.abs(BELT_X0 - BELT_X1);
     const mid = (BELT_X0 + BELT_X1) / 2;
     k.box('mbelt', frame, mid, BELT_Y - 0.06, BELT_Z, len, 0.06, 0.62);
     for (const dz of [-0.33, 0.33]) k.box('mbelt', teal, mid, BELT_Y + 0.02, BELT_Z + dz, len, 0.14, 0.05);
-    for (let x = BELT_X1 + 0.1; x < BELT_X0; x += 0.22) k.box('mroll', roller, x, BELT_Y - 0.02, BELT_Z, 0.06, 0.05, 0.56);
-    for (let x = BELT_X1 + 0.4; x < BELT_X0; x += 1.6) for (const dz of [-0.26, 0.26]) k.box('mleg', frame, x, (BELT_Y - 0.09) / 2, BELT_Z + dz, 0.06, BELT_Y - 0.09, 0.06);
+    const bx0 = Math.min(BELT_X0, BELT_X1);
+    const bx1 = Math.max(BELT_X0, BELT_X1);
+    for (let x = bx0 + 0.1; x < bx1; x += 0.22) k.box('mroll', roller, x, BELT_Y - 0.02, BELT_Z, 0.06, 0.05, 0.56);
+    for (let x = bx0 + 0.4; x < bx1; x += 1.6) for (const dz of [-0.26, 0.26]) k.box('mleg', frame, x, (BELT_Y - 0.09) / 2, BELT_Z + dz, 0.06, BELT_Y - 0.09, 0.06);
     k.blob(mid, BELT_Z, len + 0.6, 1.0);
     // Hopper: a sloped tray the robot tips into, with side walls.
     // (Its lip is just under the robots' deck, so parcels slide off the robot into it.)
@@ -242,9 +246,9 @@ export class ManualSort {
         // No-read: hold it at the label printer, and stick on a new label.
         ...(it.noread
           ? [
-              { x: TABLE.x - 1.2, face: TO_TABLE, reach: 0.4, beats: 1 },
+              { x: TABLE.x - DIR * 1.2, face: TO_TABLE, reach: 0.4, beats: 1 },
               {
-                x: TABLE.x - 1.2,
+                x: TABLE.x - DIR * 1.2,
                 face: TO_TABLE,
                 reach: 0.9,
                 beats: 1,

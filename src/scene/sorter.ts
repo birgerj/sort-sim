@@ -144,13 +144,13 @@ const STATION_CAP = 7;
 const CHUTES: [number, number][] = [
   ...Array.from({ length: 20 }, (_, k): [number, number] => [4 + 6 * k, 1]),
   ...Array.from({ length: 20 }, (_, k): [number, number] => [144 + 6 * k, 1]),
-  // No-reads: off the south-west bend, down to the belt to the manual sort table.
-  [264, 1],
+  // No-reads: off the south-east bend, down to the belt to the manual sort table (east of the robots).
+  [140, 1],
 ];
 /** The no-read chute (last in CHUTES). */
 const REJECT = 40;
 /** x of the no-read belt, where it runs south to the manual sort belt. */
-const REJECT_X = -26.4;
+const REJECT_X = 105.1;
 const FIRST_STATION_S = 142;
 /**
  * Render quality. low: pixel ratio 1, no extras. normal: outlines, toon shading and
@@ -4007,13 +4007,13 @@ export class Sorter implements Scene3D {
       fixed('pickup stations', v(44, 4.2, 11), v(41, 1.2, 17.5), 'Robot stations'),
       fixed('projectors', v(36, 6.6, 13.5), v(41, 5.8, 19)),
       fixed('bins', v(60, 3.8, 21), v(44, 0.8, 28), 'Robot floor'),
-      fixed('parking', v(-14, 3.2, 21), v(-22, 0.6, 25), 'Robot parking'),
-      fixed('manual sorting', v(-27, 3.6, 17.5), v(-33, 1, 22), 'Manual sorting'),
+      fixed('parking', v(-24, 4, 16.5), v(-33, 0.5, 23.5), 'Robot parking'),
+      fixed('manual sorting', v(103.5, 3.6, 16.5), v(109, 1, 22), 'Manual sorting'),
       { ...fixed('control room', v(-48, 2.85, 17.2), v(-48, 2.75, 21.6), 'Control room'), still: true },
       fixed('boxes', v(28, 4.2, 25.5), v(32, 0.8, 32), 'Boxes & trucks'),
       fixed('dj', v(-40, 7.5, 2), v(-50, 7, -4.5)),
       fixed('dance floor', v(LCX - 30, 6.5, -5), v(LCX - 10, 1.2, 1), 'Dance floor'),
-      fixed('break', v(-30, 3.6, 22), v(-37, 0.8, 29.5)),
+      fixed('break', v(-29, 3.2, 26.8), v(-36.5, 0.8, 31.2)),
       {
         name: 'loop ride',
         dept: 'Ride the loop',

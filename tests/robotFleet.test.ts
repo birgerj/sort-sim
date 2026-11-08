@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Fleet, sorterFloor } from '../src/sim/robotFleet';
+import { Fleet, PARK_COLS, sorterFloor } from '../src/sim/robotFleet';
 import { Rng } from '../src/sim/rng';
 
 describe('robot fleet', () => {
-  const cols = Array.from({ length: 20 }, (_, k) => 2 + 4 * k);
+  const cols = Array.from({ length: 20 }, (_, k) => PARK_COLS + 2 + 4 * k);
 
   it('reaches every bin and station along the lanes', () => {
     const { grid, parks, stations, bins } = sorterFloor(cols);
@@ -36,7 +36,8 @@ describe('robot fleet', () => {
         expect(since[b.k]).toBeLessThan(60);
       }
     }
-    expect(delivered).toBeGreaterThan(900);
+    // (Robots now park together at the west end, so trips are longer than with bays by the boxes.)
+    expect(delivered).toBeGreaterThan(800);
   });
 
   it('takes small parcels to the manual sort drop and drives on', () => {

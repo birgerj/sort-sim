@@ -177,7 +177,7 @@ export class Life {
       this.walkers.push({ h, route, speed, s: phase * route.len, yaw: 0 });
     };
     // Team leader with a tablet, round the manual sorting and control room.
-    walk({ shirt: 0x6b3fd1, trousers: 0x22283f, cap: 0x1d1d1f }, [[-44, 15.5], [-26, 15.5], [-26, 19.4], [-44, 19.4]], 0.7, 0, true);
+    walk({ shirt: 0x6b3fd1, trousers: 0x22283f, cap: 0x1d1d1f }, [[-44, 15.3], [-26, 15.3], [-26, 17.3], [-44, 17.3]], 0.7, 0, true);
     // Two colleagues walking the infeed side.
     walk({ shirt: 0x2fa58f, trousers: 0x3a3d44, vest: 0xc8ff3a, helmet: 0xffffff }, [[-58, 12.6], [-28, 12.6], [-28, 13.6], [-58, 13.6]], 0.6, 0.2);
     walk({ shirt: 0xf3f4f6, trousers: 0x22283f, vest: 0xf2a51a, helmet: 0xf2c200 }, [[-58, 12.6], [-28, 12.6], [-28, 13.6], [-58, 13.6]], 0.6, 0.7);
@@ -326,7 +326,8 @@ export class Life {
     const wood = k.std(0x8a6a44, 0.7, 0, 0xe0c89a);
     const grey = k.std(0x50545b, 0.5, 0.4, 0xb9c0c8);
     const teal = k.std(0x1f5f4f, 0.6, 0.1, 0x2fa58f);
-    for (const [tx, tz] of [[-38, 27.5], [-33, 27.5]] as const) {
+    // (Just south of the robots' parking area.)
+    for (const [tx, tz] of [[-38, 30.4], [-33, 30.4]] as const) {
       k.box('btable', wood, tx, 0.75, tz, 1.8, 0.06, 0.9);
       k.box('btleg', grey, tx, 0.37, tz, 0.08, 0.74, 0.08);
       k.box('btleg', grey, tx, 0.02, tz, 0.6, 0.04, 0.6);
