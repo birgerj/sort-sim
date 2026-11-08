@@ -659,6 +659,8 @@ interface Tour {
 /** Height at which the camera travels between stops: above the high infeeds and frames, below ducts and signs. */
 /** Fly height between stops: above the projectors (6.4–7.1 m), well below ducts, trays and lamps (8.8 m and up). */
 const CRUISE_Y = 7.2;
+/** Highest centre for a hanging sign: its top (+0.65 m) stays under the ducts at 8.8 m. */
+const SIGN_MAX_Y = 8.05;
 /** Highest the flying camera may go. */
 const FLY_MAX_Y = 8.0;
 /** Things the tour must fly around at cruise height: x, z, radius. */
@@ -3181,7 +3183,7 @@ export class Sorter implements Scene3D {
     this.trolley(-40, 18);
 
     // Hanging signs, as the labels in the illustration.
-    this.sign('Scanning', '#e8960c', -50, 9.6, 4, Math.PI / 2, (g) => {
+    this.sign('Scanning', '#e8960c', -50, 8.05, 7.9, Math.PI / 2, (g) => {
       g.beginPath();
       g.ellipse(0, 0, 24, 14, 0, 0, 7);
       g.stroke();
@@ -3265,6 +3267,8 @@ export class Sorter implements Scene3D {
 
   /** A sign hanging from the ceiling on two red cables. */
   sign(text: string, color: string, x: number, y: number, z: number, ry: number, icon: (g: CanvasRenderingContext2D) => void): void {
+    // Hang below everything on the ceiling (ducts from 8.8 m, cable trays, lamps, beams).
+    y = Math.min(y, SIGN_MAX_Y);
     // A framed sign: printed faces on both sides, an aluminium edge and two hanging eyes.
     const face = new THREE.MeshBasicMaterial({ map: signTex(text, color, icon) });
     const edge = this.signEdge ?? (this.signEdge = new THREE.MeshBasicMaterial({ color: 0xc3c8ce }));
