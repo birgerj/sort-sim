@@ -1,0 +1,24 @@
+{
+  "name": "sort-sim",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A parcel sorting hub in three.js that moves to its own ambient music: day is clean production, night is a secret party.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "shots": "node scripts/shots.mjs"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

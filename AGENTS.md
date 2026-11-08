@@ -1,0 +1,128 @@
+# AGENTS.md — working on Sort sim
+
+Read this before changing code. README.md describes the hall and the controls.
+
+## Ground rules
+
+- **No brand or product names anywhere** (scene textures, signs, code
+  comments, docs, commit messages). Signs use generic words: Scanning,
+  Sorting, Monitoring, Computing, Robot sorting, Parking, Manual sorting.
+- **Two looks, one scene.** Day is clean production: light hall, black
+  outlines, flat illustration colours, projectors only throw their working
+  beam, people work. Night is a secret party: dark hall, bloom, fog, laser
+  show from the projectors, robot underglow, moving heads, dancing workers.
+  Every new object needs a day *and* a night appearance (see "Theme").
+- **Everything on the beat.** Motion is timed in beats (`bt`, continuous),
+  not seconds. Belts move `BEAT_M` = 2 m per beat; loop positions where
+  things happen (inducts, diverts, chutes) are even metres so they land on
+  beats. New moving things should do one move per beat, or a whole number
+  of beats per move.
+- **Projectors** hang above chute ends and roller belts only — never above
+  the robots' boxes.
+- Day palette (keep to it; add colours in the same flat style): see `DAY` in
+  `src/scene/sorter.ts` — light greys, teal `#2fa58f` (sorter, cages),
+  orange `#f2a51a` (scan tunnels), purple `#6b3fd1` (monitoring), magenta
+  `#d6339a` (computing), yellow `#f2c200` (safety, workers), red `#e2231a`
+  (column feet, sprinklers), ink `#1d1d1f` outlines, blue `#1755fe` accents.
+- Verify visually: `npm run build && npm run shots -- <dept ids>` and look at
+  the PNGs, by day and by night. Typecheck and tests must pass.
+- Write in plain English; comments explain *why* and *what it represents*.
+
+## File map
+
+| File | What |
+|---|---|
+| `src/main.ts` | Wires scene + music + HUD; URL parameters; frame loop; time of day (`tod` 0 day … 1 night). Exposes `window.sortsim` for the console and the screenshot script. |
+| `src/ui/hud.ts`, `src/ui/style.css` | Start screen, caption, control bar (departments, camera, time, sound), keys, auto-hide, settings in localStorage (`sortsim.settings`). |
+| `src/audio/composer.ts` | The song as data: seeded, pure, testable. D minor, 100 BPM, 32-bar form (intro / groove / breakdown). |
+| `src/audio/music.ts` | WebAudio synths and the clock. The clock runs without sound too. `frame()` returns beats, drum envelopes, chord colours and the notes that just sounded (latency-compensated). |
+| `src/scene/types.ts` | `SceneInput` (what the scene gets every frame) and control types. |
+| `src/scene/sorter.ts` | The `Sorter` scene: renderer, post-processing, hall, infeed, loop, chutes, store and lift, parcels, club (night), day scenery, camera and tour. Owns the kit (`box`, `std`, `put`, `inkify`, `person`, `sign`) that the other scene modules use. |
+| `src/scene/floor.ts` | `RobotFloor`: pickup stations, boxes on pallets, robots, flow projectors (all of them, including over the dock belts), manual sort table, floor details. |
+| `src/scene/docks.ts` | `Docks`: north dock doors, roll cages and dock workers (work by day, dance by night). Also `buildDockDoor`, shared with the south wall. |
+| `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
+| `src/scene/forklift.ts` | Forklift model (forks point to local +z). |
+| `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
+| `src/sim/rng.ts` | Seeded random numbers. |
+| `scripts/shots.mjs` | Headless screenshots per department, day and night. |
+
+## How a parcel travels
+
+`Parcel.mode` in `sorter.ts` says who moves it:
+
+`path` (along a `Path`: `pathKind` lane → loop, chute, dock belt, intake, back)
+→ `loop` (on a tray) → divert into a chute → `path` (chute) → then one of:
+
+- dock chute → `path` (`pathKind: 'dock'`, the roller belt) → `dock` (owned
+  by `Docks`: queue, worker, cage) → dead;
+- station chute → `table` (queue at a pickup station) → `robot` (rides a
+  robot; `dropAt` tips it into the box) → dead;
+- store: `path` (intake) → `queue` → `carriage` (lift) → `shuttle` → `fixed`
+  (in the rack) → back out via `tween`/`carriage` → `path` (`back`) → loop.
+
+`pathEnd()` hands parcels from one stage to the next. Parcels are drawn as
+one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
+
+## Layout constants (sorter.ts, top)
+
+- Loop: rounded rectangle, `LOOP_LEN` 294 m, `LOOP_R` corner radius,
+  `LOOP_ZH` half depth, `LX` start x of the north straight. `loopAt(s)` gives
+  position and direction; `s` runs east along the north side. Section
+  starts are in the comment above `INDUCT`.
+- `CHUTES`: 20 dock chutes (s 4…118) and 20 station chutes (s 150…264), 6 m
+  apart. `DOCK_X` = dock positions (straight north of each chute end).
+- Hall: `WX`/`EX` west/east wall, `HZ` half depth, `HH` height; `HCX`/`HW`
+  centre and width.
+- Store: `STORE_DX` shifts the whole store east of the loop.
+- Robot floor: `FLOOR` in `robotFleet.ts` (x0, z0, cell size, columns, rows).
+  Boxes are in the last row (every other column), parking at both ends and
+  on islands in row 3. Keep rows 2 and 4 (eastbound lanes) open end to end,
+  or robots fall back to driving against the lanes and deadlock. Run
+  `npm test` after any change.
+- South aisle: `AISLE_Z` in `boxYard.ts`; doors and forklift count there.
+
+## Theme (day / night)
+
+- `std(color, rough, metal, day?)` makes a `MeshStandardMaterial` with a
+  night colour and an optional day colour; `applyTheme()` lerps all of them.
+- `put(obj, only?)` adds to the scene; with `only = 'day' | 'night'` (or
+  `kit.only` set while building) the object shows in one look only.
+- `inkify(mesh)` adds the black day outline (edges, day only).
+- `box(key, mat, x, y, z, sx, sy, sz)` adds a box to an instanced batch per
+  key+material, flushed with `flushBoxes()`: use it for static clutter.
+- Night lights are `MeshBasicMaterial` with colours above 1 so bloom picks
+  them up. By day, tone mapping is off and walls are flat basic materials.
+
+## Next step: nicer, more detailed graphics
+
+The scene is built so models can be upgraded one at a time without touching
+the simulation:
+
+- **Where each thing is built:** loop/belts/chutes `buildConveyors`, scan
+  tunnels `tunnel()`, store and lift `buildStore`, parcels `buildParcels`,
+  hall `buildHall` (night) and `buildDay` (day), people `person()`, signs
+  `sign()`, robots `RobotFloor.buildRobots`, boxes `buildBins`, projectors
+  `buildProjectors`, dock doors `buildDockDoor`, cages `Docks.buildCage`,
+  workers `Docks.buildWorker`, forklifts `buildForklift`.
+- **Animated models** keep their joints/groups (robot `top`, forklift
+  `forks`, worker `torso/armL/armR/legL/legR`, box `g` + `fill`). A
+  replacement model must expose the same handles.
+- **Textures:** all textures are generated on canvases (`canvasTex`, `tex`).
+  To add image textures, put them in `public/` and load with
+  `TextureLoader`; keep them small (≤ 512 px, KTX2 if many).
+- **GLTF models:** load with `GLTFLoader` into the same groups; use
+  `InstancedMesh` for anything repeated (20 docks × 3 cages, 40 boxes, 20
+  robots). Watch draw calls: every `inkify` mesh adds a line object.
+- **Budget:** aim for 60 fps on a mid-range laptop at the default pixel
+  ratio cap (1.5); under ~2,500 draw calls; check with
+  `renderer.info.render.calls` in the console (`sortsim.scene`).
+- Keep the day look's flat colours with black outlines; detail comes from
+  shape (bevels, ribs, rollers, bolts, labels), not from noise.
+
+## Gotchas
+
+- `CatmullRomCurve3` breaks on repeated points; `planTour` removes them.
+- The first animation frame can have a negative dt; it is clamped.
+- Parcels' `pos` is the base of the parcel, not its centre.
+- `SceneInput.beats` can jump (tab hidden); the scene re-phases instead of
+  replaying beats.

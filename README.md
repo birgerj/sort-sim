@@ -1,0 +1,83 @@
+# Sort sim
+
+A parcel sorting hub in 3D that moves to its own ambient music. By day it is
+clean production; at night the hall throws a secret party: projector laser
+shows, robots with underglow, dancing dock workers.
+
+**Live:** https://birgerj.github.io/sort-sim/
+
+Built with three.js, TypeScript and Vite. No assets: every model, texture and
+sound is generated in code.
+
+## The hall
+
+```
+                      north wall: 20 truck docks
+        ┌──────────────────────────────────────────────────────────┐
+        │  ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯ ▯  roll cages,     │
+        │  │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │  workers         │
+ west:  │  20 dock chutes + roller belts                            │ east:
+ infeed │ ╭────────────────────────────────────────────────────╮   │ lift +
+ lanes ═╪═╡           sorter loop (294 m, trays)               ╞═══╪ high-bay
+ + scan │ ╰────────────────────────────────────────────────────╯   │ storage
+ tunnels│  20 station chutes → pickup roller tables                 │ (buffer)
+        │  robot floor: robots carry parcels to boxes on pallets    │
+        │  ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢   forklift aisle  │
+        └──────────────────────────────────────────────────────────┘
+                      south wall: 20 dock doors (box trucks)
+```
+
+1. **Infeed (west).** Four lanes (two low, two on a mezzanine) come through
+   the wall, pass a scan tunnel and join the west side of the loop at 30°.
+2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
+   parcel has a destination: a dock chute, a robot station, or the store.
+3. **Docks (north).** 20 chutes drop onto roller belts that end at truck
+   docks. A worker takes each parcel off the belt and puts it in one of three
+   roll cages; the flow projector above marks which cage.
+4. **Robots (south).** 20 chutes end at pickup roller tables. Robots each
+   drive their own job: from parking to a station, load a parcel, drive to a
+   box, tip it in, then to a free parking spot.
+5. **Boxes and trucks (south wall).** When a box is full, a forklift lifts
+   it, drives it into a truck behind a dock door and brings it back empty.
+6. **Storage (east).** Parcels go up a lift into a high-bay rack (a buffer)
+   and come back out onto the loop later.
+7. Around it: manual sorting table, control room, monitoring desk, computing
+   racks, forklifts, signs.
+
+Everything moves on the beat of the music: belts move 2 m per beat, parcels
+are diverted on beats, robots move one cell per beat, forklifts and workers
+do one move per beat.
+
+## Controls
+
+| Control | Keys |
+|---|---|
+| Go to a department | `1`–`9`, `0` |
+| Camera: Auto / Fly / Follow a parcel | `A` / `F` / `P` (next parcel) |
+| Time: Day / Night / Day ↔ night cycle | `D` / `N` / `C` |
+| Sound on/off | `M` |
+| Hide the controls | `H` |
+
+The control bar hides after a few seconds without mouse movement.
+
+URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow`,
+`?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
+(no controls: for recordings), `?quality=low|high`.
+
+## Development
+
+```sh
+npm install
+npm run dev        # http://localhost:5173
+npm test           # robot fleet routing, composer
+npm run build      # typecheck + production build into dist/
+npm run shots      # screenshots of every department, day and night, into shots/
+```
+
+`npm run shots` needs Playwright with Chromium (`npm i -D playwright && npx
+playwright install chromium`); it runs `vite preview` on `dist/`, so build
+first. Pass department ids to limit it: `npm run shots -- docks boxes`.
+
+Deploys to GitHub Pages from `main` (`.github/workflows/pages.yml`).
+
+For the architecture and how to extend it, see [AGENTS.md](AGENTS.md).
