@@ -4,12 +4,14 @@
  * remembered in localStorage; URL parameters override them for one visit.
  */
 import type { Music } from '../audio/music';
-import type { Sorter } from '../scene/sorter';
+import { BELT_SPEEDS, type Sorter } from '../scene/sorter';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
 
 export interface Settings {
   time: TimeMode;
+  /** Belt speed multiple (see BELT_SPEEDS). */
+  speed: number;
   muted: boolean;
   volume: number;
 }
@@ -17,7 +19,7 @@ export interface Settings {
 const KEY = 'sortsim.settings';
 
 export function loadSettings(): Settings {
-  const s: Settings = { time: 'day', muted: false, volume: 0.8 };
+  const s: Settings = { time: 'day', speed: 1, muted: false, volume: 0.8 };
   try {
     Object.assign(s, JSON.parse(localStorage.getItem(KEY) ?? '{}'));
   } catch {
@@ -48,6 +50,7 @@ export class Hud {
   private deptBtns = new Map<string, HTMLButtonElement>();
   private camBtns = new Map<string, HTMLButtonElement>();
   private timeBtns = new Map<TimeMode, HTMLButtonElement>();
+  private speedBtns = new Map<number, HTMLButtonElement>();
   private soundBtn!: HTMLButtonElement;
   private hideTimer = 0;
   private hidden = false;
@@ -79,6 +82,7 @@ export class Hud {
     const mode = this.scene.cameraMode();
     for (const [id, b] of this.camBtns) b.classList.toggle('on', id === mode);
     for (const [id, b] of this.timeBtns) b.classList.toggle('on', id === this.settings.time);
+    for (const [v, b] of this.speedBtns) b.classList.toggle('on', v === this.scene.beltSpeed());
     const on = this.music.audible;
     this.soundBtn.textContent = on ? 'Sound on' : 'Sound off';
     this.soundBtn.classList.toggle('on', on);
@@ -103,7 +107,7 @@ export class Hud {
     };
     quiet.onclick = () => s.remove();
     row.append(go, quiet);
-    card.append(row, el('p', 'keys', 'Keys: 1–9, 0 departments · A auto · F fly · P follow · D day · N night · C cycle · M sound · H hide'));
+    card.append(row, el('p', 'keys', 'Keys: 1–9, 0 departments · A auto · F fly · P follow · [ ] belt speed · D day · N night · C cycle · M sound · H hide'));
     s.append(card);
     return s;
   }
@@ -135,6 +139,16 @@ export class Hud {
     const next = el('button', '', 'Next parcel');
     next.onclick = () => this.scene.setControl('next', true);
     cam.append(next);
+    const belt = this.group('Belt speed');
+    for (const v of BELT_SPEEDS) {
+      // 2 m per beat at the music's tempo.
+      const ms = (v * 2 * this.music.bpm) / 60;
+      const b = el('button', '', `${ms.toFixed(1)} m/s`);
+      b.title = `${v}× · keys [ and ]`;
+      b.onclick = () => this.setSpeed(v);
+      belt.append(b);
+      this.speedBtns.set(v, b);
+    }
     const time = this.group('Time');
     for (const [id, label] of [['day', 'Day'], ['night', 'Night'], ['cycle', 'Day ↔ night']] as const) {
       const b = el('button', '', label);
@@ -158,6 +172,12 @@ export class Hud {
       saveSettings(this.settings);
     };
     music.append(this.soundBtn, vol);
+  }
+
+  setSpeed(v: number): void {
+    this.scene.setBeltSpeed(v);
+    this.settings.speed = this.scene.beltSpeed();
+    saveSettings(this.settings);
   }
 
   setTime(t: TimeMode): void {
@@ -192,6 +212,10 @@ export class Hud {
       else if (k === 'n') this.setTime('night');
       else if (k === 'c') this.setTime('cycle');
       else if (k === 'm') this.toggleSound();
+      else if (k === '[' || k === ']') {
+        const i = BELT_SPEEDS.indexOf(this.scene.beltSpeed());
+        this.setSpeed(BELT_SPEEDS[Math.max(0, Math.min(BELT_SPEEDS.length - 1, i + (k === ']' ? 1 : -1)))]!);
+      }
       else if (k === 'h') {
         this.root.classList.toggle('off');
         return;
