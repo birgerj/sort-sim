@@ -10,6 +10,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 import type { FloorKit } from './floor';
 import { buildForklift } from './forklift';
+import { XMAS } from '../sim/season';
 import { buildHuman, type Human } from './people';
 
 type V2 = [number, number];
@@ -104,6 +105,12 @@ export class Life {
       w.h.legR.rotation.x = -swing;
       w.h.armL.rotation.x = -swing * 0.7;
       w.h.armR.rotation.x = w.h.armR.userData.hold ? -0.9 : swing * 0.7;
+      if (w.h.armR.userData.wave) {
+        // Father Christmas waves (and carries his sack with the other hand).
+        w.h.armR.rotation.x = -2.7;
+        w.h.armR.rotation.z = 0.25 + Math.sin(bt * Math.PI * 2) * 0.35;
+        w.h.armL.rotation.x = -0.35;
+      }
       w.h.root.position.y = Math.abs(Math.cos(bt * Math.PI * 2)) * 0.03;
     }
   }
@@ -127,6 +134,13 @@ export class Life {
     // Team leader with a tablet, round the manual sorting and control room.
     walk({ shirt: 0x6b3fd1, trousers: 0x22283f, cap: 0x1d1d1f }, [[-44, 15.3], [-26, 15.3], [-26, 17.3], [-44, 17.3]], 0.7, 0, true);
     // Two colleagues walking the infeed side.
+    if (XMAS) {
+      // Father Christmas walks a round by the control room, waving.
+      const h = buildHuman(k, { shirt: 0xc8102e, trousers: 0xc8102e, skin: 0xf0cfb0, hair: 0xffffff, santa: true });
+      this.group.add(h.root);
+      h.armR.userData.wave = true;
+      this.walkers.push({ h, route: new Route([[-55, 15], [-46.5, 15], [-46.5, 18.3], [-55, 18.3]]), speed: 0.35, s: 0, yaw: 0 });
+    }
     walk({ shirt: 0x2fa58f, trousers: 0x3a3d44, vest: 0xc8ff3a, helmet: 0xffffff }, [[-58, 12.6], [-28, 12.6], [-28, 13.6], [-58, 13.6]], 0.6, 0.2);
     walk({ shirt: 0xf3f4f6, trousers: 0x22283f, vest: 0xf2a51a, helmet: 0xf2c200 }, [[-58, 12.6], [-28, 12.6], [-28, 13.6], [-58, 13.6]], 0.6, 0.7);
     // Cleaner on a ride-on scrubber, under the high infeeds.
@@ -153,7 +167,7 @@ export class Life {
     driver.root.position.y = 0.0;
     sc.add(seat);
     seat.position.y = 0;
-    this.walkers.push({ h: { ...driver, root: new THREE.Group() }, route: new Route([[-58, -9], [-31, -9], [-31, -6.6], [-58, -6.6]]), speed: 0.5, s: 0, yaw: 0, seated: sc });
+    this.walkers.push({ h: { ...driver, root: new THREE.Group() }, route: new Route([[-57, 10.6], [-28, 10.6], [-28, 11.4], [-57, 11.4]]), speed: 0.5, s: 0, yaw: 0, seated: sc });
   }
 
   // ---------- static details ----------

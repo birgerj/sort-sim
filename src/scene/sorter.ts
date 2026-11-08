@@ -33,6 +33,8 @@ import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
 import { Life } from './life';
+import { Xmas } from './xmas';
+import { XMAS } from '../sim/season';
 import { Party } from './party';
 import { Crowd } from './crowd';
 import { Batcher } from './batch';
@@ -671,6 +673,8 @@ export interface Parcel {
   vel: V3;
   dead: boolean;
   slot?: Slot;
+  /** Wrapped as a present (Christmas). */
+  gift?: boolean;
   /** In the buffer store because this chute was full; it goes back there when the chute has room. */
   buffered?: number;
   bufferedAt?: number;
@@ -913,6 +917,7 @@ export class Sorter implements Scene3D {
   private labelsDirty = 0;
   /** Tape across the top of the boxes. */
   private tapeMesh!: THREE.InstancedMesh;
+  private ribbonMesh!: THREE.InstancedMesh;
   private nextId = 400000 + Math.floor(Math.random() * 500000);
   private queue: Parcel[] = [];
 
@@ -972,6 +977,8 @@ export class Sorter implements Scene3D {
 
   // Day / night look.
   private day = 0;
+  /** Christmas decorations (Settings → Christmas). */
+  private xmas: Xmas | null = null;
   private dayShown: boolean | null = null;
   private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
@@ -1101,6 +1108,46 @@ export class Sorter implements Scene3D {
         },
       },
     );
+    if (XMAS) {
+      const edge: { x: number; z: number; nx: number; nz: number; y: number }[] = [];
+      for (let s = 0; s < LOOP_LEN; s += 0.6) {
+        loopAt(s, this.p, this.t);
+        outward(this.t, this.n);
+        edge.push({ x: this.p.x, z: this.p.z, nx: this.n.x, nz: this.n.z, y: this.p.y });
+      }
+      const beams: number[] = [];
+      for (let x = WX + 2; x <= EX - 2; x += 10) beams.push(x);
+      this.xmas = new Xmas(this, {
+        wx: WX,
+        ex: EX,
+        hz: HZ,
+        hh: HH,
+        beams,
+        northDoors: NORTH_DOORS,
+        southDoors: SOUTH_DOORS,
+        loopEdge: edge,
+        trees: [
+          { x: -55.5, z: 21.5, h: 4.2 },
+          { x: -48.8, z: 31.4, h: 3.6 },
+          { x: -19.5, z: -30.8, h: 4.2 },
+          { x: PLATFORM_X - 2.4, z: 2.6, y: PLATFORM_Y, h: 2.2 },
+        ],
+        canes: [
+          { x: -41.6, z: 1.7, ry: 0 },
+          { x: -41.6, z: -1.7, ry: Math.PI },
+          { x: -45.4, z: 22.8, ry: Math.PI / 2 },
+          { x: -42.6, z: 22.8, ry: -Math.PI / 2 },
+          { x: -17.6, z: -27.5, ry: 0.4 },
+          { x: -31.2, z: 31.6, ry: Math.PI },
+        ],
+        stars: [
+          ...Array.from({ length: 6 }, (_, k) => ({ x: -38 + k * 26, z: 0, y: HH - 2.6, r: 0.8 })),
+          ...Array.from({ length: 5 }, (_, k) => ({ x: -30 + k * 28, z: k % 2 ? 22 : -22, y: HH - 2.2, r: 0.5 })),
+        ],
+        snow: [...Array.from({ length: 11 }, (_, k) => ({ x: -36 + k * 12, z: 0 })), { x: -58, z: 12 }, { x: -58, z: -14 }, { x: -26, z: -20 }],
+        market: { x: -28.6, z: 32.6 },
+      });
+    }
     this.life = new Life(this, {
       wx: WX,
       ex: EX,
@@ -1356,6 +1403,7 @@ export class Sorter implements Scene3D {
     this.manual.update(bt, this.dayShown !== false);
     this.yard.update(bt);
     this.life.update(dt, bt);
+    this.xmas?.update(bt, 1 - this.day, this.kick);
     this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown });
     this.party.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
     const bots = this.floor.fleet.bots;
@@ -1682,6 +1730,8 @@ export class Sorter implements Scene3D {
       glow: new THREE.Color(),
       lead: false,
       shape: bag ? 1 : tube ? 2 : 0,
+      // Christmas: some boxes are presents, in wrapping paper with a ribbon round them.
+      gift: XMAS && !env && !bag && !tube && !big && Math.random() < 0.18,
       scanned: false,
       flash: 0,
       dest: 0,
@@ -1707,6 +1757,7 @@ export class Sorter implements Scene3D {
       vel: new THREE.Vector3(),
       dead: false,
     };
+    if (p.gift) p.col.set(pick([0xc8102e, 0x1f7a3a, 0xe8b923, 0x1755fe, 0xd6339a, 0xf3f4f6]));
     this.assign(p);
     p.labelCell = this.freeCells.pop() ?? 0;
     if (p.labelCell) this.drawLabel(p.labelCell, p);
@@ -2333,6 +2384,7 @@ export class Sorter implements Scene3D {
     const counts = [0, 0, 0];
     let labels = 0;
     let tapes = 0;
+    let ribbons = 0;
     let hull = 0;
     for (const p of this.parcels) {
       const set = this.shapes[p.shape]!;
@@ -2364,7 +2416,18 @@ export class Sorter implements Scene3D {
       // Shipping label on top (tubes have theirs wrapped round, not drawn).
       if (p.shape === 2) continue;
       // Boxes get a strip of tape along the top first.
-      if (p.shape === 0 && p.h > 0.15) {
+      if (p.gift) {
+        // A present: a ribbon both ways round the top.
+        o.position.copy(p.pos).addScaledVector(this.n, p.h + 0.003);
+        o.quaternion.copy(p.q).multiply(this.qLabel);
+        o.scale.set(0.07, p.d * 1.004, 1);
+        o.updateMatrix();
+        this.ribbonMesh.setMatrixAt(ribbons++, o.matrix);
+        o.scale.set(p.w * 1.004, 0.07, 1);
+        o.position.addScaledVector(this.n, 0.001);
+        o.updateMatrix();
+        this.ribbonMesh.setMatrixAt(ribbons++, o.matrix);
+      } else if (p.shape === 0 && p.h > 0.15) {
         o.position.copy(p.pos).addScaledVector(this.n, p.h + 0.002);
         o.quaternion.copy(p.q).multiply(this.qLabel);
         o.scale.set(0.09, p.d * 1.002, 1);
@@ -2396,6 +2459,8 @@ export class Sorter implements Scene3D {
     this.labelCellAttr.needsUpdate = true;
     this.tapeMesh.count = tapes;
     this.tapeMesh.instanceMatrix.needsUpdate = true;
+    this.ribbonMesh.count = ribbons;
+    this.ribbonMesh.instanceMatrix.needsUpdate = true;
     // New labels are uploaded a few times a second at most (the canvas is large).
     if (this.labelsDirty && this.time - this.labelsDirty > 0.8) {
       this.labelTex.needsUpdate = true;
@@ -3721,6 +3786,12 @@ export class Sorter implements Scene3D {
     this.tapeMesh.count = 0;
     this.tapeMesh.userData.noInk = true;
     this.put(this.tapeMesh);
+    this.ribbonMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), this.std(0x8a6a10, 0.3, 0.5, 0xe8b923), MAX_PARCELS * 2);
+    this.ribbonMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.ribbonMesh.frustumCulled = false;
+    this.ribbonMesh.count = 0;
+    this.ribbonMesh.userData.noInk = true;
+    this.put(this.ribbonMesh);
     this.labelMesh = new THREE.InstancedMesh(labelGeo, labelMat, MAX_PARCELS);
     this.labelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.labelMesh.frustumCulled = false;

@@ -9,6 +9,7 @@
  */
 import { BPM, chordOf, Composer, energyOf, STEPS_PER_BAR, type Mood, type NoteEvent } from './composer';
 import type { NoteRole, RGB } from '../scene/types';
+import { XMAS } from '../sim/season';
 
 const SPB = 60 / BPM; // seconds per beat at the starting tempo
 const STEP = SPB / 4; // one 16th at the starting tempo
@@ -366,6 +367,41 @@ export class Music {
 
   private delayLine: DelayNode | null = null;
 
+  /** Christmas: sleigh bells instead of the closed hat (a few bright, quickly dying pings). */
+  private jingle(ctx: AudioContext, at: number, vel: number): void {
+    for (const [f, d] of [[2637, 0], [3951, 0.006], [5274, 0.011], [3322, 0.017]] as const) {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.02);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, at + d);
+      g.gain.exponentialRampToValueAtTime(0.03 * vel, at + d + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + d + 0.11);
+      o.connect(g).connect(this.out!);
+      o.start(at + d);
+      o.stop(at + d + 0.13);
+    }
+  }
+
+  /** Christmas: a bell (inharmonic partials, a long ring) instead of the lead. */
+  private bell(ctx: AudioContext, at: number, f: number, vel: number): void {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.09 * vel, at + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 2.2);
+    g.connect(this.out!);
+    g.connect(this.reverb!);
+    for (const [mul, lvl] of [[1, 1], [2.76, 0.4], [5.4, 0.18], [8.9, 0.08]] as const) {
+      const o = ctx.createOscillator();
+      o.frequency.value = f * mul;
+      const og = ctx.createGain();
+      og.gain.value = lvl;
+      o.connect(og).connect(g);
+      o.start(at);
+      o.stop(at + 2.3);
+    }
+  }
+
   private play(ev: NoteEvent, at: number, step = STEP): void {
     const ctx = this.ctx!;
     if (at < ctx.currentTime) return;
@@ -437,6 +473,10 @@ export class Music {
       }
       case 'snare':
       case 'hat': {
+        if (ev.voice === 'hat' && XMAS && !ev.open) {
+          this.jingle(ctx, at, ev.vel);
+          break;
+        }
         const s = ctx.createBufferSource();
         s.buffer = this.noise;
         const f = ctx.createBiquadFilter();
@@ -507,6 +547,10 @@ export class Music {
         break;
       }
       case 'lead': {
+        if (XMAS) {
+          this.bell(ctx, at, mtof(ev.midi!), ev.vel);
+          break;
+        }
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, at);
         g.gain.exponentialRampToValueAtTime(0.1 * ev.vel, at + 0.006);
@@ -531,7 +575,7 @@ export class Music {
         f.type = 'lowpass';
         f.Q.value = 0.6;
         f.frequency.setValueAtTime(380, at);
-        f.frequency.linearRampToValueAtTime(1300, at + dur * 0.5);
+        f.frequency.linearRampToValueAtTime(XMAS ? 900 : 1300, at + dur * 0.5);
         f.frequency.linearRampToValueAtTime(600, at + dur + 2);
         const g = ctx.createGain();
         const peak = 0.035 * ev.vel;

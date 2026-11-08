@@ -82,6 +82,7 @@ do one move per beat.
 
 - **Hub time** starts at 18:00; a beat is 15 seconds of hub time.
 - **Departures:** every door has a truck leaving every hour (the doors' times are spread over the hour). The cleardown starts 6 minutes before; a truck also leaves early when it is full by volume, weight or places. A departure more than 2 minutes after its cutoff counts as late.
+- **Christmas** (Settings, `?xmas=1`): trees with baubles, lights and presents, garlands along the walls, light strings under the roof and along the loop (twinkling on the beat), wreaths on the dock doors, giant candy canes, hanging stars, snowflakes on the floor, presents among the parcels, Christmas hats, Father Christmas walking round, decorated forklifts, a Christmas market (hot-chocolate stall, nativity stable), sleigh bells and bells in the music, and a countdown on the wall boards.
 - **Country** (Settings): the Netherlands, Belgium, France, Germany, Finland, Sweden, Moldova, India or Australia; by default from the browser's language. Its 40 largest towns or municipalities (with their postcode ranges) are the 40 destinations; names, streets and address format follow the country.
 - **Destinations** are weighted by inhabitants (rounded, about 2024); within a city the postcodes are equally likely.
 - **Sorter:** a parcel longer than a tray takes two trays. The scan tunnel measures and weighs every parcel (and the volumetric weight, L×W×H/5000); too big or too heavy goes to manual sorting, as do labels that cannot be read (about 2%, of which the loop scanners still read some) and parcels whose chute stayed full for 3 rounds. Now and then a parcel lands in the next dock chute (a missort): the worker puts it in the return tote and it goes back to the infeed.
@@ -104,7 +105,7 @@ Sort sim is a progressive web app: install it from the browser (the **Install ap
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |
 | Sound on/off and volume (in Settings) | `M` |
 | Hide the controls | `H` |
-| Settings…: time of day, sound, graphics quality (Low / Normal / High / Ultra) and country | button (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
+| Settings…: time of day, sound, graphics quality (Low / Normal / High / Ultra), Christmas and country | button (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
 
 Click or tap a parcel to see its shipping label (a made-up recipient: a common surname of the country with a first name, or initials in the Netherlands, at a street in the parcel's town, real ones in the Netherlands; written the way that country writes addresses) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
 
