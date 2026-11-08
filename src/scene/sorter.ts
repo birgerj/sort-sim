@@ -94,24 +94,24 @@ const LABEL_ROWS = 32;
 // s 0–120: north straight, 20 dock chutes · 127–136: east side, to and from the store ·
 // 142–262: south straight, 20 robot station chutes · 263–284: west end.
 /**
- * Infeeds: four low lanes from the west wall, 4 m apart, each through its own scan
- * tunnel just inside the wall. They run under the west end of the loop into the
- * middle, climb to loop height and, one after the other, turn left and join the
- * north straight from the inside at 30°, 6 m apart (between the chute tables).
- * The joins are on odd marks: lanes 0 and 2 land on the beat (odd trays), lanes 1
- * and 3 half a beat later (even trays), so every tray can be filled.
+ * Infeeds: four lanes come in through the west wall at floor level, 5 m apart, each
+ * through its own scan tunnel just inside the wall, then a buffer (the hold point
+ * where parcels queue), then up a ramp to loop height and onto the west end of the
+ * loop from the outside at 30°, 4 m apart. The joins are on even marks: lanes 0
+ * and 2 land on the beat (even trays), lanes 1 and 3 half a beat later (odd
+ * trays), so every tray can be filled.
  */
-const INDUCT = [13, 19, 25, 31];
+const INDUCT = [268, 272, 276, 280];
 /** Half-beat offset of each lane's landing (see above). */
 const LANE_PHASE = [0, 0.5, 0, 0.5];
-const LANE_Y = 1.2;
-/** z of the lanes (north to south); they keep it until they turn onto the loop. */
-const LANE_Z = [-6, -2, 2, 6];
+const LANE_Y = 0.9;
+/** z of the lanes (south to north); they keep it until they turn onto the loop. */
+const LANE_Z = [11.6, 6.6, 1.6, -3.4];
 const LANE_TUNNEL_X = -58.4;
-/** The mezzanine (the DJ's at night), south of the lanes. */
-const MEZZ_Z = 9.6;
-/** Where parcels queue on an infeed lane (metres along it, after the scan tunnel). */
-const HOLD_S = 15;
+/** The mezzanine (the DJ's at night), north of the lanes. */
+const MEZZ_Z = -7.2;
+/** The buffer: where parcels queue on an infeed lane (metres along it, after the scan tunnel). */
+const HOLD_S = 16;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
 const LANE_QUEUE = 7;
 /** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
@@ -2967,8 +2967,8 @@ export class Sorter implements Scene3D {
     const rail = this.std(0xd9a400, 0.5, 0.4);
     const MZ = MEZZ_Z;
     this.box('grate', grate, -55, 6.15, MZ, 14, 0.12, 2.2);
-    this.box('rail', rail, -55, 7.2, MZ - 1, 14, 0.06, 0.06);
-    for (let x = -62; x <= -48; x += 2) this.box('rail', rail, x, 6.65, MZ - 1, 0.06, 1.1, 0.06);
+    this.box('rail', rail, -55, 7.2, MZ + 1, 14, 0.06, 0.06);
+    for (let x = -62; x <= -48; x += 2) this.box('rail', rail, x, 6.65, MZ + 1, 0.06, 1.1, 0.06);
     for (let k = 0; k < 20; k++) this.box('grate', grate, -47.7 + k * 0.6, 6.0 - k * 0.3, MZ - 0.5, 0.6, 0.08, 1.2);
     for (let x = -60; x <= -50; x += 5) this.box('steel', steel, x, 3.05, MZ - 0.9, 0.2, 6.1, 0.2);
     // Control room with lit windows.
@@ -3167,19 +3167,20 @@ export class Sorter implements Scene3D {
       }
     };
 
-    // Infeeds: four low lanes side by side, each through its own scan tunnel.
+    // Infeeds: four lanes side by side at floor level, each through its own scan tunnel.
     for (let k = 0; k < 4; k++) {
       const y = LANE_Y;
       const z = LANE_Z[k]!;
-      // In from the west wall, under the loop's west end, then climb inside the loop and
-      // turn left onto the north straight at 30°, from the inside.
+      // In from the west wall, scan, buffer, up the ramp, then a short straight that
+      // meets the loop at 30° from the outside (`into`), starting where it crosses z.
       loopAt(INDUCT[k]!, this.p, this.t);
       const end = this.p.clone();
-      const into = this.t.clone().applyAxisAngle(UP, Math.PI / 6);
-      const corner = end.clone().addScaledVector(into, -(end.z - z) / into.z);
-      corner.y = LOOP_Y - 0.4;
-      const path = Path.fillet([v(WX - 1, y, z), v(-22.4, y, z), v(corner.x, corner.y, z), end], 3);
-      belt(path, 0.6, path.len - 1.0, stripIn);
+      const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
+      const corner = end.clone().addScaledVector(into, (z - end.z) / into.z);
+      const path = Path.fillet([v(WX - 1, y, z), v(-44, y, z), v(corner.x - 4, LOOP_Y, z), corner, end], 3);
+      // The belt stops where its inner edge meets the loop's outer edge (at 30° that is about
+      // 3 m before the centre line); parcels slide the last bit onto their tray.
+      belt(path, 0.6, path.len - (0.8 + 0.7) / Math.sin(Math.PI / 6) - 0.1, stripIn);
 
       const tunnel = this.tunnel(path, LANE_TUNNEL_X - WX + 1, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
@@ -3501,6 +3502,8 @@ export class Sorter implements Scene3D {
     }
     for (const y of LEVELS) {
       for (const x of [RACK_X0, RACK_X1]) this.box('beam', beam, x, y - 0.08, 0, 0.08, 0.14, zMax * 2);
+      // The shelf the parcels stand on: a steel deck between the beams, its top at the level.
+      this.box('rdeck', this.std(0x6b7078, 0.5, 0.6, 0xc9ced4), (RACK_X0 + RACK_X1) / 2, y - 0.03, 0, RACK_X1 - RACK_X0 + 0.04, 0.04, zMax * 2);
       this.box('srail', this.std(0x50555e, 0.4, 0.8, DAY.tealD), SHUTTLE_X, y - 0.2, 0, 0.9, 0.06, zMax * 2);
     }
     for (let b = -BAYS; b <= BAYS; b++) {
