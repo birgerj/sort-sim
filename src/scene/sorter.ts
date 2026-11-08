@@ -106,6 +106,8 @@ const LANE_TUNNEL_X = -55;
 const HOLD_S = 6.6;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
 const LANE_QUEUE = 7;
+/** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
+const ROBOT_SHARE = 0.12;
 /** Gap between parcels banked up on a belt or table (metres). */
 const GAP = 0.06;
 /** Length of a pickup table the queue may use. */
@@ -1523,12 +1525,16 @@ export class Sorter implements Scene3D {
 
   // ---------- parcels ----------
   /**
-   * A postcode and the chute for it: 70% to the cities at the north docks (their
-   * chute), 30% to the cities served by the robots (any pickup station, the least
+   * A postcode and the chute for it: most to the cities at the north docks (their
+   * chute), about 12% to the cities served by the robots (any pickup station, the least
    * busy of three tried); now and then an exception for manual sorting.
    */
   private assign(p: Parcel): void {
-    const r = randomPostcode();
+    // The robots handle less than the roll cages: about one parcel in eight goes to them,
+    // and fewer still while their pickup tables are filling up.
+    const queued = this.stationQueue.reduce((a, q) => a + q.length, 0);
+    const load = Math.min(1, queued / Math.max(1, this.stationQueue.length * 3));
+    const r = randomPostcode(Math.random, ROBOT_SHARE * (1 - 0.8 * load));
     p.pc = r.pc;
     p.manual = false;
     if (r.north) {
