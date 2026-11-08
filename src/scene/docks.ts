@@ -248,7 +248,13 @@ export class Docks {
     const d = this.docks.find((k) => k.x === x);
     // (Also while the loader is still in the trailer, or on the way in or out of it.)
     const inTruck = (w: Worker) => w.root.position.z < WALL_Z + 0.6 || (!!w.step && w.step.to.z < WALL_Z + 0.6);
-    return !!d && (d.cages.some((c) => c.state === 'moving') || d.loader.step?.pose === 'push' || inTruck(d.loader) || d.staged.length > 0 || (this.handlers.truck.clearing?.(x) === true && d.cages.some((c) => c.state === 'home' && c.n > 0)));
+    if (!d) return false;
+    // Cages still on their way in, or the loader in the trailer: wait.
+    if (d.cages.some((c) => c.state === 'moving') || d.staged.some((st) => st.moving) || d.loader.step?.pose === 'push' || inTruck(d.loader)) return true;
+    // Cages that should still go in: only while the trailer has room for them (a full
+    // trailer leaves; what is left waits for the next truck).
+    const room = !!this.handlers.truck.slot?.(x);
+    return room && (d.staged.length > 0 || d.cages.some((c) => c.state === 'home' && c.n > 0));
   }
 
   arrive(chute: number, p: DockParcel): void {

@@ -272,7 +272,8 @@ export class Trucks {
           d.t0 = Math.ceil(bt);
           d.full = !due;
         }
-      } else if (d.state === 'cleardown' && bt >= d.t0 + DUR.cleardown && (d.reserved > 0 || d.hold?.())) {
+      } else if (d.state === 'cleardown' && bt >= d.t0 + DUR.cleardown && (d.reserved > 0 || d.hold?.()) && bt < d.t0 + DUR.cleardown + 120) {
+        // (A safety net: after 120 beats of waiting the truck leaves anyway.)
         // Still something on its way out of the trailer: keep warning.
       } else if (bt >= d.t0 + DUR[d.state]) {
         // (After a held cleardown, the next state starts now, not when it would have.)
