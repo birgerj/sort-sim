@@ -227,7 +227,9 @@ export class Docks {
   /** Cages still to go into the trailer at this dock's cleardown (the truck waits for them). */
   pending(x: number): boolean {
     const d = this.docks.find((k) => k.x === x);
-    return !!d && (d.cages.some((c) => c.state === 'moving') || d.loader.step?.pose === 'push' || d.staged.length > 0 || (this.handlers.truck.clearing?.(x) === true && d.cages.some((c) => c.state === 'home' && c.n > 0)));
+    // (Also while the loader is still in the trailer, or on the way in or out of it.)
+    const inTruck = (w: Worker) => w.root.position.z < WALL_Z + 0.6 || (!!w.step && w.step.to.z < WALL_Z + 0.6);
+    return !!d && (d.cages.some((c) => c.state === 'moving') || d.loader.step?.pose === 'push' || inTruck(d.loader) || d.staged.length > 0 || (this.handlers.truck.clearing?.(x) === true && d.cages.some((c) => c.state === 'home' && c.n > 0)));
   }
 
   arrive(chute: number, p: DockParcel): void {
