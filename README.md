@@ -69,6 +69,15 @@ Everything moves on the beat of the music: belts move 2 m per beat, parcels
 are diverted on beats, robots move one cell per beat, forklifts and workers
 do one move per beat.
 
+## Logistics
+
+- **Hub time** starts at 18:00; a beat is 15 seconds of hub time.
+- **Departures:** every door has a truck leaving every hour (the doors' times are spread over the hour). The cleardown starts 6 minutes before; a truck also leaves early when it is full by volume, weight or places. A departure more than 2 minutes after its cutoff counts as late.
+- **Destinations** are weighted by inhabitants (rounded, about 2024); within a city the postcodes are equally likely.
+- **Sorter:** a parcel longer than a tray takes two trays. The scan tunnel measures and weighs every parcel (and the volumetric weight, L×W×H/5000); too big or too heavy goes to manual sorting, as do labels that cannot be read (about 2%, of which the loop scanners still read some) and parcels whose chute stayed full for 3 rounds. Now and then a parcel lands in the next dock chute (a missort): the worker puts it in the return tote and it goes back to the infeed.
+- **Fill by volume:** roll cages, boxes and trailers are full by volume (or weight, or places), not by count. Dock belts are full when the parcels reach back about 4 m.
+- **Figures** (button in the Hub group): parcels in and out per hour, dwell time, recirculation, no-reads, to manual, missorts, chutes full, robots busy, infeed queue, trucks on time, load factor; a chart, the last departures, and a CSV download of the timeline and all departures.
+
 ## Controls
 
 | Control | Keys |

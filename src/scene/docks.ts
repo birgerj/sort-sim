@@ -28,8 +28,10 @@ export interface DockParcel {
   pos: V3;
   q: THREE.Quaternion;
   h: number;
-  /** Length along the belt. */
+  /** Length along the belt, width, and weight. */
   d: number;
+  w: number;
+  kg: number;
   dead: boolean;
   /** Postcode (four digits). */
   pc: number;
@@ -41,6 +43,9 @@ interface Cage {
   /** Postcodes it takes. */
   range: [number, number];
   n: number;
+  /** Volume (m³) and weight (kg) of the parcels in it. */
+  vol: number;
+  kg: number;
   g: THREE.Group;
   pile: THREE.Object3D[];
   /** The parcels in it. */
@@ -55,7 +60,8 @@ interface Cage {
 export interface TruckLink {
   open(x: number): boolean;
   reserve(x: number, n: 1 | -1): void;
-  load(x: number): void;
+  /** One load into the trailer: its volume (m³) and weight (kg). */
+  load(x: number, vol: number, kg: number): void;
   /** The truck is in cleardown (it leaves once everything is in). */
   clearing?(x: number): boolean;
 }
@@ -114,11 +120,15 @@ export interface DockHandlers {
   shipped(chute: number): void;
   /** Keep a parcel inside a moving thing (a cage), at a local position. */
   hold(p: DockParcel, holder: THREE.Object3D, local: V3): void;
+  /** A parcel for another dock (a missort), put in the return tote. */
+  missort(p: DockParcel): void;
   truck: TruckLink;
 }
 
 /** Parcels in a full roll cage. */
-const CAGE_FULL = 6;
+const CAGE_FULL = 12;
+/** A roll cage is full by volume: about this much of parcels (m³), stacked as well as they go. */
+const CAGE_M3 = 1.1;
 /** Card colours on the cages (pastel, for black print). */
 const CARD_COLS = ['#ffe45c', '#9fd8ff', '#a6e8a0', '#ffb877', '#f6a6d6'];
 /** Roll cages per dock. */
@@ -144,7 +154,7 @@ function cageGeometry(): Record<'frame' | 'wheels' | 'parcel', THREE.BufferGeome
 
 /** Place k in a roll cage (local): two by two, in layers. */
 function cageSlot(k: number, out: V3): V3 {
-  return out.set((k % 2 ? 0.3 : -0.3), 0.36 + Math.floor(k / 4) * 0.42, (Math.floor(k / 2) % 2 ? 0.22 : -0.22));
+  return out.set((k % 2 ? 0.3 : -0.3), 0.36 + Math.floor(k / 4) * 0.48, (Math.floor(k / 2) % 2 ? 0.22 : -0.22));
 }
 
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
@@ -189,8 +199,9 @@ export class Docks {
 
   /** Room left on a dock's belt end (the sorter holds parcels back when it is full). */
   space(chute: number): number {
+    // The belt end counts as full when the parcels on it reach back about 4 m (a photo eye there).
     const d = this.docks.find((x) => x.chute === chute);
-    return d ? 5 - d.queue.length : 0;
+    return d ? Math.min(6 - d.queue.length, Math.floor((4.2 - this.depth(chute)) / 0.7)) : 0;
   }
 
   /** Cages still to go into the trailer at this dock's cleardown (the truck waits for them). */
@@ -249,13 +260,37 @@ export class Docks {
         this.fetchJob(d, d.cages[gone]!, door, aisle);
         return;
       }
-      const full = home.find((c) => c.n >= CAGE_FULL);
+      const full = home.find((c) => this.isFull(c));
       if (full) {
         this.pushJob(d, full, door, aisle);
         return;
       }
     }
     const p = d.queue[0];
+    // Not for any cage here (sent to the wrong dock): into the return tote beside the belt.
+    if (p && rangeOf(d.cages.map((c) => c.range), p.pc) < 0) {
+      d.queue.shift();
+      w.parcel = p;
+      w.cage = -1;
+      w.pickFrom.copy(p.pos);
+      this.handlers.mark(d.chute, p.pos, String(p.pc));
+      const tote = v(d.x + 0.9, 0, DOCK_BELT_END - 0.4);
+      w.steps.push(
+        { beats: 1, to: w.home, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'pick' },
+        { beats: 1, to: w.home, face: tote, pose: 'carry' },
+        {
+          beats: 1,
+          to: w.home,
+          face: tote,
+          pose: 'drop',
+          done: () => {
+            w.parcel = null;
+            this.handlers.missort(p);
+          },
+        },
+      );
+      return;
+    }
     const ci = p ? this.pickCage(d, p) : -1;
     if (!p || ci < 0) return;
     // A parcel: pick it off the belt (the projector shows its postcode), walk to its cage, put it in, step back.
@@ -303,11 +338,13 @@ export class Docks {
       done: () => {
         c.state = 'gone';
         c.g.visible = false;
+        T.load(d.x, c.vol, c.kg);
         c.n = 0;
+        c.vol = 0;
+        c.kg = 0;
         // Its parcels leave with the truck.
         for (const p of c.items) p.dead = true;
         c.items = [];
-        T.load(d.x);
         T.reserve(d.x, -1);
       },
     });
@@ -384,7 +421,17 @@ export class Docks {
   private pickCage(d: Dock, p: DockParcel): number {
     const i = rangeOf(d.cages.map((c) => c.range), p.pc);
     const c = d.cages[i];
-    return c && c.state === 'home' && c.n < CAGE_FULL ? i : -1;
+    return c && c.state === 'home' && !this.isFull(c) ? i : -1;
+  }
+
+  /** Full by volume (or out of places to stack). */
+  private isFull(c: Cage): boolean {
+    return c.n >= CAGE_FULL || c.vol >= CAGE_M3;
+  }
+
+  /** How full each cage is (0–1), for the boards and screens. */
+  fillOf(c: Cage): number {
+    return Math.min(1, Math.max(c.vol / CAGE_M3, c.n / CAGE_FULL));
   }
 
   private writePile(c: Cage): void {
@@ -404,6 +451,8 @@ export class Docks {
     this.handlers.hold(p, c.g, cageSlot(c.n, new THREE.Vector3()));
     c.items.push(p);
     c.n = Math.min(CAGE_FULL, c.n + 1);
+    c.vol += p.w * p.h * p.d;
+    c.kg += p.kg;
     this.handlers.shipped(d.chute);
   }
 
@@ -449,7 +498,7 @@ export class Docks {
         // (Its own vector: cageTop below uses this.t.)
         const hands = this.hands.set(Math.sin(w.yaw) * 0.55, 0.95, Math.cos(w.yaw) * 0.55).add(w.root.position).setY(0.95);
         if (st.pose === 'pick') w.parcel.pos.lerpVectors(w.pickFrom, hands, ease(ph));
-        else if (st.pose === 'drop') w.parcel.pos.lerpVectors(hands, this.cageTop(d.cages[w.cage]!), ease(ph));
+        else if (st.pose === 'drop') w.parcel.pos.lerpVectors(hands, w.cage < 0 ? v(d.x + 0.9, 0.5, DOCK_BELT_END - 0.4) : this.cageTop(d.cages[w.cage]!), ease(ph));
         else w.parcel.pos.copy(hands);
         this.q.setFromAxisAngle(UP, w.yaw);
         w.parcel.q.copy(this.q);
@@ -503,6 +552,8 @@ export class Docks {
       const bg = CARD_COLS[i % CARD_COLS.length]!;
       for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), NORTH_CITIES[city]!.name, { bg, fg: '#111111', sub: '#111111', border: '#111111' });
     });
+    // The return tote for parcels sent here by mistake.
+    k.box('tote', k.std(0x1f3f80, 0.6, 0.1, 0x2c62c8), x + 0.9, 0.22, E - 0.4, 0.6, 0.44, 0.42);
     const worker = this.buildWorker(v(x, 0, E - 1.1));
     this.docks.push({ x, chute, city, queue: [], cages, worker });
   }
@@ -556,7 +607,7 @@ export class Docks {
       p.visible = false;
       pile.push(p);
     }
-    return { at, range, n: 0, g, pile, items: [], state: 'home', ry };
+    return { at, range, n: 0, vol: 0, kg: 0, g, pile, items: [], state: 'home', ry };
   }
 
   private cageMats: Record<'teal' | 'wheel' | 'card', THREE.MeshStandardMaterial> | null = null;

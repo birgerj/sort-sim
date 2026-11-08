@@ -9,6 +9,8 @@
 
 export interface City {
   name: string;
+  /** Inhabitants, in thousands (about 2024; rounded): post goes out in proportion. */
+  pop: number;
   /** Postcode areas, as [from, to] ranges (inclusive). */
   pc: [number, number][];
 }
@@ -21,46 +23,46 @@ const r = (s: string): [number, number][] =>
 
 /** Largest first. */
 export const CITIES: City[] = [
-  { name: 'Amsterdam', pc: r('1011-1098, 1101-1109') },
-  { name: 'Rotterdam', pc: r('3011-3089') },
-  { name: 'Den Haag', pc: r('2491-2498, 2511-2597') },
-  { name: 'Utrecht', pc: r('3451-3455, 3511-3585') },
-  { name: 'Eindhoven', pc: r('5611-5658') },
-  { name: 'Groningen', pc: r('9711-9756') },
-  { name: 'Tilburg', pc: r('5011-5049') },
-  { name: 'Almere', pc: r('1309-1364') },
-  { name: 'Breda', pc: r('4811-4841') },
-  { name: 'Nijmegen', pc: r('6511-6546') },
-  { name: 'Apeldoorn', pc: r('7311-7351') },
-  { name: 'Arnhem', pc: r('6811-6846') },
-  { name: 'Haarlemmermeer', pc: r('2131-2158') },
-  { name: 'Haarlem', pc: r('2011-2037') },
-  { name: 'Enschede', pc: r('7511-7548') },
-  { name: 'Amersfoort', pc: r('3811-3829') },
-  { name: 'Zaanstad', pc: r('1501-1509, 1521-1567') },
-  { name: "'s-Hertogenbosch", pc: r('5211-5249') },
-  { name: 'Zwolle', pc: r('8011-8045') },
-  { name: 'Leiden', pc: r('2311-2334') },
-  { name: 'Zoetermeer', pc: r('2711-2729') },
-  { name: 'Leeuwarden', pc: r('8911-8941, 9001-9089') },
-  { name: 'Maastricht', pc: r('6211-6229') },
-  { name: 'Ede', pc: r('6711-6745') },
-  { name: 'Dordrecht', pc: r('3311-3329') },
-  { name: 'Alphen a/d Rijn', pc: r('2391-2409') },
-  { name: 'Westland', pc: r('2291-2295, 2671-2694') },
-  { name: 'Alkmaar', pc: r('1811-1831, 1841-1847') },
-  { name: 'Emmen', pc: r('7811-7895') },
-  { name: 'Delft', pc: r('2611-2629') },
-  { name: 'Venlo', pc: r('5911-5951') },
-  { name: 'Deventer', pc: r('7411-7437') },
-  { name: 'Sittard-Geleen', pc: r('6121-6167') },
-  { name: 'Helmond', pc: r('5701-5709') },
-  { name: 'Oss', pc: r('5341-5398') },
-  { name: 'Amstelveen', pc: r('1181-1189') },
-  { name: 'Hilversum', pc: r('1211-1223') },
-  { name: 'Súdwest-Fryslân', pc: r('8601-8775') },
-  { name: 'Heerlen', pc: r('6411-6433') },
-  { name: 'Nissewaard', pc: r('3201-3218') },
+  { name: 'Amsterdam', pop: 931, pc: r('1011-1098, 1101-1109') },
+  { name: 'Rotterdam', pop: 664, pc: r('3011-3089') },
+  { name: 'Den Haag', pop: 566, pc: r('2491-2498, 2511-2597') },
+  { name: 'Utrecht', pop: 374, pc: r('3451-3455, 3511-3585') },
+  { name: 'Eindhoven', pop: 246, pc: r('5611-5658') },
+  { name: 'Groningen', pop: 243, pc: r('9711-9756') },
+  { name: 'Tilburg', pop: 229, pc: r('5011-5049') },
+  { name: 'Almere', pop: 226, pc: r('1309-1364') },
+  { name: 'Breda', pop: 186, pc: r('4811-4841') },
+  { name: 'Nijmegen', pop: 183, pc: r('6511-6546') },
+  { name: 'Apeldoorn', pop: 167, pc: r('7311-7351') },
+  { name: 'Arnhem', pop: 166, pc: r('6811-6846') },
+  { name: 'Haarlemmermeer', pop: 162, pc: r('2131-2158') },
+  { name: 'Haarlem', pop: 168, pc: r('2011-2037') },
+  { name: 'Enschede', pop: 162, pc: r('7511-7548') },
+  { name: 'Amersfoort', pop: 161, pc: r('3811-3829') },
+  { name: 'Zaanstad', pop: 159, pc: r('1501-1509, 1521-1567') },
+  { name: "'s-Hertogenbosch", pop: 160, pc: r('5211-5249') },
+  { name: 'Zwolle', pop: 133, pc: r('8011-8045') },
+  { name: 'Leiden', pop: 128, pc: r('2311-2334') },
+  { name: 'Zoetermeer', pop: 127, pc: r('2711-2729') },
+  { name: 'Leeuwarden', pop: 126, pc: r('8911-8941, 9001-9089') },
+  { name: 'Maastricht', pop: 123, pc: r('6211-6229') },
+  { name: 'Ede', pop: 122, pc: r('6711-6745') },
+  { name: 'Dordrecht', pop: 121, pc: r('3311-3329') },
+  { name: 'Alphen a/d Rijn', pop: 115, pc: r('2391-2409') },
+  { name: 'Westland', pop: 115, pc: r('2291-2295, 2671-2694') },
+  { name: 'Alkmaar', pop: 110, pc: r('1811-1831, 1841-1847') },
+  { name: 'Emmen', pop: 108, pc: r('7811-7895') },
+  { name: 'Delft', pop: 105, pc: r('2611-2629') },
+  { name: 'Venlo', pop: 103, pc: r('5911-5951') },
+  { name: 'Deventer', pop: 102, pc: r('7411-7437') },
+  { name: 'Sittard-Geleen', pop: 91, pc: r('6121-6167') },
+  { name: 'Helmond', pop: 94, pc: r('5701-5709') },
+  { name: 'Oss', pop: 95, pc: r('5341-5398') },
+  { name: 'Amstelveen', pop: 92, pc: r('1181-1189') },
+  { name: 'Hilversum', pop: 92, pc: r('1211-1223') },
+  { name: 'Súdwest-Fryslân', pop: 92, pc: r('8601-8775') },
+  { name: 'Heerlen', pop: 87, pc: r('6411-6433') },
+  { name: 'Nissewaard', pop: 87, pc: r('3201-3218') },
 ];
 
 /** Cities at the north doors (roll cages) and at the south doors (robot boxes). */
@@ -94,13 +96,13 @@ export const rangeOf = (ranges: [number, number][], pc: number) => ranges.findIn
 
 /**
  * A random destination: a share `south` to the cities the robots serve, the
- * rest to the north cities (roll cages). Bigger cities get a little more post.
+ * rest to the north cities (roll cages). Cities get post in proportion to their inhabitants.
  */
 export function randomPostcode(rnd: () => number = Math.random, south = 0.3): { pc: number; city: number; north: boolean } {
   const north = rnd() >= south;
   const list = north ? NORTH_CITIES : SOUTH_CITIES;
-  // Weight by rank: the first city about twice as likely as the last.
-  const w = list.map((_, i) => 2 - i / list.length);
+  // By inhabitants: a city twice as big gets twice the post.
+  const w = list.map((c) => c.pop);
   let x = rnd() * w.reduce((a, b) => a + b, 0);
   let i = 0;
   while (i < w.length - 1 && (x -= w[i]!) > 0) i++;

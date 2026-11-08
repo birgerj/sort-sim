@@ -25,7 +25,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
-import { BOX_FULL, DECK_Y, DROP, RobotFloor, STATION_START_Z } from './floor';
+import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -39,6 +39,7 @@ import { Trucks } from './trucks';
 import { Labels } from './labels';
 import { BPM } from '../audio/composer';
 import { addressFor, type Address } from '../sim/addresses';
+import { Kpi } from '../sim/kpi';
 import { CITIES, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
@@ -109,6 +110,14 @@ const HOLD_S = 6.6;
 const LANE_QUEUE = 7;
 /** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
 const ROBOT_SHARE = 0.12;
+/** Rounds on the sorter before a parcel whose chute stays full is put aside (overflow). */
+const MAX_LAPS = 3;
+/** Chance a parcel lands in the next dock chute by mistake. */
+const MISSORT = 0.002;
+/** Hub time: minutes per beat, and the time the simulation starts at. */
+const HUB_MIN_PER_BEAT = 0.25;
+const HUB_START = 18 * 60;
+const hhmmOf = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
 /** Gap between parcels banked up on a belt or table (metres). */
 const GAP = 0.06;
 /** Length of a pickup table the queue may use. */
@@ -611,6 +620,18 @@ export interface Parcel {
   pathKind: 'lane' | 'chute' | 'intake' | 'back' | 'dock' | 'reject';
   /** Its label could not be read yet (it goes to the no-read chute unless a loop scanner reads it). */
   noread?: boolean;
+  /** Why it goes to manual sorting: no read, too big or heavy for the sorter, or round too often. */
+  reason?: 'noread' | 'oversize' | 'overflow';
+  /** Weight in kg (measured at the infeed). */
+  kg: number;
+  /** Hub time it came in (minutes), for the dwell time. */
+  born: number;
+  /** A long parcel takes the tray behind too. */
+  tray2?: number;
+  /** Sent to the wrong chute by mistake: it goes back to the infeed from the dock. */
+  missorted?: boolean;
+  /** Not counted as leaving the hub (it came back in). */
+  recycled?: boolean;
   /** On its way down the no-read chute. */
   rejected?: boolean;
   lane: number;
@@ -1027,10 +1048,12 @@ export class Sorter implements Scene3D {
       ...NORTH_DOORS.map((x, k) => ({ x, wallZ: -HZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[k]!.name, pc: pcs(NORTH_CITIES[k]!), hold: () => this.docks.pending(x) })),
       ...SOUTH_DOORS.map((x, k) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const, number: 21 + k, city: SOUTH_CITIES[k]!.name, pc: pcs(SOUTH_CITIES[k]!) })),
     ]);
+    this.trucks.clock = () => this.hubTime();
+    this.trucks.onDepart = (d) => this.kpi.departed(d);
     this.yard = new BoxYard(this, this.floor, {
       open: (x) => this.trucks.isOpen(NORTH_DOORS.length + SOUTH_DOORS.indexOf(x)),
       reserve: (x, n) => this.trucks.reserve(NORTH_DOORS.length + SOUTH_DOORS.indexOf(x), n),
-      load: (x) => this.trucks.load(NORTH_DOORS.length + SOUTH_DOORS.indexOf(x)),
+      load: (x, vol, kg) => this.trucks.load(NORTH_DOORS.length + SOUTH_DOORS.indexOf(x), vol, kg),
     });
     this.docks = new Docks(
       this,
@@ -1042,10 +1065,18 @@ export class Sorter implements Scene3D {
         },
         shipped: (chute) => (this.chutes[chute]!.flash = 1),
         hold: (p, holder, local) => this.hold(p as Parcel, holder, local),
+        // A parcel in the wrong dock: the worker puts it in the return tote; it goes back to the infeed.
+        missort: (p) => {
+          const q = p as Parcel;
+          this.kpi.missort();
+          q.dead = true;
+          q.recycled = true;
+          this.backlog++;
+        },
         truck: {
           open: (x) => this.trucks.isOpen(NORTH_DOORS.indexOf(x)),
           reserve: (x, n) => this.trucks.reserve(NORTH_DOORS.indexOf(x), n),
-          load: (x) => this.trucks.load(NORTH_DOORS.indexOf(x)),
+          load: (x, vol, kg) => this.trucks.load(NORTH_DOORS.indexOf(x), vol, kg),
           clearing: (x) => this.trucks.clearing(NORTH_DOORS.indexOf(x)),
         },
       },
@@ -1298,6 +1329,11 @@ export class Sorter implements Scene3D {
     this.updateClub(dt, bar);
     this.updateForklifts(dt, prev);
     this.trucks.update(bt);
+    this.kpi.tick(this.hubTime(), () => ({
+      chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && this.room(k) <= 0 ? 1 : 0), 0),
+      robotsBusyPct: (100 * this.floor.fleet.bots.filter((b) => b.state !== 'idle').length) / this.floor.fleet.bots.length,
+      infeedQueue: this.backlog + this.waiting.reduce((a, b) => a + b, 0),
+    }));
     this.manual.update(bt, this.dayShown !== false);
     this.yard.update(bt);
     this.life.update(dt, bt);
@@ -1496,6 +1532,7 @@ export class Sorter implements Scene3D {
       } else if (p) {
         const bin = this.floor.bins[e.bin]!;
         this.hold(p, bin.g, this.floor.binSlot(Math.max(0, bin.n - 1), new THREE.Vector3()));
+        this.floor.addToBin(e.bin, p.w * p.h * p.d, p.kg);
       }
       this.botParcel.delete(e.bot);
     }
@@ -1564,12 +1601,20 @@ export class Sorter implements Scene3D {
     const env = r < 0.12;
     const bag = !env && r < 0.3;
     const tube = !env && !bag && r < 0.37;
-    const w = env ? rnd(0.7, 0.9) : bag ? rnd(0.45, 0.8) : tube ? rnd(0.16, 0.26) : rnd(0.35, 0.95);
+    // Now and then a box too big for the sorter (it will be measured at the infeed and put aside).
+    const big = !env && !bag && !tube && Math.random() < 0.004;
+    const w = env ? rnd(0.7, 0.9) : bag ? rnd(0.45, 0.8) : tube ? rnd(0.16, 0.26) : big ? rnd(0.8, 1.0) : rnd(0.35, 0.95);
+    const h = env ? rnd(0.06, 0.12) : bag ? rnd(0.12, 0.25) : tube ? w : big ? rnd(0.6, 0.9) : rnd(0.22, 0.7);
+    const d = env ? rnd(0.5, 0.7) : bag ? rnd(0.4, 0.65) : tube ? rnd(0.7, 1.1) : big ? rnd(1.25, 1.6) : rnd(0.35, 0.85);
+    // Weight from the volume and a density (most parcels are largely air).
+    const kg = env ? rnd(0.1, 0.9) : Math.min(45, w * h * d * (bag ? rnd(60, 160) : tube ? rnd(80, 220) : rnd(40, 230)) + 0.15);
     const p: Parcel = {
       id: this.nextId++,
       w,
-      h: env ? rnd(0.06, 0.12) : bag ? rnd(0.12, 0.25) : tube ? w : rnd(0.22, 0.7),
-      d: env ? rnd(0.5, 0.7) : bag ? rnd(0.4, 0.65) : tube ? rnd(0.7, 1.1) : rnd(0.35, 0.85),
+      h,
+      d,
+      kg,
+      born: this.hubTime(),
       col: new THREE.Color(
         env ? pick([0xe8e6e0, 0xd6d3cc, 0xbfc4cc]) : bag ? pick([0xf3f4f6, 0x9aa0a8, 0x1d1d1f, 0x2c62c8, 0xd6339a, 0x6b3fd1]) : tube ? pick([0xb08a5e, 0xc4a070, 0xe6e4de]) : pick(PARCEL_COLS),
       ),
@@ -1614,23 +1659,35 @@ export class Sorter implements Scene3D {
     const bt = this.ct;
     let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M), lane.lastArrive + 2);
     if (this.waiting[k]! >= LANE_QUEUE) return false;
-    let tries = 0;
-    while (this.trayOwner[trayAt(INDUCT[k]!, arrive)] && tries++ < 6) arrive++;
-    const tray = trayAt(INDUCT[k]!, arrive);
-    if (this.trayOwner[tray]) return false;
     const p = this.newParcel();
     if (!p) return false;
+    // A parcel longer than a tray takes the one behind it too.
+    const long = p.d > 0.9;
+    const behind = (t: number) => (t - 1 + TRAYS) % TRAYS;
+    const free = (t: number) => !this.trayOwner[t] && (!long || !this.trayOwner[behind(t)]);
+    let tries = 0;
+    while (!free(trayAt(INDUCT[k]!, arrive)) && tries++ < 6) arrive++;
+    const tray = trayAt(INDUCT[k]!, arrive);
+    if (!free(tray)) {
+      p.dead = true;
+      p.recycled = true;
+      return false;
+    }
     lane.lastArrive = arrive;
     lane.lastSpawn = bt;
     this.trayOwner[tray] = p;
     p.tray = tray;
+    if (long) {
+      p.tray2 = behind(tray);
+      this.trayOwner[p.tray2] = p;
+    }
     p.lane = k;
     p.lead = lead;
     if (lead && color) p.glow.setRGB(...color);
-    const free = this.slots.filter((s) => !s.parcel && !s.reserved);
+    const freeSlots = this.slots.filter((s) => !s.parcel && !s.reserved);
     const toStore = this.parcels.filter((x) => x.dest < 0 && x.mode !== 'fixed' && x.pathKind !== 'back').length;
-    if (free.length > 4 && toStore < 3 && this.lift.steps.length < 6 && Math.random() < 0.14) {
-      const slot = pick(free);
+    if (freeSlots.length > 4 && toStore < 3 && this.lift.steps.length < 6 && Math.random() < 0.14 && !p.manual && p.d < 1.1) {
+      const slot = pick(freeSlots);
       slot.reserved = true;
       p.slot = slot;
       p.dest = -1;
@@ -1763,8 +1820,14 @@ export class Sorter implements Scene3D {
             const lane = this.lanes[p.lane]!;
             if (p.sPrev < lane.tunnelS && s >= lane.tunnelS) {
               this.scan(p, lane.tunnel);
-              if (!lane.tunnel.read && p.dest >= 0) {
+              // The scan tunnel also measures and weighs: too big or too heavy for the trays goes aside.
+              if (p.dest >= 0 && (Math.max(p.w, p.d, p.h) > 1.2 || p.kg > 31.5)) {
                 p.noread = true;
+                p.reason = 'oversize';
+              } else if (!lane.tunnel.read && p.dest >= 0) {
+                p.noread = true;
+                p.reason = 'noread';
+                this.kpi.noread();
                 if (p.labelCell) this.drawLabel(p.labelCell, p);
               }
             }
@@ -1781,7 +1844,7 @@ export class Sorter implements Scene3D {
             if (Math.floor((p.sPrev - lt.s) / LOOP_LEN) !== Math.floor((s - lt.s) / LOOP_LEN)) {
               this.scan(p, lt.t);
               // A loop scanner may still read a label the infeed could not (then on to its own chute).
-              if (p.noread && Math.random() < 0.35) {
+              if (p.noread && p.reason === 'noread' && Math.random() < 0.35) {
                 p.noread = false;
                 this.retarget(p);
               }
@@ -1861,7 +1924,11 @@ export class Sorter implements Scene3D {
     }
     // Drop finished parcels.
     if (this.parcels.some((p) => p.dead)) {
-      for (const p of this.parcels) if (p.dead && p.labelCell) this.freeCells.push(p.labelCell);
+      for (const p of this.parcels) {
+        if (!p.dead) continue;
+        if (p.labelCell) this.freeCells.push(p.labelCell);
+        if (!p.recycled) this.kpi.out(this.hubTime() - p.born);
+      }
       this.parcels = this.parcels.filter((p) => !p.dead);
       if (this.follow?.dead) this.follow = null;
     }
@@ -1879,7 +1946,7 @@ export class Sorter implements Scene3D {
     p.flash = 1;
     t.flash = 1;
     // Now and then a label cannot be read (a red line); the next scanner gets it.
-    t.read = Math.random() > 0.05;
+    t.read = Math.random() > 0.02;
     t.col.copy(p.glow);
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     for (const side of [0, 1]) {
@@ -1893,6 +1960,7 @@ export class Sorter implements Scene3D {
     switch (p.pathKind) {
       case 'lane':
         this.stats.inducted++;
+        this.kpi.inducted();
         this.induct(p, INDUCT[p.lane]!, p.t1);
         break;
       case 'back':
@@ -1960,6 +2028,17 @@ export class Sorter implements Scene3D {
     return free - (this.inbound.get(dest) ?? 0);
   }
 
+  /** The parcel leaves its tray(s): they tilt and are free again. */
+  private freeTrays(p: Parcel, side: number): void {
+    for (const t of [p.tray, p.tray2 ?? -1]) {
+      if (t < 0) continue;
+      if (this.trayOwner[t] === p) this.trayOwner[t] = null;
+      this.trayTilt[t] = side;
+    }
+    p.tray = -1;
+    p.tray2 = undefined;
+  }
+
   private divert(p: Parcel): void {
     // A no-read leaves by the no-read chute (its own chute is unknown to the sorter).
     const to = p.noread && p.dest >= 0 ? REJECT : p.dest;
@@ -1969,27 +2048,34 @@ export class Sorter implements Scene3D {
         return;
       }
       this.inbound.set(REJECT, (this.inbound.get(REJECT) ?? 0) + 1);
-      if (p.tray >= 0) {
-        if (this.trayOwner[p.tray] === p) this.trayOwner[p.tray] = null;
-        this.trayTilt[p.tray] = 1;
-        p.tray = -1;
-      }
+      this.kpi.toManual();
+      this.freeTrays(p, 1);
       p.rejected = true;
       this.onPath(p, this.chutes[REJECT]!.path, 'chute', p.divertAt, p.divertAt + 1.5, 1);
       return;
     }
     if (p.dest >= 0 && this.room(p.dest) <= 0) {
-      // Destination full: the parcel stays on its tray and goes round again (recirculation).
-      p.divertAt += LOOP_LEN / BEAT_M;
+      // Destination full: the parcel stays on its tray and goes round again (recirculation);
+      // after MAX_LAPS rounds it is put aside to manual sorting (overflow).
       p.laps = (p.laps ?? 0) + 1;
+      this.kpi.recirculated();
+      if (p.laps >= MAX_LAPS) {
+        p.noread = true;
+        p.reason = 'overflow';
+        this.retarget(p);
+      } else p.divertAt += LOOP_LEN / BEAT_M;
       return;
     }
-    if (p.dest >= 0) this.inbound.set(p.dest, (this.inbound.get(p.dest) ?? 0) + 1);
-    if (p.tray >= 0) {
-      if (this.trayOwner[p.tray] === p) this.trayOwner[p.tray] = null;
-      this.trayTilt[p.tray] = p.dest >= 0 ? this.chutes[p.dest]!.side : 1;
-      p.tray = -1;
+    // Now and then a tray tips a moment too early or late: the parcel lands in the next dock chute.
+    if (p.dest >= 0 && p.dest < 20 && Math.random() < MISSORT) {
+      const n = clamp(p.dest + (Math.random() < 0.5 ? -1 : 1), 0, 19);
+      if (n !== p.dest && this.room(n) > 0) {
+        p.dest = n;
+        p.missorted = true;
+      }
     }
+    if (p.dest >= 0) this.inbound.set(p.dest, (this.inbound.get(p.dest) ?? 0) + 1);
+    this.freeTrays(p, p.dest >= 0 ? this.chutes[p.dest]!.side : 1);
     if (p.dest >= 0) this.onPath(p, this.chutes[p.dest]!.path, 'chute', p.divertAt, p.divertAt + 1.5, 1);
     else this.onPath(p, this.intake, 'intake', p.divertAt, p.divertAt + Math.max(1, Math.round(this.intake.len / BEAT_M)), 0);
   }
@@ -2127,10 +2213,16 @@ export class Sorter implements Scene3D {
     const bt = this.ct;
     let arrive = Math.max(Math.ceil(bt + this.back.len / BEAT_M), this.backLast + 2);
     let tries = 0;
-    while (this.trayOwner[trayAt(STORE_BACK, arrive)] && tries++ < 10) arrive++;
+    const long = p.d > 0.9;
+    const behind = (t: number) => (t - 1 + TRAYS) % TRAYS;
+    while ((this.trayOwner[trayAt(STORE_BACK, arrive)] || (long && this.trayOwner[behind(trayAt(STORE_BACK, arrive))])) && tries++ < 10) arrive++;
     const tray = trayAt(STORE_BACK, arrive);
     this.trayOwner[tray] = p;
     p.tray = tray;
+    if (long && !this.trayOwner[behind(tray)]) {
+      p.tray2 = behind(tray);
+      this.trayOwner[p.tray2] = p;
+    }
     this.backLast = arrive;
     p.scanned = true;
     this.onPath(p, this.back, 'back', bt, arrive, 0);
@@ -2871,9 +2963,10 @@ export class Sorter implements Scene3D {
       const cap = st !== undefined ? 4 : 5;
       return { x: end.x, z: end.z, fill: 1 - this.room(k) / cap, dock: st === undefined };
     });
-    const doors = this.trucks.docks.map((d) => ({ x: d.x, z: d.wallZ, state: d.state, load: d.load / 4 }));
+    const fills = this.trucks.list();
+    const doors = this.trucks.docks.map((d, i) => ({ x: d.x, z: d.wallZ, state: d.state, load: Math.min(1, fills[i]!.fill) }));
     const robots = this.floor.robots.map((r, k) => ({ x: r.g.position.x, z: r.g.position.z, busy: this.floor.fleet.bots[k]!.state !== 'idle' }));
-    const boxes = this.floor.bins.map((b) => ({ x: b.x, z: b.z, fill: b.n / BOX_FULL, away: b.g.position.distanceToSquared(this.t.set(b.x, 0, b.z)) > 0.5 }));
+    const boxes = this.floor.bins.map((b) => ({ x: b.x, z: b.z, fill: Math.min(1, Math.max(b.vol / BOX_M3, b.n / BOX_FULL)), away: b.g.position.distanceToSquared(this.t.set(b.x, 0, b.z)) > 0.5 }));
     const parcels: [number, number][] = [];
     let recirculating = 0;
     for (const p of this.parcels) {
@@ -2881,7 +2974,7 @@ export class Sorter implements Scene3D {
       if ((p.laps ?? 0) > 0 && p.mode === 'loop') recirculating++;
     }
     // (The plan shows the sorter, the docks and the robot floor: the infeed and store ends are cropped.)
-    return { hall: [LX - 12, LX + STRAIGHT + 12, -HZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0) };
+    return { hall: [LX - 12, LX + STRAIGHT + 12, -HZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
   }
 
   /** Big KPI boards and clocks on the walls, showing live numbers and the real time. */
@@ -3947,7 +4040,7 @@ export class Sorter implements Scene3D {
   private visitPoi = 0;
 
   /** Dock doors 1–40 for the cleardown panel: destination, postcodes and what the truck is doing. */
-  doors(): { number: number; city: string; pc: string; state: string; load: number; cap: number }[] {
+  doors(): { number: number; city: string; pc: string; state: string; load: number; cap: number; fill: number }[] {
     return this.trucks.list();
   }
 
@@ -4007,13 +4100,17 @@ export class Sorter implements Scene3D {
   }
 
   /** What its label says, and where it is now. */
-  parcelInfo(p: Parcel): { id: string; address: Address; route: string; where: string; kg: string; size: string; noread: boolean } {
+  parcelInfo(p: Parcel): { id: string; address: Address; route: string; where: string; kg: string; size: string; noread: boolean; note: string } {
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     const north = NORTH_CITIES.findIndex((c) => c.name === city);
     const south = SOUTH_CITIES.findIndex((c) => c.name === city);
     const route = north >= 0 ? `Door ${north + 1} · chute ${p.dest + 1}` : south >= 0 ? `Door ${21 + south} · robots` : 'Store';
-    const kg = (p.w * p.h * p.d * (p.shape === 1 ? 30 : p.shape === 2 ? 45 : 38) + 0.15).toFixed(1);
     const cm = (x: number) => Math.round(x * 100);
+    // Weighed and measured at the infeed: actual, volumetric (L×W×H cm / 5000) and the one charged.
+    const vol = (cm(p.d) * cm(p.w) * cm(p.h)) / 5000;
+    const kg = `${p.kg.toFixed(1)} kg (vol ${vol.toFixed(1)})`;
+    const note =
+      p.reason === 'oversize' ? 'Too big or heavy for the sorter: to manual sorting' : p.reason === 'overflow' ? `Its chute stayed full (${p.laps ?? 0} rounds): to manual sorting` : p.noread ? 'Label could not be read: to manual sorting' : p.missorted ? 'Sent to the wrong dock by mistake: it will go back' : '';
     return {
       id: String(p.id).padStart(8, '0'),
       address: addressFor(p.id, p.pc, city),
@@ -4022,6 +4119,7 @@ export class Sorter implements Scene3D {
       kg,
       size: `${cm(p.d)} × ${cm(p.w)} × ${cm(p.h)} cm`,
       noread: !!p.noread,
+      note,
     };
   }
 
@@ -4046,6 +4144,14 @@ export class Sorter implements Scene3D {
         return 'In the store';
     }
   }
+
+  /** Hub time now, in minutes since midnight (a beat is a quarter of a minute). */
+  hubTime(): number {
+    return HUB_START + this.bt * HUB_MIN_PER_BEAT;
+  }
+
+  /** The hub's figures. */
+  readonly kpi = new Kpi();
 
   private readonly ray = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();

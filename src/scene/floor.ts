@@ -164,7 +164,9 @@ interface Projector {
 }
 
 /** Parcels in a box before it counts as full. */
-export const BOX_FULL = 6;
+export const BOX_FULL = 12;
+/** A box is full by volume: about this much of parcels (m³). */
+export const BOX_M3 = 0.55;
 
 export interface BinView {
   code: string;
@@ -175,6 +177,9 @@ export interface BinView {
   x: number;
   z: number;
   n: number;
+  /** Volume (m³) and weight (kg) inside. */
+  vol: number;
+  kg: number;
   /** Robots may unload here (false while full or away on a forklift). */
   open: boolean;
   /** The box on its pallet, and the parcel pile inside it. */
@@ -260,10 +265,6 @@ export class RobotFloor {
         const bin = this.bins[e.bin]!;
         bin.n = Math.min(BOX_FULL, bin.n + 1);
         this.writeFill(e.bin);
-        if (bin.n >= BOX_FULL && bin.open) {
-          bin.open = false;
-          this.handlers.full(e.bin);
-        }
       }
       this.handlers.event(e);
     }
@@ -292,9 +293,21 @@ export class RobotFloor {
     this.binSlot(bin.n, out).applyMatrix4(bin.g.matrixWorld);
   }
 
+  /** A parcel went into box b: when it is full (by volume, or no room to stack), it waits for a forklift. */
+  addToBin(b: number, vol: number, kg: number): void {
+    const bin = this.bins[b];
+    if (!bin) return;
+    bin.vol += vol;
+    bin.kg += kg;
+    if ((bin.vol >= BOX_M3 || bin.n >= BOX_FULL) && bin.open) {
+      bin.open = false;
+      this.handlers.full(b);
+    }
+  }
+
   /** Place k in a box (local to the box): two by two, in layers. */
   binSlot(k: number, out: THREE.Vector3): THREE.Vector3 {
-    return out.set(k % 2 ? 0.27 : -0.27, 0.19 + Math.floor(k / 4) * 0.3, Math.floor(k / 2) % 2 ? 0.27 : -0.27);
+    return out.set(k % 2 ? 0.27 : -0.27, 0.19 + Math.floor(k / 4) * 0.24, Math.floor(k / 2) % 2 ? 0.27 : -0.27);
   }
 
   /** Called when a box is emptied into a truck (its parcels leave with it). */
@@ -337,9 +350,11 @@ export class RobotFloor {
   emptied(b: number): void {
     this.shippedBoxes++;
     const bin = this.bins[b]!;
-    bin.n = 0;
-    this.writeFill(b);
     this.onEmptied(b);
+    bin.n = 0;
+    bin.vol = 0;
+    bin.kg = 0;
+    this.writeFill(b);
   }
 
   /** The box stands at its place again: robots may use it. */
@@ -644,7 +659,7 @@ export class RobotFloor {
         k.put(board);
       }
       k.blobUnder(g, 1.6, 1.6);
-      this.bins.push({ code, range, city, x, z, n: 0, open: true, g, fill });
+      this.bins.push({ code, range, city, x, z, n: 0, vol: 0, kg: 0, open: true, g, fill });
       this.writeFill(this.bins.length - 1);
     }
   }
