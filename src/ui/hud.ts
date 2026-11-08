@@ -6,6 +6,7 @@
 import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
+import { COUNTRIES, COUNTRY, type CountryId } from '../sim/countries';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
 
@@ -16,6 +17,8 @@ export interface Settings {
   /** Parcels per minute into the hub. */
   rate: number;
   quality: Quality;
+  /** Country the hub serves (unset: from the browser's language). */
+  country?: CountryId;
   muted: boolean;
   volume: number;
 }
@@ -124,7 +127,7 @@ export class Hud {
       if (this.card.where.textContent !== w) this.card.where.textContent = w;
     }
     if (this.stats && performance.now() - this.stats.last > 1000) this.drawStats();
-    for (const pn of [this.panel, this.stats?.el]) {
+    for (const pn of [this.panel, this.stats?.el, this.settingsPanel]) {
       if (!pn) continue;
       // Stay clear of the control bar below.
       const h = `${Math.max(160, window.innerHeight - this.bar.offsetHeight - 48)}px`;
@@ -228,23 +231,6 @@ export class Hud {
       time.append(b);
       this.timeBtns.set(id, b);
     }
-    const quality = this.group('Quality');
-    for (const [id, label, title] of [
-      ['low', 'Low', 'Fastest: pixel ratio 1'],
-      ['normal', 'Normal', 'Outlines, flat shading, contact shadows'],
-      ['high', 'High', 'Also ambient occlusion, sun shadows, glossy night floor, depth of field'],
-      ['ultra', 'Ultra', 'For laptops and desktops: 2× supersampling, finer and wider shadows, more ambient occlusion'],
-    ] as const) {
-      const b = el('button', '', label);
-      b.title = title;
-      b.onclick = () => {
-        this.settings.quality = id;
-        saveSettings(this.settings);
-        this.opts.onQuality();
-      };
-      quality.append(b);
-      this.qualityBtns.set(id, b);
-    }
     const music = this.group('Music');
     this.soundBtn = el('button', '', 'Sound');
     this.soundBtn.onclick = () => this.toggleSound();
@@ -261,8 +247,12 @@ export class Hud {
       saveSettings(this.settings);
     };
     music.append(this.soundBtn, vol);
-    // The app: install, full screen (from the PWA helper).
+    // The app: settings, install, full screen (from the PWA helper).
     this.appGroup = this.group('App');
+    const set = el('button', '', 'Settings…');
+    set.title = 'Graphics quality and the country the hub serves';
+    set.onclick = () => this.toggleSettings();
+    this.appGroup.append(set);
   }
 
   /** The cleardown panel: doors 1–40 with their destinations; pick some and start. */
@@ -273,6 +263,7 @@ export class Hud {
       return;
     }
     if (this.stats) this.toggleStats();
+    if (this.settingsPanel) this.toggleSettings();
     const p = el('div', 'panel');
     const head = el('div', 'head');
     head.append(el('h2', '', 'Cleardown'), el('p', '', 'Pick dock doors: their trucks leave with what they have, and new empty ones come. 1–20 roll cages, 21–40 robot boxes.'));
@@ -316,6 +307,65 @@ export class Hud {
     this.panelCount();
   }
 
+  /** The settings panel: graphics quality, and the country (names, towns, postcodes). */
+  private toggleSettings(): void {
+    if (this.settingsPanel) {
+      this.settingsPanel.remove();
+      this.settingsPanel = null;
+      this.qualityBtns.clear();
+      return;
+    }
+    if (this.panel) this.togglePanel();
+    if (this.stats) this.toggleStats();
+    const p = el('div', 'panel settings');
+    const head = el('div', 'head');
+    head.append(el('h2', '', 'Settings'));
+    const q = el('div', 'set-row');
+    q.append(el('span', 'set-label', 'Graphics quality'));
+    const qb = el('div', 'set-opts');
+    for (const [id, label, title] of [
+      ['low', 'Low', 'Fastest: pixel ratio 1'],
+      ['normal', 'Normal', 'Outlines, flat shading, contact shadows'],
+      ['high', 'High', 'Also ambient occlusion, sun shadows, glossy night floor, depth of field'],
+      ['ultra', 'Ultra', 'For laptops and desktops: 2× supersampling, finer and wider shadows, more ambient occlusion'],
+    ] as const) {
+      const b = el('button', '', label);
+      b.title = title;
+      b.onclick = () => {
+        this.settings.quality = id;
+        saveSettings(this.settings);
+        this.opts.onQuality();
+      };
+      qb.append(b);
+      this.qualityBtns.set(id, b);
+    }
+    q.append(qb, el('span', 'set-help', 'Low is fastest; High and Ultra add shadows, ambient occlusion and sharper lines.'));
+    const c = el('div', 'set-row');
+    c.append(el('span', 'set-label', 'Country'));
+    const cb = el('div', 'set-opts');
+    for (const k of COUNTRIES) {
+      const b = el('button', k.id === COUNTRY.id ? 'on' : '', k.native === k.name ? k.name : `${k.name} · ${k.native}`);
+      b.onclick = () => {
+        if (k.id === COUNTRY.id) return;
+        this.settings.country = k.id;
+        saveSettings(this.settings);
+        // Docks, cages, boxes and signs are labelled when the hall is built: start again.
+        location.reload();
+      };
+      cb.append(b);
+    }
+    c.append(cb, el('span', 'set-help', 'Recipients, towns, streets and postcodes of that country: its 40 largest towns get the 40 dock doors. Changing it restarts the hall.'));
+    const row = el('div', 'row');
+    const close = el('button', '', 'Close');
+    close.onclick = () => this.toggleSettings();
+    row.append(close);
+    p.append(head, q, c, row);
+    this.root.append(p);
+    this.settingsPanel = p;
+  }
+
+  private settingsPanel: HTMLElement | null = null;
+
   /** The figures panel: KPI tiles, a throughput chart, recent departures, CSV download. */
   private toggleStats(): void {
     if (this.stats) {
@@ -324,6 +374,7 @@ export class Hud {
       return;
     }
     if (this.panel) this.togglePanel();
+    if (this.settingsPanel) this.toggleSettings();
     const p = el('div', 'panel stats');
     const head = el('div', 'head');
     head.append(el('h2', '', 'Hub figures'));
@@ -523,7 +574,7 @@ export class Hud {
     };
     head.append(close);
     const to = el_('div', 'lc-to');
-    to.append(el_('span', 'lc-small', 'Deliver to'), el_('div', 'lc-name', a.name), el_('div', '', `${a.street} ${a.number}`), el_('div', 'lc-pc', `${a.postcode}  ${a.city.toUpperCase()}`));
+    to.append(el_('span', 'lc-small', 'Deliver to'), el_('div', 'lc-name', a.name), el_('div', '', a.line1), el_('div', 'lc-pc', a.line2));
     // Barcode from the parcel number.
     const bars = el_('div', 'lc-bars');
     let seed = Number(info.id) * 2654435761;

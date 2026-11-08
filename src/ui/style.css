@@ -578,3 +578,30 @@ input[type='range'] {
 #app canvas {
   touch-action: none;
 }
+
+.panel.settings {
+  width: min(620px, calc(100% - 32px));
+  overflow: auto;
+}
+
+.set-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.set-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.set-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.set-help {
+  color: var(--muted);
+  font-size: 12px;
+}

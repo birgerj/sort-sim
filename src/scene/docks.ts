@@ -8,6 +8,7 @@
 // By day the workers work, one move per beat: pick, carry, drop, step back.
 // By night they dance, and the parcels drop into the cages by themselves.
 import * as THREE from 'three';
+import { pcDigits } from '../sim/countries';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
@@ -273,7 +274,7 @@ export class Docks {
       w.parcel = p;
       w.cage = -1;
       w.pickFrom.copy(p.pos);
-      this.handlers.mark(d.chute, p.pos, String(p.pc));
+      this.handlers.mark(d.chute, p.pos, pcDigits(p.pc));
       const tote = v(d.x + 0.9, 0, DOCK_BELT_END - 0.4);
       w.steps.push(
         { beats: 1, to: w.home, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'pick' },
@@ -301,7 +302,7 @@ export class Docks {
     const c = d.cages[ci]!;
     const belt = v(d.x, 0, DOCK_BELT_END + 0.35);
     const near = w.home.clone().lerp(c.at, 0.5).setY(0);
-    this.handlers.mark(d.chute, p.pos, String(p.pc));
+    this.handlers.mark(d.chute, p.pos, pcDigits(p.pc));
     w.steps.push(
       { beats: 1, to: w.home, face: belt, pose: 'pick' },
       { beats: 1, to: near, face: c.at, pose: 'carry' },
