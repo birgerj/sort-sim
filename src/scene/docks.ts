@@ -668,6 +668,7 @@ export class Docks {
     let squat = 0;
     let dance = false;
     let chat = false;
+    w.m.talk = 0;
     let headTurn = 0;
     let nod = 0;
     let armR2: number | null = null;
@@ -743,6 +744,7 @@ export class Docks {
       const speaker = ((Math.imul(turn, 2654435761) + (w.group ?? 0) * 97) >>> 5) % n;
       const me = w.mates.indexOf(w.chat);
       const talking = speaker === me;
+      w.m.talk = talking ? 1 : 0;
       const t = bt * w.rate + w.phase;
       // Face the middle of the group, turned a little towards whoever talks.
       const who = w.mates[speaker]!;

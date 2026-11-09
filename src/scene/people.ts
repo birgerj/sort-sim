@@ -12,7 +12,8 @@ import * as THREE from 'three';
 
 import type { FloorKit } from './floor';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { canvasTexture } from './textures';
 
 import { XMAS } from '../sim/season';
 
@@ -45,6 +46,9 @@ export interface Human {
   handR: THREE.Group;
   /** Ponytail (only with that hair style). */
   tail: THREE.Group | null;
+  /** Eyes (scaled flat to blink) and mouth (scaled open to talk). */
+  eyes: THREE.Group;
+  mouth: THREE.Group;
   /** Motion state, kept by `motion.ts`. */
   m: MotionState;
 }
@@ -75,6 +79,10 @@ export interface MotionState {
   y: number;
   /** A per-person seed 0…1 (rhythm of breathing and weight shift). */
   seed: number;
+  /** Talking 0…1 (set by the caller), eased; when the next blink comes. */
+  talk: number;
+  talkE: number;
+  blinkAt: number;
 }
 
 export interface HumanLook {
@@ -93,6 +101,8 @@ export interface HumanLook {
   cap?: number;
   skin?: number;
   hair?: number;
+  /** Build (default: from a seed): height and width factors (about 0.9…1.1) and a belly 0…1. */
+  build?: { height?: number; width?: number; belly?: number };
 }
 
 // Shared geometry: built once. Front is +z. Each joint's parts are merged per
@@ -146,26 +156,22 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     // Trousers: back pockets and a crease down the front of each leg.
     pockets: merge(box(0.075, 0.08, 0.008, -0.075, -0.03, -0.1), box(0.075, 0.08, 0.008, 0.075, -0.03, -0.1)),
     neck: new THREE.CylinderGeometry(0.044, 0.05, 0.11, 12).translate(0, 0.62, 0.005),
-    // Head: skull, jaw and chin, cheeks, ears and a nose.
-    head: merge(
-      ell(0.03, 0.022, 0.02, -0.04, 0.715, 0.078, 8),
-      ell(0.03, 0.022, 0.02, 0.04, 0.715, 0.078, 8),
-      ell(0.092, 0.112, 0.102, 0, 0.75, 0, 18),
-      ell(0.072, 0.06, 0.08, 0, 0.69, 0.018, 12),
-      ell(0.016, 0.028, 0.012, -0.092, 0.745, -0.005, 6),
-      ell(0.016, 0.028, 0.012, 0.092, 0.745, -0.005, 6),
-      new THREE.ConeGeometry(0.016, 0.04, 6).rotateX(Math.PI / 2).translate(0, 0.735, 0.105),
+    // Head: one smooth sculpted surface (no seams for the ink to find): skull,
+    // narrower jaw and chin, brow ridge, eye sockets, cheekbones and a nose.
+    // The face atlas goes on its front.
+    head: sculptHead(),
+    // Ears, with a rim.
+    ears: merge(
+      ell(0.016, 0.028, 0.012, -0.092, 0.745, -0.005, 8),
+      ell(0.016, 0.028, 0.012, 0.092, 0.745, -0.005, 8),
+      ell(0.006, 0.02, 0.006, -0.099, 0.745, -0.004, 6),
+      ell(0.006, 0.02, 0.006, 0.099, 0.745, -0.004, 6),
     ),
-    // The whites of the eyes.
-    eyes: merge(ell(0.014, 0.0095, 0.006, -0.034, 0.76, 0.091, 8), ell(0.014, 0.0095, 0.006, 0.034, 0.76, 0.091, 8)),
-    // Pupils and eyebrows (dark), and the mouth.
-    face: merge(
-      ell(0.0065, 0.0075, 0.004, -0.034, 0.76, 0.0965, 6),
-      ell(0.0065, 0.0075, 0.004, 0.034, 0.76, 0.0965, 6),
-      box(0.032, 0.006, 0.008, -0.034, 0.778, 0.094),
-      box(0.032, 0.006, 0.008, 0.034, 0.778, 0.094),
-      box(0.03, 0.005, 0.006, 0, 0.7, 0.093),
-    ),
+    // The eyes: whites and pupils (on their own joint, to blink).
+    eyes: merge(ell(0.014, 0.0095, 0.006, -0.034, 0.76, 0.091, 10), ell(0.014, 0.0095, 0.006, 0.034, 0.76, 0.091, 10)),
+    pupils: merge(ell(0.0065, 0.0075, 0.004, -0.034, 0.76, 0.0965, 8), ell(0.0065, 0.0075, 0.004, 0.034, 0.76, 0.0965, 8)),
+    // The mouth (on its own joint, to talk): a slim pair of lips.
+    lips: ell(0.017, 0.0042, 0.005, 0, 0.7, 0.096, 12),
     // Hair: the back of the head and the crown, down to the ears (the face stays clear).
     hair: new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.098, 0.118, 0.108).translate(0, 0.756, -0.004),
     // Longer hair: down over the neck at the back, with a side fringe.
@@ -177,8 +183,9 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     hairTail: new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.1, 0.12, 0.11).translate(0, 0.756, -0.004),
     // The tail itself hangs from its own joint (TAIL), so it can swing.
     tail: new THREE.CapsuleGeometry(0.026, 0.12, 3, 8).rotateX(0.35).translate(0, -0.08, -0.03),
-    helmet: merge(new THREE.SphereGeometry(1, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.122, 0.106, 0.134).translate(0, 0.79, 0), ridge),
-    brim: lathe([[0.118, 0.0], [0.15, -0.012], [0.15, -0.024], [0.118, -0.012]], 1.08, 0.795, 20).translate(0, 0, 0.01),
+    // Helmet: a dome that reaches a little below its widest point (no gap above the brim), sitting above the brows.
+    helmet: merge(new THREE.SphereGeometry(1, 22, 11, 0, Math.PI * 2, 0, Math.PI / 2 + 0.14).scale(0.122, 0.106, 0.134).translate(0, 0.805, 0), ridge.clone().translate(0, 0.015, 0)),
+    brim: lathe([[0.118, 0.0], [0.15, -0.012], [0.15, -0.024], [0.118, -0.012]], 1.08, 0.81, 24).translate(0, 0, 0.01),
     cap: new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.3).scale(0.104, 0.1, 0.112).translate(0, 0.79, 0),
     peak: new THREE.CylinderGeometry(0.08, 0.08, 0.012, 14, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 1.15).translate(0, 0.8, 0.09),
     // Christmas: a red hat that flops back (over the helmet for workers), its white brim and bobble.
@@ -192,7 +199,10 @@ function shapes(): Record<string, THREE.BufferGeometry> {
 
   };
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
-  for (const key of ['head', 'eyes', 'face', 'hair', 'hairLong', 'hairTail', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
+  for (const key of ['head', 'ears', 'eyes', 'pupils', 'lips', 'hair', 'hairLong', 'hairTail', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
+  // Eyes and mouth hang from their own joints on the head.
+  for (const key of ['eyes', 'pupils']) geo[key]!.translate(-EYES.x, -EYES.y, -EYES.z);
+  for (const key of ['lips']) geo[key]!.translate(-MOUTH.x, -MOUTH.y, -MOUTH.z);
   // The chest, and everything on it, hangs from the lower back.
   for (const key of ['collar', 'vestU', 'bandsU', 'neck', 'lanyard', 'badge', 'buttons', 'shirtV', 'lapels', 'tie', 'jacketButtons', 'sack']) geo[key]!.translate(0, -CHEST_Y, 0);
   return geo;
@@ -211,8 +221,169 @@ export const UPPER_ARM = 0.29;
 export const FOREARM = 0.3;
 /** Hip height (the pelvis above the root). */
 export const HIP_Y = 0.92;
+/**
+ * The head as one surface: an ellipsoid pushed in and out with smooth bumps
+ * (jaw, chin, brow ridge, eye sockets, cheekbones, nose). Smooth normals, so
+ * the ink pass draws its outline and nothing inside the face.
+ */
+function sculptHead(): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(1, 72, 56);
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  const bump = (x: number, y: number, cx: number, cy: number, sx: number, sy: number) => Math.exp(-(((x - cx) / sx) ** 2 + ((y - cy) / sy) ** 2));
+  for (let i = 0; i < pos.count; i++) {
+    const dx = pos.getX(i);
+    const dy = pos.getY(i);
+    const dz = pos.getZ(i);
+    let x = dx * 0.092;
+    const y = 0.75 + dy * 0.112;
+    let z = dz * 0.102;
+    const front = Math.max(0, dz);
+    // Jaw: narrower towards the chin, the lower face a little forward.
+    const jaw = Math.min(1, Math.max(0, (0.725 - y) / 0.07));
+    x *= 1 - 0.22 * jaw * jaw;
+    z += 0.01 * jaw * front;
+    const ax = Math.abs(x);
+    z += front * (
+      0.022 * bump(x, y, 0, 0.733, 0.012, 0.02) + // nose
+      0.008 * bump(x, y, 0, 0.722, 0.016, 0.008) + // nose tip and wings
+      0.006 * bump(0, y, 0, 0.783, 1, 0.008) * Math.exp(-((ax / 0.055) ** 4)) + // brow ridge
+      0.005 * bump(ax, y, 0.046, 0.73, 0.018, 0.012) + // cheekbones
+      0.009 * bump(x, y, 0, 0.664, 0.02, 0.014) - // chin
+      0.006 * bump(ax, y, 0.034, 0.762, 0.015, 0.009) // eye sockets
+    );
+    pos.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 /** Where the ponytail hangs from, on the head. */
 const TAIL = new THREE.Vector3(0, 0.17, -0.09);
+/** The eyes' and the mouth's joints, on the head. */
+const EYES = new THREE.Vector3(0, 0.76 - NECK_Y, 0.094);
+const MOUTH = new THREE.Vector3(0, 0.7 - NECK_Y, 0.094);
+
+/**
+ * How the face atlas lies on the head (torso frame, before the head's offset):
+ * a cell spans ±57° across the front of the skull, from the forehead to below
+ * the chin. The back of the head maps to the cell's white corner.
+ */
+const FACE = { rx: 0.092, ry: 0.112, cy: 0.75, phi0: Math.PI / 2 - 1, phiLen: 2, theta0: 0.45, thetaLen: 1.95 };
+/** The atlas: 4 × 4 cells of 128 px; 15 faces and one plain white cell (for the rest of the body). */
+const CELLS = 4;
+const FACES = 15;
+const CELL_PX = 128;
+const WHITE_UV = [(3 + 0.5) / CELLS, (0 + 0.5) / CELLS] as const;
+
+/** Where a point of the face (x, y in the torso frame, at the front) falls on the atlas cell (0…1, v up). */
+function faceUV(x: number, y: number): [number, number] {
+  const theta = Math.acos(Math.max(-1, Math.min(1, (y - FACE.cy) / FACE.ry)));
+  const phi = Math.acos(Math.max(-1, Math.min(1, -x / (FACE.rx * Math.sin(theta)))));
+  return [(phi - FACE.phi0) / FACE.phiLen, 1 - (theta - FACE.theta0) / FACE.thetaLen];
+}
+
+/**
+ * The face atlas: drawn once, white where the skin shows through (the material
+ * multiplies it with the skin colour), with brows, lashes and some of
+ * freckles, stubble, blush, smile lines and crow's feet per face.
+ */
+function faceAtlas(): THREE.Texture | null {
+  if (typeof document === 'undefined') return null;
+  const t = canvasTexture('faces', CELLS * CELL_PX, CELLS * CELL_PX, (g) => {
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, CELLS * CELL_PX, CELLS * CELL_PX);
+    let s = 7;
+    const rnd = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296);
+    for (let f = 0; f < FACES; f++) {
+      const cx = (f % CELLS) * CELL_PX;
+      const cy = Math.floor(f / CELLS) * CELL_PX;
+      const at = (x: number, y: number): [number, number] => {
+        const [u, v] = faceUV(x, y);
+        return [cx + u * CELL_PX, cy + (1 - v) * CELL_PX];
+      };
+      const old = f % 5 === 4;
+      const brow = ['#3b2b22', '#5a4030', '#2a2626', '#8a6a48', '#4a3a30'][f % 5]!;
+      const thick = 2 + rnd() * 2.5;
+      const arch = (rnd() - 0.3) * 0.006;
+      const tilt = (rnd() - 0.5) * 0.008;
+      g.lineCap = 'round';
+      for (const side of [-1, 1]) {
+        // Brows: a curve over each eye, inner end a little lower or higher.
+        g.strokeStyle = old ? '#8a8580' : brow;
+        g.lineWidth = thick;
+        g.beginPath();
+        g.moveTo(...at(side * 0.017, 0.776 + tilt));
+        g.quadraticCurveTo(...at(side * 0.034, 0.783 + arch), ...at(side * 0.052, 0.776 - tilt * 0.5));
+        g.stroke();
+        // Lashes: a short dark line along the top of the eye.
+        g.strokeStyle = '#2a2222';
+        g.lineWidth = f % 3 === 0 ? 2 : 1.2;
+        g.beginPath();
+        g.moveTo(...at(side * 0.022, 0.765));
+        g.quadraticCurveTo(...at(side * 0.034, 0.7705), ...at(side * 0.048, 0.765));
+        g.stroke();
+        if (old) {
+          // Crow's feet and smile lines.
+          g.strokeStyle = 'rgba(120,90,80,0.55)';
+          g.lineWidth = 1;
+          for (const dy of [-0.004, 0, 0.004]) {
+            g.beginPath();
+            g.moveTo(...at(side * 0.052, 0.76 + dy));
+            g.lineTo(...at(side * 0.062, 0.76 + dy * 1.8));
+            g.stroke();
+          }
+          g.beginPath();
+          g.moveTo(...at(side * 0.016, 0.722));
+          g.quadraticCurveTo(...at(side * 0.03, 0.712), ...at(side * 0.026, 0.696));
+          g.stroke();
+        }
+      }
+      // The corners of the mouth turned up a little (most of the time a friendly face).
+      g.strokeStyle = 'rgba(110,55,50,0.6)';
+      g.lineWidth = 1.3;
+      for (const side of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(...at(side * 0.016, 0.7));
+        g.quadraticCurveTo(...at(side * 0.021, 0.7), ...at(side * 0.024, 0.704 + (f % 4 === 3 ? 0 : 0.002)));
+        g.stroke();
+      }
+      if (f % 3 === 1) {
+        // Freckles over the nose and cheeks.
+        g.fillStyle = 'rgba(170,105,70,0.55)';
+        for (let i = 0; i < 26; i++) {
+          const [x, y] = at((rnd() - 0.5) * 0.11, 0.728 + rnd() * 0.022);
+          g.beginPath();
+          g.arc(x, y, 0.8 + rnd() * 0.9, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+      if (f % 4 === 2) {
+        // Blush on the cheeks.
+        for (const side of [-1, 1]) {
+          const [x, y] = at(side * 0.048, 0.728);
+          const gr = g.createRadialGradient(x, y, 0, x, y, 12);
+          gr.addColorStop(0, 'rgba(235,120,120,0.45)');
+          gr.addColorStop(1, 'rgba(235,120,120,0)');
+          g.fillStyle = gr;
+          g.fillRect(x - 12, y - 12, 24, 24);
+        }
+      }
+      if (f % 5 === 3 || f === 8) {
+        // Stubble: a soft grey shadow over the chin, jaw and upper lip.
+        g.fillStyle = 'rgba(95,85,80,0.32)';
+        const [x0, y0] = at(-0.07, 0.716);
+        const [x1, y1] = at(0.07, 0.683);
+        g.beginPath();
+        g.ellipse((x0 + x1) / 2, y1, (x1 - x0) / 2, (y1 - y0) * 1.1, 0, Math.PI, 0, true);
+        g.fill();
+      }
+    }
+  });
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.generateMipmaps = false;
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
 
 /** A floppy hat: a cone that bends back, the tip lower down behind. */
 function santaHat(r: number, y: number): THREE.BufferGeometry {
@@ -243,7 +414,7 @@ const smooth = (a: number, b: number, x: number) => {
 };
 
 /** A profile (radius, height) with points added so no step is longer than `step`: rings that bend smoothly. */
-function dense(prof: [number, number][], step = 0.03): [number, number][] {
+function dense(prof: [number, number][], step = 0.022): [number, number][] {
   const out: [number, number][] = [prof[0]!];
   for (let i = 1; i < prof.length; i++) {
     const [r0, y0] = prof[i - 1]!;
@@ -262,11 +433,11 @@ let skinGeo: Record<'leg' | 'torso' | 'arm', THREE.BufferGeometry> | null = null
 function skins(): Record<'leg' | 'torso' | 'arm', THREE.BufferGeometry> {
   return (skinGeo ??= {
     // Hip to ankle: full thigh, the knee, a calf, a slim ankle (inside the boot).
-    leg: lathe([[0, 0.05], [0.06, 0.05], [0.09, 0.02], [0.096, -0.06], [0.09, -0.16], [0.082, -0.28], [0.071, -0.38], [0.066, -0.42], [0.066, -0.46], [0.071, -0.53], [0.069, -0.6], [0.06, -0.7], [0.053, -0.78], [0.052, -0.84], [0, -0.845]], 0.95, 16),
+    leg: lathe([[0, 0.05], [0.06, 0.05], [0.09, 0.02], [0.096, -0.06], [0.09, -0.16], [0.082, -0.28], [0.071, -0.38], [0.066, -0.42], [0.066, -0.46], [0.071, -0.53], [0.069, -0.6], [0.06, -0.7], [0.053, -0.78], [0.052, -0.84], [0, -0.845]], 0.95, 26),
     // Crotch to collar (waist joint at 0): seat and hips, waist, chest, sloping shoulders.
-    torso: lathe([[0, -0.11], [0.09, -0.1], [0.142, -0.06], [0.156, 0.0], [0.15, 0.05], [0.143, 0.12], [0.15, 0.25], [0.166, 0.36], [0.174, 0.43], [0.164, 0.49], [0.122, 0.535], [0.06, 0.56], [0, 0.565]], 0.66, 20),
+    torso: lathe([[0, -0.11], [0.09, -0.1], [0.142, -0.06], [0.156, 0.0], [0.15, 0.05], [0.143, 0.12], [0.15, 0.25], [0.166, 0.36], [0.174, 0.43], [0.164, 0.49], [0.122, 0.535], [0.06, 0.56], [0, 0.565]], 0.66, 34),
     // Shoulder to wrist: a round shoulder cap, upper arm, elbow, forearm, wrist.
-    arm: lathe([[0, 0.075], [0.04, 0.07], [0.061, 0.045], [0.066, 0.01], [0.062, -0.05], [0.056, -0.13], [0.051, -0.22], [0.047, -0.28], [0.046, -0.3], [0.048, -0.34], [0.047, -0.4], [0.041, -0.47], [0.035, -0.53], [0.033, -0.56], [0, -0.565]], 0.92, 14),
+    arm: lathe([[0, 0.075], [0.04, 0.07], [0.061, 0.045], [0.066, 0.01], [0.062, -0.05], [0.056, -0.13], [0.051, -0.22], [0.047, -0.28], [0.046, -0.3], [0.048, -0.34], [0.047, -0.4], [0.041, -0.47], [0.035, -0.53], [0.033, -0.56], [0, -0.565]], 0.92, 22),
   });
 }
 
@@ -289,6 +460,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   if (!mat) {
     mat = k.std(0xffffff, 0.8, 0, 0xffffff);
     mat.vertexColors = true;
+    mat.map = faceAtlas();
     bodyMats.set(k, mat);
   }
   const skin = look.skin ?? 0xf0cfb0;
@@ -297,6 +469,14 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const hair = look.hair ?? HAIR[seed % HAIR.length]!;
   const style = look.hairStyle ?? Math.floor(seed / 7) % 3;
   const glove = 0x3a3d44;
+  // Build: a little taller or shorter, slimmer or broader, some with a belly.
+  const r = (n: number) => (((seed * 2654435761 + n * 40503) >>> 0) % 1000) / 1000;
+  const height = look.build?.height ?? 0.93 + r(1) * 0.14;
+  const width = look.build?.width ?? 0.9 + r(2) * 0.24;
+  const belly = look.build?.belly ?? (look.santa ? 1 : Math.max(0, r(3) - 0.6) * 2.2);
+  const face = seed % FACES;
+  // Lips: the skin, darker and a little red.
+  const lip = new THREE.Color(skin).lerp(new THREE.Color(0x8a3a3a), 0.45).getHex();
 
   // The skeleton, at rest: straight, arms hanging down (the pose comes after binding).
   const root = new THREE.Group();
@@ -307,8 +487,10 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     return j;
   };
   const pelvis = joint(root, 0, HIP_Y, 0);
-  const legL = joint(pelvis, -0.085, 0, 0);
-  const legR = joint(pelvis, 0.085, 0, 0);
+  const hipX = 0.085 * (1 + (width - 1) * 0.6);
+  const shoulderX = 0.182 * (1 + (width - 1) * 0.7);
+  const legL = joint(pelvis, -hipX, 0, 0);
+  const legR = joint(pelvis, hipX, 0, 0);
   const kneeL = joint(legL, 0, -KNEE, 0);
   const kneeR = joint(legR, 0, -KNEE, 0);
   const footL = joint(kneeL, 0, -ANKLE, 0);
@@ -317,8 +499,10 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const chest = joint(torso, 0, CHEST_Y, 0);
   const head = joint(chest, 0, NECK_Y - CHEST_Y, 0);
   const tail = style === 2 ? joint(head, TAIL.x, TAIL.y, TAIL.z) : null;
-  const armL = joint(chest, -0.182, 0.465 - CHEST_Y, 0);
-  const armR = joint(chest, 0.182, 0.465 - CHEST_Y, 0);
+  const eyes = joint(head, EYES.x, EYES.y, EYES.z);
+  const mouth = joint(head, MOUTH.x, MOUTH.y, MOUTH.z);
+  const armL = joint(chest, -shoulderX, 0.465 - CHEST_Y, 0);
+  const armR = joint(chest, shoulderX, 0.465 - CHEST_Y, 0);
   const foreL = joint(armL, 0, -UPPER_ARM, 0);
   const foreR = joint(armR, 0, -UPPER_ARM, 0);
   const handL = joint(foreL, 0, -WRIST, 0);
@@ -354,6 +538,8 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     /** A colour, or one by the point (rest, root frame). */
     c: number | ((p: THREE.Vector3) => number);
     w?: (p: THREE.Vector3) => Weights;
+    /** Face shell: UVs into this person's atlas cell. */
+    face?: boolean;
   }
   const parts: Part[] = [];
   const add = (j: THREE.Object3D, geo: THREE.BufferGeometry, c: Part['c'], w?: Part['w']) => parts.push({ geo, j, c, w });
@@ -400,9 +586,11 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(hd, g.hand!, worker ? glove : skin);
   }
   // Head: face, hair, and a helmet, cap or hat.
-  add(head, g.head!, skin);
-  add(head, g.eyes!, 0xf6f6f2);
-  add(head, g.face!, 0x1d1d1f);
+  parts.push({ geo: g.head!, j: head, c: skin, face: true });
+  add(head, g.ears!, skin);
+  add(eyes, g.eyes!, 0xf6f6f2);
+  add(eyes, g.pupils!, 0x1d1d1f);
+  add(mouth, g.lips!, lip);
   add(head, [g.hair!, g.hairLong!, g.hairTail!][style]!, hair);
   if (tail) add(tail, g.tail!, hair);
   if (look.santa) {
@@ -426,16 +614,51 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
 
   // Bake the parts into one geometry at rest, with colours and skin weights.
   root.updateMatrixWorld(true);
-  const bones: THREE.Object3D[] = [pelvis, legL, kneeL, footL, legR, kneeR, footR, torso, chest, head, armL, foreL, handL, armR, foreR, handR];
+  const bones: THREE.Object3D[] = [pelvis, legL, kneeL, footL, legR, kneeR, footR, torso, chest, head, eyes, mouth, armL, foreL, handL, armR, foreR, handR];
   if (tail) bones.push(tail);
   const index = new Map(bones.map((b, i) => [b, i]));
   const col = new THREE.Color();
   const p = new THREE.Vector3();
   const geos = parts.map((part) => {
     const geo = (part.geo.index ? part.geo.toNonIndexed() : part.geo.clone()).applyMatrix4(part.j.matrixWorld);
-    for (const name of Object.keys(geo.attributes)) if (name !== 'position' && name !== 'normal') geo.deleteAttribute(name);
     const pos = geo.attributes.position as THREE.BufferAttribute;
     const n = pos.count;
+    // UVs: the face shell into this person's cell of the atlas, everything else on the white cell.
+    const uv = new Float32Array(n * 2);
+    const fu = face % CELLS;
+    const fv = CELLS - 1 - Math.floor(face / CELLS);
+    for (let i = 0; i < n; i++) {
+      if (part.face) {
+        // By the point's place on the face; clamped inside the cell (its border is white).
+        p.fromBufferAttribute(pos, i);
+        let [u, v] = p.z > 0.01 ? faceUV(p.x, p.y - HIP_Y) : [0.02, 0.02];
+        u = Math.min(0.98, Math.max(0.02, u));
+        v = Math.min(0.98, Math.max(0.02, v));
+        uv.set([(fu + u) / CELLS, (fv + v) / CELLS], i * 2);
+      } else uv.set(WHITE_UV, i * 2);
+    }
+    for (const name of Object.keys(geo.attributes)) if (name !== 'position' && name !== 'normal') geo.deleteAttribute(name);
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    // Build: the torso (and what is worn on it) wider, deeper and with a belly; limbs a little fuller.
+    const cx = part.j.getWorldPosition(new THREE.Vector3()).x;
+    const kind = part.w === torsoW ? 'torso' : part.w && (part.j === legL || part.j === legR || part.j === armL || part.j === armR) ? 'limb' : null;
+    if (kind) {
+      const lw = Math.sqrt(width);
+      for (let i = 0; i < n; i++) {
+        p.fromBufferAttribute(pos, i);
+        if (kind === 'torso') {
+          const y = p.y - HIP_Y;
+          const front = Math.max(0, p.z / (Math.hypot(p.x, p.z) || 1)) ** 1.5;
+          p.x *= width;
+          p.z *= 1 + (width - 1) * 0.6;
+          p.z += belly * 0.055 * Math.exp(-(((y - 0.14) / 0.11) ** 2)) * front;
+        } else {
+          p.x = cx + (p.x - cx) * lw;
+          p.z *= lw;
+        }
+        pos.setXYZ(i, p.x, p.y, p.z);
+      }
+    }
     const colors = new Float32Array(n * 3);
     const si = new Uint16Array(n * 4);
     const sw = new Float32Array(n * 4);
@@ -455,7 +678,8 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
     return geo;
   });
-  const body = new THREE.SkinnedMesh(mergeGeometries(geos)!, mat);
+  // Shared corners merged (indexed): about a third of the vertices.
+  const body = new THREE.SkinnedMesh(mergeVertices(mergeGeometries(geos)!, 1e-5), mat);
   geos.forEach((x) => x.dispose());
   root.add(body);
   body.updateMatrixWorld(true);
@@ -468,6 +692,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   armL.rotation.z = -0.07;
   armR.rotation.z = 0.07;
   foreL.rotation.x = foreR.rotation.x = -0.12;
+  root.scale.setScalar(height);
 
   k.blobUnder(root, 0.8, 0.6);
   HUMANS.push(root);
@@ -476,6 +701,6 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     root.rotation.y = at.ry;
     k.put(root);
   }
-  const m: MotionState = { t: 0, walk: 0, amp: 0, px: 0, py: 0, pyaw: 0, proll: 0, drop: 0, footL: 0, footR: 0, tx: 0, tvx: 0, tz: 0, tvz: 0, yaw: 0, y: 0, seed: (seed % 997) / 997 };
-  return { root, pelvis, torso, chest, armL, armR, foreL, foreR, head, legL, legR, kneeL, kneeR, footL, footR, handL, handR, tail, m };
+  const m: MotionState = { t: 0, walk: 0, amp: 0, px: 0, py: 0, pyaw: 0, proll: 0, drop: 0, footL: 0, footR: 0, tx: 0, tvx: 0, tz: 0, tvz: 0, yaw: 0, y: 0, seed: (seed % 997) / 997, talk: 0, talkE: 0, blinkAt: 1 + r(4) * 4 };
+  return { root, pelvis, torso, chest, armL, armR, foreL, foreR, head, legL, legR, kneeL, kneeR, footL, footR, handL, handR, tail, eyes, mouth, m };
 }

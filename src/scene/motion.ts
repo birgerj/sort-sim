@@ -202,6 +202,31 @@ export function settle(h: Human, dt: number, o: SettleOpts = {}): void {
   m.footL *= 0.9;
   m.footR *= 0.9;
   if (h.tail) swingTail(h, dt);
+  face(h, dt);
+}
+
+/**
+ * Blinking (every few seconds, each at its own pace; a blink takes about a
+ * seventh of a second) and talking: while `m.talk` is up, the mouth opens and
+ * closes in syllables of uneven length.
+ */
+function face(h: Human, dt: number): void {
+  const m = h.m;
+  const t = m.t;
+  let lid = 1;
+  if (t >= m.blinkAt) {
+    const f = (t - m.blinkAt) / 0.14;
+    if (f >= 1) {
+      // Next blink in 2…6 s (now and then a double blink).
+      const n = Math.abs(Math.sin(m.blinkAt * 12.9898 + m.seed * 78.233) * 43758.5453) % 1;
+      m.blinkAt = t + (n < 0.12 ? 0.25 : 2 + n * 4);
+    } else lid = Math.abs(1 - 2 * f) * 0.92 + 0.08;
+  }
+  h.eyes.scale.y = lid;
+  m.talkE += (m.talk - m.talkE) * Math.min(1, dt * 8);
+  const syl = Math.max(0, Math.sin(t * 13 + m.seed * 9)) * (0.55 + 0.45 * Math.sin(t * 4.7 + m.seed * 3));
+  const open = m.talkE * syl;
+  h.mouth.scale.set(1 - 0.15 * open, 1 + 2.4 * open, 1);
 }
 
 /** The ponytail: a damped spring that wants to hang down and lags behind turns and bobbing. */

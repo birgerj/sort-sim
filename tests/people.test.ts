@@ -2,9 +2,10 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../src/scene/textures', () => ({ hiVis: () => null }));
+vi.mock('../src/scene/textures', () => ({ hiVis: () => null, canvasTexture: () => null }));
 
 import { buildHuman } from '../src/scene/people';
+import { settle } from '../src/scene/motion';
 import type { FloorKit } from '../src/scene/floor';
 
 const kit = {
@@ -20,7 +21,7 @@ describe('people', () => {
     expect(meshes.length).toBe(1);
     const w = meshes[0]!.geometry.attributes.skinWeight as THREE.BufferAttribute;
     for (let i = 0; i < w.count; i += 97) expect(w.getX(i) + w.getY(i) + w.getZ(i) + w.getW(i)).toBeCloseTo(1, 4);
-    expect(meshes[0]!.skeleton.bones.length).toBe(17);
+    expect(meshes[0]!.skeleton.bones.length).toBe(19);
   });
 
   it('a bent knee takes the shin and boot with it, and bends the skin smoothly', () => {
@@ -51,5 +52,37 @@ describe('people', () => {
     // The knee moves, but less than the ankle: no crease, no gap.
     const kd = bent[1]!.distanceTo(rest[1]!);
     expect(kd).toBeLessThan(bent[0]!.distanceTo(rest[0]!));
+  });
+
+  it('blinks now and then, and opens its mouth when talking', () => {
+    const h = buildHuman(kit, { shirt: 0x2f3b6b, trousers: 0x22283f });
+    let lid = 1;
+    let open = 0;
+    for (let i = 0; i < 600; i++) {
+      h.m.talk = i > 300 ? 1 : 0;
+      settle(h, 1 / 60);
+      lid = Math.min(lid, h.eyes.scale.y);
+      if (i < 300) expect(h.mouth.scale.y).toBeCloseTo(1, 3);
+      else open = Math.max(open, h.mouth.scale.y);
+    }
+    expect(lid).toBeLessThan(0.3);
+    expect(open).toBeGreaterThan(1.8);
+  });
+
+  it('people differ in build, and a given build is kept', () => {
+    const a = buildHuman(kit, { shirt: 0x2f3b6b, trousers: 0x22283f, build: { height: 1.08, width: 1.15, belly: 1 } });
+    const b = buildHuman(kit, { shirt: 0x2f3b6b, trousers: 0x22283f, build: { height: 0.94, width: 0.9, belly: 0 } });
+    expect(a.root.scale.y).toBeCloseTo(1.08);
+    expect(b.root.scale.y).toBeCloseTo(0.94);
+    expect(a.armR.position.x).toBeGreaterThan(b.armR.position.x);
+    const depth = (h: typeof a) => {
+      const body = h.root.children.find((o) => (o as THREE.SkinnedMesh).isSkinnedMesh) as THREE.SkinnedMesh;
+      // The front of the belly (the cap's peak and the boots stick out further).
+      const pos = body.geometry.attributes.position as THREE.BufferAttribute;
+      let z = 0;
+      for (let i = 0; i < pos.count; i++) if (pos.getY(i) > 0.98 && pos.getY(i) < 1.12 && Math.abs(pos.getX(i)) < 0.05) z = Math.max(z, pos.getZ(i));
+      return z;
+    };
+    expect(depth(a)).toBeGreaterThan(depth(b));
   });
 });
