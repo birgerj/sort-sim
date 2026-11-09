@@ -3,7 +3,11 @@
 // there (so updates arrive), from the cache when it is not. A new version waits until the
 // page asks it to take over (the "Update" button), so a running hall is never swapped mid-way.
 const VERSION = '__VERSION__';
-const CACHE = `sort-sim-${VERSION}`;
+// The cache is named by scope, so a test build under /next/ keeps its own cache
+// beside the main one instead of deleting it.
+const SCOPE = new URL(self.registration.scope).pathname;
+const PREFIX = `sort-sim-v2:${SCOPE}:`;
+const CACHE = PREFIX + VERSION;
 const FILES = __FILES__;
 
 self.addEventListener('install', (e) => {
@@ -13,7 +17,8 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     (async () => {
-      for (const k of await caches.keys()) if (k.startsWith('sort-sim-') && k !== CACHE) await caches.delete(k);
+      // Older builds of this scope, and caches from before scoped names (sort-sim-<version>).
+      for (const k of await caches.keys()) if ((k.startsWith(PREFIX) && k !== CACHE) || /^sort-sim-[0-9a-f]{12}$/.test(k)) await caches.delete(k);
       await self.clients.claim();
     })(),
   );
