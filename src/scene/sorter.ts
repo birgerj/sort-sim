@@ -32,6 +32,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
+import { dayEnvironment, FLOOR_TILE_M, grime, lightShafts, realFloorMaps } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -1040,6 +1041,12 @@ export class Sorter implements Scene3D {
   only: 'day' | 'night' | undefined;
   private nightEnv: THREE.Texture | null = null;
   private keyLight!: THREE.DirectionalLight;
+  /** The realistic day look ("Day") instead of the flat one ("Minimal"); nights are the same. */
+  private real = false;
+  private dayEnv: THREE.Texture | null = null;
+  /** Hall surfaces of the flat day look, and their lit counterparts in the realistic one. */
+  private flatOnly: THREE.Object3D[] = [];
+  private realOnly: THREE.Object3D[] = [];
   private hull!: THREE.InstancedMesh;
   private cageLine!: THREE.LineBasicMaterial;
 
@@ -3129,43 +3136,81 @@ export class Sorter implements Scene3D {
     fog.density = this.nightFog() + (0.009 - this.nightFog()) * this.day;
   }
 
+  /** Minimal (flat, drawn) or realistic day; the night is the same for both. */
+  setRealistic(real: boolean): void {
+    if (real === this.real) return;
+    this.real = real;
+    if (real && !this.dayEnv) this.dayEnv = dayEnvironment(this.renderer);
+    this.dayShown = null; // re-apply the look
+    this.applyTheme(this.day);
+  }
+
+  private realC = new THREE.Color();
+  /** A day colour toned down for the lit look: light colours are capped at a light grey. */
+  private realCol(c: THREE.Color): THREE.Color {
+    const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    return this.realC.copy(c).multiplyScalar(l > 0.55 ? 0.55 / l : 1);
+  }
+
+  isRealistic(): boolean {
+    return this.real;
+  }
+
   private applyTheme(day: number): void {
     if (Math.abs(day - this.day) < 0.002 && this.dayShown !== null) return;
     this.day = day;
-    TOON.value = day;
-    this.ink.enabled = day > 0.02;
-    this.ink.strength = smooth01(day * 1.2);
-    if (this.blobMat) this.blobMat.opacity = 0.45 - 0.17 * day;
+    // The drawn look (toon steps, ink, flat colours) fades in only for Minimal.
+    const flat = this.real ? 0 : day;
+    TOON.value = flat;
+    this.ink.enabled = flat > 0.02;
+    this.ink.strength = smooth01(flat * 1.2);
+    if (this.blobMat) this.blobMat.opacity = this.real ? 0.45 - 0.1 * day : 0.45 - 0.17 * day;
     for (const t of this.themed) {
-      t.m.color.lerpColors(t.n, t.d, day);
-      t.m.roughness = t.nr + (t.dr - t.nr) * day;
-      t.m.metalness = t.nm + (t.dm - t.nm) * day;
+      // Realistic day: the day colours, but no pure whites (a lit white reads as paper, not steel).
+      const d = this.real ? this.realCol(t.d) : t.d;
+      t.m.color.lerpColors(t.n, d, day);
+      // Realistic day: the day colours, as paint on steel (between the matte drawing and the club's metal).
+      const dr = this.real ? Math.max(0.3, (t.nr + t.dr) / 2) : t.dr;
+      const dm = this.real ? t.nm * 0.5 : t.dm;
+      t.m.roughness = t.nr + (dr - t.nr) * day;
+      t.m.metalness = t.nm + (dm - t.nm) * day;
     }
     const bg = this.scene.background as THREE.Color;
-    bg.setHex(0x0b0910).lerp(this.c.setHex(DAY.bg), day);
+    bg.setHex(0x0b0910).lerp(this.c.setHex(this.real ? 0xc8ccd1 : DAY.bg), day);
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(bg);
     fog.density = this.nightFog() + (0.009 - this.nightFog()) * day;
-    this.renderer.toneMappingExposure = 1.15 - 0.2 * day;
-    this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xffffff), day);
-    this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0xc9cfd6), day);
-    this.hemi.intensity = 0.45 + 0.55 * day;
-    this.keyLight.color.setHex(0xb0b8ff).lerp(this.white, day);
-    this.keyLight.intensity = 0.3 + 0.7 * day;
+    this.renderer.toneMappingExposure = this.real ? 1.15 - 0.4 * day : 1.15 - 0.2 * day;
+    if (this.real) {
+      // Daylight from the roof: a warm sun through the roof lights, cool sky light from above.
+      this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xdfe8ff), day);
+      this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0x8a8580), day);
+      this.hemi.intensity = 0.45 + 0.05 * day;
+      this.keyLight.color.setHex(0xb0b8ff).lerp(this.c.setHex(0xfff1dc), day);
+      this.keyLight.intensity = 0.3 + 1.5 * day;
+    } else {
+      this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xffffff), day);
+      this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0xc9cfd6), day);
+      this.hemi.intensity = 0.45 + 0.55 * day;
+      this.keyLight.color.setHex(0xb0b8ff).lerp(this.white, day);
+      this.keyLight.intensity = 0.3 + 0.7 * day;
+    }
     this.cageLine.color.setHex(0x8a8f96).lerp(this.c.setHex(DAY.tealD), day);
     const show = day > 0.5;
     if (show === this.dayShown) return;
     this.dayShown = show;
     for (const o of this.dayOnly) o.visible = show;
     for (const o of this.nightOnly) o.visible = !show;
+    for (const o of this.flatOnly) o.visible = show && !this.real;
+    for (const o of this.realOnly) o.visible = show && this.real;
     this.applyNightFx();
-    this.scene.environment = show ? null : this.nightEnv;
+    this.scene.environment = show ? (this.real ? this.dayEnv : null) : this.nightEnv;
     // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
     const hq = this.quality === 'high' || this.quality === 'ultra';
     if (!show && hq && !this.mirror) this.mirror = this.buildMirror();
     if (this.mirror) this.mirror.visible = !show && hq;
-    // Flat, bright colours by day, like the illustration; filmic tone mapping for the club.
-    this.renderer.toneMapping = show ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    // Flat, bright colours for the drawn day; filmic tone mapping for the photo-like day and the club.
+    this.renderer.toneMapping = show && !this.real ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
     drawBelt(this.beltTex, show);
   }
 
@@ -4117,6 +4162,60 @@ export class Sorter implements Scene3D {
   }
 
   /** The day look's own scenery: a light hall, the illustration's workstation, GPU racks, people and signs. */
+  /**
+   * The lit hall of the realistic day look: worn concrete, cladding and a ceiling that
+   * take light and shadow, and shafts of daylight under the roof lights.
+   */
+  private buildRealHall(): void {
+    const add = (o: THREE.Object3D) => {
+      this.put(o, 'day');
+      this.realOnly.push(o);
+    };
+    const { map, rough } = realFloorMaps();
+    const fm = map.clone();
+    const fr = rough.clone();
+    for (const t of [fm, fr]) {
+      t.repeat.set(HW / FLOOR_TILE_M, HD / FLOOR_TILE_M);
+      t.needsUpdate = true;
+    }
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d4, map: fm, roughnessMap: fr, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
+    grime(floorMat, 0.22, 9, 'xz');
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(HCX, 0, HZC);
+    add(floor);
+    const cl = dayWall().clone();
+    cl.repeat.set(1 / 8, 1 / HH);
+    cl.offset.set(0, 0.5);
+    cl.needsUpdate = true;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: cl, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+    grime(wallMat, 0.18, 6, 'xy', 1.2);
+    for (const z of [NZ, HZ]) {
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), wallMat);
+      w.position.set(HCX, HH / 2, z);
+      add(w);
+    }
+    const side = dayWall().clone();
+    side.repeat.set(HD / 8, 1);
+    side.needsUpdate = true;
+    const sideMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: side, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+    grime(sideMat, 0.18, 6, 'zy', 1.2);
+    for (const x of [WX, EX]) {
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), sideMat);
+      w.position.set(x, HH / 2, HZC);
+      w.rotation.y = Math.PI / 2;
+      add(w);
+    }
+    const ceil = new THREE.Mesh(
+      ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS),
+      new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.8, metalness: 0.3, side: THREE.DoubleSide }),
+    );
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.set(HCX, HH, HZC);
+    add(ceil);
+    add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
+  }
+
   private buildDay(): void {
     this.only = 'day';
     const grid = canvasTex(64, 64, (g) => {
@@ -4134,6 +4233,7 @@ export class Sorter implements Scene3D {
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(HCX, 0, HZC);
     this.put(floor);
+    this.flatOnly.push(floor);
     // Flat walls and ceiling, as in a drawing.
     // Cladding with a band of high windows.
     const cladding = (len: number) => {
@@ -4155,17 +4255,21 @@ export class Sorter implements Scene3D {
       const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longDay);
       w.position.set(HCX, HH / 2, z);
       this.put(w);
+      this.flatOnly.push(w);
     }
     for (const x of [WX, EX]) {
       const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wall);
       w.position.set(x, HH / 2, HZC);
       w.rotation.y = Math.PI / 2;
       this.put(w);
+      this.flatOnly.push(w);
     }
     const ceil = new THREE.Mesh(ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS), new THREE.MeshBasicMaterial({ color: DAY.ceiling, side: THREE.DoubleSide }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil);
+    this.flatOnly.push(ceil);
+    this.buildRealHall();
     // Rows of linear LED fixtures between the roof lights, and cable trays along the hall.
     const led = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const housing = this.std(0xb9c0c8, 0.5, 0.6, 0xb9c0c8);

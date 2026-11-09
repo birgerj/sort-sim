@@ -3,6 +3,7 @@
  *
  * URL parameters (all optional):
  *   time=day|night|cycle   time of day
+ *   look=minimal|real      the day's look: a clean drawing, or lit like a photo
  *   camera=auto|fly|follow|walk camera mode
  *   dept=<id>              start at a department (see Sorter.departments())
  *   mute=1                 no start screen, no sound
@@ -33,6 +34,9 @@ const settings = loadSettings();
 
 const time = q.get('time');
 if (time === 'day' || time === 'night' || time === 'cycle') settings.time = time as TimeMode;
+const look = q.get('look');
+if (look === 'minimal' || look === 'real') settings.look = look;
+scene.setRealistic(settings.look === 'real');
 const cam = q.get('camera');
 if (cam === 'auto' || cam === 'fly' || cam === 'follow' || cam === 'walk') scene.setControl('cam', cam);
 const speed = Number(q.get('speed') ?? settings.speed);

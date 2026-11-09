@@ -13,11 +13,15 @@ import { XMAS } from '../sim/season';
 import { NIGHT_PRESETS, NIGHT_SWITCHES, presetOf, type NightFx, type NightPreset } from '../scene/nightFx';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
+/** How the day looks: drawn and flat (Minimal) or lit like a photo (Day). */
+export type DayLook = 'minimal' | 'real';
 type Tab = 'go' | 'camera' | 'hub' | 'night' | 'more';
 const TAB_TITLES: Record<Tab, string> = { go: 'Go to', camera: 'Camera', hub: 'Hub', night: 'Night effects', more: 'More' };
 
 export interface Settings {
   time: TimeMode;
+  /** The day's look (the night is the same for both). */
+  look?: DayLook;
   /** Belt speed multiple (see BELT_SPEEDS). */
   speed: number;
   /** Parcels per minute into the hub. */
@@ -74,7 +78,7 @@ export class Hud {
   private open: Tab | null = null;
   private deptBtns = new Map<string, HTMLButtonElement>();
   private camBtns = new Map<string, HTMLButtonElement>();
-  private timeBtns = new Map<TimeMode, HTMLButtonElement>();
+  private timeBtns = new Map<TimeMode | DayLook, HTMLButtonElement>();
   private speedBtns = new Map<number, HTMLButtonElement>();
   private qualityBtns = new Map<Quality, HTMLButtonElement>();
   private soundBtn!: HTMLButtonElement;
@@ -120,7 +124,8 @@ export class Hud {
     for (const [id, b] of this.deptBtns) b.classList.toggle('on', id === visiting);
     const mode = this.scene.cameraMode();
     for (const [id, b] of this.camBtns) b.classList.toggle('on', id === mode);
-    for (const [id, b] of this.timeBtns) b.classList.toggle('on', id === this.settings.time);
+    const look = this.settings.look ?? 'minimal';
+    for (const [id, b] of this.timeBtns) b.classList.toggle('on', this.settings.time === 'day' ? id === look : id === this.settings.time);
     for (const [v, b] of this.speedBtns) {
       b.classList.toggle('on', v === this.scene.beltSpeed());
       // 2 m per beat at the music's tempo now.
@@ -382,11 +387,14 @@ export class Hud {
 
   /** More: time of day, sound, graphics quality, Christmas, country, and the app. */
   private buildMore(sec: HTMLElement): void {
-    const tb = this.row(sec, 'Time of day', 'Day: clean production. Night: the party. Keys D, N, C.');
-    tb.classList.add('cols3');
-    for (const [id, label] of [['day', 'Day'], ['night', 'Night'], ['cycle', 'Day ↔ night']] as const) {
+    const tb = this.row(sec, 'Time of day', 'Minimal: the day as a clean drawing. Day: the day lit like a photo. Night: the party. Keys D (Minimal ↔ Day), N, C.');
+    tb.classList.add('cols4');
+    for (const [id, label] of [['minimal', 'Minimal'], ['real', 'Day'], ['night', 'Night'], ['cycle', 'Day ↔ night']] as const) {
       const b = el('button', '', label);
-      b.onclick = () => this.setTime(id);
+      b.onclick = () => {
+        if (id === 'minimal' || id === 'real') this.setTime('day', id);
+        else this.setTime(id);
+      };
       tb.append(b);
       this.timeBtns.set(id, b);
     }
@@ -664,8 +672,13 @@ export class Hud {
     saveSettings(this.settings);
   }
 
-  setTime(t: TimeMode): void {
+  /** Time of day, and optionally the day's look (kept for the cycle). */
+  setTime(t: TimeMode, look?: DayLook): void {
     this.settings.time = t;
+    if (look) {
+      this.settings.look = look;
+      this.scene.setRealistic(look === 'real');
+    }
     saveSettings(this.settings);
   }
 
@@ -702,7 +715,8 @@ export class Hud {
       else if (k === 'v') this.scene.setControl('cam', this.scene.cameraMode() === 'walk' ? 'auto' : 'walk');
       else if (k === 'f') this.scene.setControl('cam', 'fly');
       else if (k === 'p') this.scene.setControl('next', true);
-      else if (k === 'd') this.setTime('day');
+      // D: to the day, or between Minimal and Day while it is day.
+      else if (k === 'd') this.setTime('day', this.settings.time === 'day' ? (this.settings.look === 'real' ? 'minimal' : 'real') : undefined);
       else if (k === 'n') this.setTime('night');
       else if (k === 'c') this.setTime('cycle');
       else if (k === 'm') this.toggleSound();

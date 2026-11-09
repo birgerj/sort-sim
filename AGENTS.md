@@ -63,6 +63,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/nightFx.ts` | What the night shows (`NightFx`): parcel glow 0…1 and a switch per party effect, presets Party / Calm / Dark. `Sorter.setNightFx` applies it; the HUD's Night effects panel (only shown while the night look is on) edits and stores it. |
 | `src/scene/roof.ts` | `Roof`: 18 flat skylights (curb, level glass, glazing bars) in two rows at z ±20, one in every other bay between the roof beams; both ceilings have holes for them (`ceilingWithLights`). Above them a sky dome that follows the camera: light blue with drifting flat clouds by day, stars and grey clouds at night (`uDay`). |
 | `src/scene/party.ts` | Night party: DJ booth on the maintenance platform inside the loop's west end (`PLATFORM_X`), laser fans, mirror-ball floor spots, confetti on the drop. |
+| `src/scene/realDay.ts` | The realistic day look ("Day"): generated worn-concrete floor (`realFloorMaps`), world-space grime that never tiles (`grime`), a generated daylight environment (`dayEnvironment`), daylight shafts under the roof lights (`lightShafts`, one draw call). Built in `Sorter.buildRealHall`. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
 | `src/sim/rng.ts` | Seeded random numbers. |
@@ -170,6 +171,13 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   recompiles every material).
 - Night lights are `MeshBasicMaterial` with colours above 1 so bloom picks
   them up. By day, tone mapping is off and walls are flat basic materials.
+- **Three looks:** Minimal (the drawn day above), Day (realistic) and Night.
+  `setRealistic(true)` (HUD, `?look=real`, `settings.look`) keeps the day's
+  objects and colours but drops toon steps and ink, turns on filmic tone
+  mapping and a daylight environment, caps light day colours at a light grey
+  (`realCol`), and swaps the flat hall surfaces (`flatOnly`) for lit ones
+  (`realOnly`). Without the ink pass it draws about half the calls of
+  Minimal. Shadows and AO still come with quality high.
 
 ## Next step: nicer, more detailed graphics
 

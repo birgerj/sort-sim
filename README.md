@@ -128,7 +128,7 @@ The music follows the parcels per minute: its tempo moves (3 BPM per bar) betwee
 
 With a mouse, the dock fades after three seconds without movement or a key and comes back when the mouse moves; on touch screens it stays. **Hide controls** (More, or key `H`) hides everything; click or tap the hall to bring it back.
 
-URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow|walk`,
+URL parameters: `?time=day|night|cycle`, `?look=minimal|real` (the day as a drawing or lit like a photo), `?camera=auto|fly|follow|walk`,
 `?speed=0.5|1|2|4`, `?rate=<parcels per minute>`, `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
 (no controls: for recordings), `?quality=low|high`, `?night=party|calm|dark`.
 
