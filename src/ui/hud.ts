@@ -10,6 +10,7 @@ import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
 import { COUNTRIES, COUNTRY, type CountryId } from '../sim/countries';
 import { XMAS } from '../sim/season';
+import { InfoPanel } from './info';
 import { NIGHT_PRESETS, NIGHT_SWITCHES, presetOf, type NightFx, type NightPreset } from '../scene/nightFx';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
@@ -29,6 +30,8 @@ export interface Settings {
   country?: CountryId;
   muted: boolean;
   volume: number;
+  /** Product-info cards at tour stops (default on; `?info=0|1`). */
+  info?: boolean;
   /** What the night party shows (see NightFx). */
   night?: NightFx;
 }
@@ -64,6 +67,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 export class Hud {
   readonly root = el('div', 'hud');
   private caption = el('div', 'caption');
+  private info: InfoPanel;
   /** The dock: the tabs, always at the bottom. */
   private bar = el('nav', 'bar dock');
   /** The panel of the open tab, above the dock. */
@@ -98,7 +102,11 @@ export class Hud {
     readonly settings: Settings,
     private opts: { showStart: boolean; showUi: boolean; onQuality: () => void; onGame?: () => void },
   ) {
-    this.root.append(this.caption, this.sheet, this.bar);
+    this.info = new InfoPanel(scene);
+    const q = new URLSearchParams(location.search).get('info');
+    if (q === '0' || q === '1') settings.info = q === '1';
+    this.info.setOn(settings.info !== false);
+    this.root.append(this.caption, this.info.el, this.sheet, this.bar);
     if (!opts.showUi) this.root.classList.add('off');
     this.buildBar();
     if (opts.showStart) this.root.append(this.startScreen());
@@ -116,6 +124,7 @@ export class Hud {
     const cap = this.scene.caption();
     if (this.caption.textContent !== cap) this.caption.textContent = cap;
     this.caption.classList.toggle('show', !!cap);
+    this.info.update(this.music.bpm);
     const visiting = this.scene.visiting();
     for (const [id, b] of this.deptBtns) b.classList.toggle('on', id === visiting);
     const mode = this.scene.cameraMode();
@@ -436,6 +445,20 @@ export class Hud {
         location.reload();
       };
       xb.append(b);
+    }
+    const ib = this.row(sec, 'Product info', 'A card with the product behind each tour stop; the tour stays long enough to read it.');
+    ib.classList.add('cols2');
+    const infoBtns: HTMLButtonElement[] = [];
+    for (const [on, label] of [[false, 'Off'], [true, 'On']] as const) {
+      const b = el('button', on === (this.settings.info !== false) ? 'on' : '', label);
+      b.onclick = () => {
+        this.settings.info = on;
+        saveSettings(this.settings);
+        this.info.setOn(on);
+        infoBtns.forEach((x, i) => x.classList.toggle('on', (i === 1) === on));
+      };
+      infoBtns.push(b);
+      ib.append(b);
     }
     const country = el('select', 'country');
     country.setAttribute('aria-label', 'Country the hub serves');

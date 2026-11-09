@@ -1053,6 +1053,13 @@ export class Sorter implements Scene3D {
   /** Fly mode: a random tour past points of interest. */
   private tour: Tour | null = null;
   private recent: number[] = [];
+  /**
+   * Seconds to hover at a tour stop, by stop name (undefined: the usual few bars).
+   * Set by the product-info overlay so there is time to read its card.
+   */
+  dwellFor: ((name: string) => number | undefined) | null = null;
+  /** Beat at which the tour was paused at a stop (null: running). */
+  private tourHeldAt: number | null = null;
   private pois: Poi[] = [];
   private first = true;
   private readonly look = new THREE.Vector3(18, 3, 0);
@@ -2878,7 +2885,7 @@ export class Sorter implements Scene3D {
       return;
     }
     const shot = Math.floor(bar / 8);
-    if (this.camMode === 'auto' && shot !== this.lastShotBar) {
+    if (this.camMode === 'auto' && shot !== this.lastShotBar && !(this.dwellFor && !this.autoFollow && this.lingering())) {
       this.lastShotBar = shot;
       this.autoFollow = !this.autoFollow;
       if (this.autoFollow) this.pickFollow();
@@ -4901,6 +4908,48 @@ export class Sorter implements Scene3D {
     this.autoFollow = false;
   }
 
+  /** Beats to hover at a stop: from `dwellFor` (seconds at the current tempo), else the stop's own, else 6–11. */
+  private dwellBeats(poi: Poi): number {
+    const secs = this.dwellFor?.(poi.name);
+    if (secs) return Math.ceil((secs * this.bpmNow) / 60);
+    return poi.dwell ?? 6 + Math.floor(Math.random() * 6);
+  }
+
+  /** The tour is on its way to, or still within its time at, a stop that has a reading time. */
+  private lingering(): boolean {
+    const t = this.tour;
+    if (!t || !this.dwellFor?.(this.pois[t.poi]!.name)) return false;
+    return this.tourHeldAt !== null || t.s < t.len || this.bt - t.arrivedAt < t.dwell;
+  }
+
+  /**
+   * The stop the tour camera is hovering at (arrived), with beats since arrival and
+   * the beats it will stay (Infinity in visit mode, which stays until told otherwise).
+   */
+  tourStop(): { name: string; since: number; dwell: number; held: boolean } | null {
+    const t = this.tour;
+    const touring = this.camMode === 'fly' || this.camMode === 'visit' || (this.camMode === 'auto' && !this.autoFollow);
+    if (!t || !touring || t.s < t.len) return null;
+    const now = this.tourHeldAt ?? this.bt;
+    return { name: this.pois[t.poi]!.name, since: now - t.arrivedAt, dwell: this.camMode === 'visit' ? Infinity : t.dwell, held: this.tourHeldAt !== null };
+  }
+
+  /** Pause or resume the tour at its stop (the time already spent there is kept). */
+  holdTour(on: boolean): void {
+    if (on && this.tourHeldAt === null) this.tourHeldAt = this.bt;
+    else if (!on && this.tourHeldAt !== null) {
+      if (this.tour) this.tour.arrivedAt += this.bt - this.tourHeldAt;
+      this.tourHeldAt = null;
+    }
+  }
+
+  /** Leave this stop now and fly on to the next (from a department visit too). */
+  nextStop(): void {
+    this.tourHeldAt = null;
+    if (this.camMode === 'visit') this.camMode = 'fly';
+    if (this.tour) this.tour.dwell = 0;
+  }
+
   /** The department being visited, if any. */
   visiting(): string | null {
     return this.camMode === 'visit' ? this.pois[this.visitPoi]!.name : null;
@@ -4923,7 +4972,7 @@ export class Sorter implements Scene3D {
     const since = t && t.s >= t.len ? this.bt - t.arrivedAt : 0;
     const moveOn = !t
       || (this.camMode === 'visit' && t.poi !== this.visitPoi)
-      || (staying ? t.s >= t.len && !!this.pois[t.poi]!.next?.(since) : t.s >= t.len && since > t.dwell);
+      || (this.tourHeldAt === null && (staying ? t.s >= t.len && !!this.pois[t.poi]!.next?.(since) : t.s >= t.len && since > t.dwell));
     if (moveOn) {
       this.planTour(t);
       return this.flyTour(dt, travel);
@@ -4968,6 +5017,7 @@ export class Sorter implements Scene3D {
   }
 
   private planTour(prev: Tour | null): void {
+    this.tourHeldAt = null;
     const from = this.camera.position.clone();
     const lookFrom = prev ? this.wantLook.clone() : v(0, 2, 0);
     let k = 0;
@@ -5017,7 +5067,7 @@ export class Sorter implements Scene3D {
     if (clean.length < 2) clean.push(pos.clone().add(this.t.set(0, 0.1, 0)));
     const curve = new THREE.CatmullRomCurve3(clean, false, 'centripetal');
     const len = curve.getLength();
-    this.tour = { poi: k, curve, len: Number.isFinite(len) && len > 0.01 ? len : 0.01, s: 0, lookFrom, dwell: poi.dwell ?? 6 + Math.floor(Math.random() * 6), arrivedAt: 0, offset: new THREE.Vector3() };
+    this.tour = { poi: k, curve, len: Number.isFinite(len) && len > 0.01 ? len : 0.01, s: 0, lookFrom, dwell: this.dwellBeats(poi), arrivedAt: 0, offset: new THREE.Vector3() };
     if (!(len > 0.01)) {
       // Already there: hover.
       this.tour.s = this.tour.len;
