@@ -3364,8 +3364,11 @@ export class Sorter implements Scene3D {
   }
 
   /** Compile the shaders of what is on show now, without blocking where the browser allows it. */
-  async warmUp(): Promise<void> {
+  async warmUp(tod = 0): Promise<void> {
     try {
+      // Put the look in place first (lights, shadows, materials), so the shaders compiled now
+      // are the ones the first frame needs, not compiled once more on it.
+      this.applyTheme(1 - smooth01(tod * 1.6 - 0.3));
       this.batcher.update();
       await this.renderer.compileAsync(this.scene, this.camera);
     } catch {

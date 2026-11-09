@@ -177,7 +177,7 @@ function frame(now: number): void {
 // loading screen still up; it fades out once the hall has been drawn.
 loadingSay('Preparing the graphics…');
 await nextPaint();
-await scene.warmUp();
+await scene.warmUp(tod);
 requestAnimationFrame((t) => {
   frame(t);
   if (loading) {
