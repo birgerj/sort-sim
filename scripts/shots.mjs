@@ -27,6 +27,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.error('page error:', e.message, e.stack?.split('\n')[1] ?? ''));
+  page.on('console', (m) => { if (m.type() === 'error') console.error(m.text().slice(0, 400)); });
   const base = `http://localhost:${PORT}/`;
   await page.goto(`${base}?ui=0`);
   await page.waitForFunction(() => 'sortsim' in window);
@@ -35,6 +36,8 @@ try {
     if (only.length && !only.includes(d.id)) continue;
     for (const time of times) {
       await page.goto(`${base}?ui=0&time=${time}${look}${quality}&dept=${encodeURIComponent(d.id)}`);
+      // (The loading screen stays up until the hall has been drawn once.)
+      await page.waitForFunction(() => !document.getElementById('loading'), null, { timeout: 180000 });
       await page.waitForTimeout(WAIT_MS);
       const file = `shots/${d.id.replace(/\W+/g, '-')}-${time}${look ? '-' + process.env.SHOTS_LOOK : ''}.png`;
       await page.screenshot({ path: file });

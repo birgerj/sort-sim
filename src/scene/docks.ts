@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
+import { litPaper } from './realDay';
 import { DOCK_CITY, NORTH_CITIES, rangeOf, rangeText, split } from '../sim/postcodes';
 import { Labels } from './labels';
 import { buildHuman, type Human } from './people';
@@ -212,6 +213,8 @@ export class Docks {
     private handlers: DockHandlers,
   ) {
     this.boards = new Labels(lines.length * CAGES * 2, 0.68, 0.48, 200, 140);
+    // Paper cards: lit like paper in the realistic day.
+    litPaper(this.boards.mat);
     kit.put(this.boards.mesh);
     for (const [n, l] of lines.entries()) this.buildDock(l.x, l.chute, n + 1, DOCK_CITY[n] ?? n);
     // Loaders of neighbouring docks chat in groups of two or three when there is nothing to load.
@@ -1055,6 +1058,7 @@ export function buildDockDoor(k: FloorKit, x: number, wallZ: number, dir: 1 | -1
   // Control box with buttons, beside the door.
   k.box('dockctl', door!, x + 2.35, 1.4, z(0.12), 0.35, 0.5, 0.15);
   const bm = new THREE.MeshBasicMaterial({ map: numberTex(String(number)) });
+  litPaper(bm);
   boardMats.push(bm);
   const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), bm);
   board.position.set(x, 5.4, z(0.12));
