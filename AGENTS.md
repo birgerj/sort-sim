@@ -211,6 +211,10 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   (`realGear`). Printed signs, cage cards and door numbers take light like
   paper (`litPaper`: a fixed sun term, no lights in the shader); screens and
   lamps still glow.
+  More in Day: supports and table legs in dark RAL blue (`kit.realColor`,
+  `RAL_BLUE`), soft light pools under the LED fixtures (`lightPools`, one
+  draw call), SMAA edge smoothing, every parcel its own kraft shade with worn
+  edges (`parcelWear`, seeded from its instance colour), dirty roof glass.
   A light vignette and warm/cool finish (`gradePass`) runs only in
   Day. The Day hall is built the first time Day is chosen.
 - **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`
@@ -287,3 +291,5 @@ the simulation:
   so they drive continuously and round corners; they only ease when starting
   or stopping.
 - `Reflector` renders the scene again: it exists only at night on high.
+- `gait`: a step is at most `MAX_STEP`; faster, it takes 2–4 steps per beat (never
+  longer strides). Standing (speed 0), the feet stay flat on the floor. Tested.

@@ -643,3 +643,89 @@ export function litPaper(m: THREE.MeshBasicMaterial): void {
   const key = m.customProgramCacheKey.bind(m);
   m.customProgramCacheKey = () => `${key()}-paper`;
 }
+
+/**
+ * Soft pools of light on the floor under the ceiling's LED fixtures, for the realistic day: one
+ * stretched, faint, additive patch per fixture, all in one mesh (one draw call). Real lights
+ * would cost every material a light; this is only a picture of their light on the floor.
+ */
+export function lightPools(spots: [number, number][], w: number, d: number): THREE.Mesh {
+  const geos = spots.map(([x, z]) => new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2).translate(x, 0.006, z));
+  const pos: number[] = [];
+  const uv: number[] = [];
+  for (const g of geos) {
+    const ng = g.toNonIndexed();
+    pos.push(...(ng.attributes.position!.array as Float32Array));
+    uv.push(...(ng.attributes.uv!.array as Float32Array));
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.computeBoundingSphere();
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uCol: { value: new THREE.Color(1.0, 0.97, 0.9) }, uStrength: { value: 0.07 } },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uCol;
+      uniform float uStrength;
+      varying vec2 vUv;
+      void main() {
+        vec2 q = (vUv - 0.5) * 2.0;
+        float a = uStrength * pow(max(0.0, 1.0 - dot(q, q)), 2.0);
+        gl_FragColor = vec4(uCol * a, 1.0);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.userData.noInk = true;
+  m.renderOrder = -1;
+  return m;
+}
+
+/**
+ * Parcels in the realistic day: every box its own cardboard (from its colour, which stays with
+ * it), from pale kraft to brown, a little worn at the edges and corners, a few scuffs and
+ * crushed corners. In the box's own space, so it travels with it.
+ */
+export function parcelWear(m: THREE.MeshStandardMaterial): void {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
+    sh.uniforms.uReal = REAL;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vPw;\nvarying vec3 vPseed;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPw = position;\n#ifdef USE_INSTANCING_COLOR\nvPseed = instanceColor;\n#else\nvPseed = vec3(0.5);\n#endif');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uReal;\nvarying vec3 vPw;\nvarying vec3 vPseed;\n${NOISE}`)
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        if (uReal > 0.001) {
+          float seed = dot(vPseed, vec3(12.9898, 78.233, 37.719));
+          float k = fract(sin(seed) * 43758.5453);
+          // Edges and corners of the box (its own space runs -0.5 … 0.5).
+          vec3 a = abs(vPw) * 2.0;
+          float edge = smoothstep(0.86, 0.98, max(min(a.x, a.y), max(min(a.y, a.z), min(a.x, a.z))));
+          float corner = smoothstep(0.82, 0.97, min(a.x, min(a.y, a.z)));
+          float scuff = smoothstep(0.7, 0.85, rdNoise(vPw.xz * 14.0 + k * 31.0)) * 0.6;
+          vec3 c = diffuseColor.rgb;
+          // Kraft shade of this box: brighter or browner.
+          c *= mix(vec3(1.04, 1.02, 0.98), vec3(0.86, 0.78, 0.66), k);
+          c *= 1.0 - 0.18 * edge - 0.22 * corner * step(0.6, k) - 0.12 * scuff;
+          diffuseColor.rgb = mix(diffuseColor.rgb, c, uReal);
+          roughnessFactor = mix(roughnessFactor, clamp(roughnessFactor + 0.1 * edge, 0.0, 1.0), uReal);
+        }`,
+      );
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${key()}-parcelwear`;
+}
