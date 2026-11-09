@@ -1,0 +1,51 @@
+name: Build
+
+# Tests and builds every push and pull request. The result is a self-contained
+# static site (relative paths, base './'), uploaded as the run's artifact:
+# download it from the run page and unzip it into any folder of any static
+# web server — index.html sits at the root of the zip.
+# A tag v* also attaches the same zip to a GitHub Release, which doesn't expire.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Name the build
+        id: name
+        run: echo "name=sort-sim-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      # GitHub zips the artifact itself, so upload the folder (not a zip, or you get a zip in a zip).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.name }}
+          path: dist/
+          if-no-files-found: error
+      - name: Attach zip to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip_name="sort-sim-${GITHUB_REF_NAME}.zip"
+          (cd dist && zip -qr "../$zip_name" .)
+          gh release create "$GITHUB_REF_NAME" "$zip_name" --generate-notes --title "$GITHUB_REF_NAME" \
+            || gh release upload "$GITHUB_REF_NAME" "$zip_name" --clobber

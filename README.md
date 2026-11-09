@@ -4,8 +4,6 @@ A parcel sorting hub in 3D that moves to its own ambient music. By day it is
 clean production; at night the hall throws a secret party: projector laser
 shows, robots with underglow, dancing dock workers.
 
-**Live:** https://birgerj.github.io/sort-sim/
-
 Built with three.js, TypeScript and Vite. No assets: every model, texture and
 sound is generated in code.
 
@@ -148,6 +146,10 @@ npm run shots      # screenshots of every department, day and night, into shots/
 playwright install chromium`); it runs `vite preview` on `dist/`, so build
 first. Pass department ids to limit it: `npm run shots -- docks boxes`.
 
-Deploys to GitHub Pages from `main` (`.github/workflows/pages.yml`).
+Every push builds a zip of the static site (`.github/workflows/build.yml`):
+open the run under Actions and download the `sort-sim-<commit>` artifact. Unzip
+it into any folder on any static web server; paths are relative, so a subfolder
+works too. Offline mode (service worker) needs HTTPS or localhost. Push a tag
+`v*` to also attach the zip to a GitHub Release.
 
 For the architecture and how to extend it, see [AGENTS.md](AGENTS.md).
