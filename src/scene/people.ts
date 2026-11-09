@@ -32,6 +32,10 @@ export interface HumanLook {
   vest?: number;
   /** Helmet colour (workers), or a cap. */
   helmet?: number;
+  /** A suit: jacket (shirt colour) with lapels, a white shirt and a tie; bare head. */
+  suit?: { tie: number };
+  /** 0 short, 1 longer, 2 ponytail (default: from a seed). */
+  hairStyle?: number;
   /** Father Christmas (beard and sack; the suit is the shirt and trousers). */
   santa?: boolean;
   cap?: number;
@@ -89,6 +93,14 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     lanyard: new THREE.TorusGeometry(0.075, 0.004, 4, 16, Math.PI).rotateZ(Math.PI).scale(0.9, 1.9, 1).translate(0, 0.53, 0.105),
     badge: box(0.05, 0.07, 0.006, 0, 0.375, 0.112),
     buttons: merge(...[0.27, 0.34, 0.41, 0.48].map((y) => ball(0.006, 0, y, 0.106 - (y - 0.27) * 0.05, 5))),
+    // Suit: the white shirt front showing in the jacket's V, lapels, a tie, and jacket buttons.
+    shirtV: new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(-0.055, 0.55), new THREE.Vector2(0.055, 0.55), new THREE.Vector2(0, 0.36)])).translate(0, 0, 0.104),
+    lapels: merge(
+      new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(-0.058, 0.552), new THREE.Vector2(-0.085, 0.47), new THREE.Vector2(-0.006, 0.355), new THREE.Vector2(-0.03, 0.48)])).translate(0, 0, 0.107),
+      new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(0.058, 0.552), new THREE.Vector2(0.03, 0.48), new THREE.Vector2(0.006, 0.355), new THREE.Vector2(0.085, 0.47)])).translate(0, 0, 0.107),
+    ),
+    tie: merge(box(0.022, 0.018, 0.01, 0, 0.535, 0.108), new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(-0.012, 0.527), new THREE.Vector2(0.012, 0.527), new THREE.Vector2(0.02, 0.4), new THREE.Vector2(0, 0.38), new THREE.Vector2(-0.02, 0.4)])).translate(0, 0, 0.108)),
+    jacketButtons: merge(ball(0.007, 0, 0.3, 0.104, 5), ball(0.007, 0, 0.24, 0.1, 5)),
     // Trousers: back pockets and a crease down the front of each leg.
     pockets: merge(box(0.075, 0.08, 0.008, -0.075, -0.03, -0.1), box(0.075, 0.08, 0.008, 0.075, -0.03, -0.1)),
     crease: box(0.006, 0.7, 0.006, 0, -0.42, 0.072),
@@ -217,7 +229,12 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   add(torso, g.neck!, M.skin, skin);
   const worker = look.vest !== undefined;
   if (worker) add(torso, g.radio!, M.dark);
-  else {
+  else if (look.suit) {
+    add(torso, g.shirtV!, M.cloth, 0xffffff);
+    add(torso, g.lapels!, M.cloth, look.shirt);
+    add(torso, g.tie!, M.cloth, look.suit.tie);
+    add(torso, g.jacketButtons!, M.dark);
+  } else {
     add(torso, g.lanyard!, M.cloth, 0x1755fe);
     add(torso, g.badge!, M.cloth, 0xffffff);
     add(torso, g.buttons!, M.cloth, 0xf3f4f6);
@@ -229,7 +246,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   add(head, g.face!, M.dark);
   const seed = Math.abs((look.shirt * 7 + (look.skin ?? 0) * 13 + HUMANS.length * 31) | 0);
   const hair = look.hair ?? HAIR[seed % HAIR.length]!;
-  add(head, [g.hair!, g.hairLong!, g.hairTail!][Math.floor(seed / 7) % 3]!, M.cloth, hair);
+  add(head, [g.hair!, g.hairLong!, g.hairTail!][look.hairStyle ?? Math.floor(seed / 7) % 3]!, M.cloth, hair);
   if (look.santa) {
     add(head, g.beard!, M.cloth, 0xffffff);
     add(torso, g.sack!, M.cloth, 0x8a5a2a);
@@ -243,7 +260,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   } else if (look.helmet !== undefined) {
     add(head, g.helmet!, M.hard, look.helmet);
     add(head, g.brim!, M.hard, look.helmet);
-  } else {
+  } else if (!look.suit) {
     const c = look.cap ?? 0x2f3b6b;
     add(head, g.cap!, M.cloth, c);
     add(head, g.peak!, M.cloth, c);
@@ -256,13 +273,15 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const fores: THREE.Group[] = [];
   for (const a of [armL, armR]) {
     add(a, g.upper!, M.cloth, look.shirt);
-    if (!worker) add(a, g.sleeve!, M.cloth, look.shirt);
+    if (!worker && !look.suit) add(a, g.sleeve!, M.cloth, look.shirt);
     const f = joint(a, 0, -0.29, 0);
     // A little bend at the elbow when the arm hangs.
     f.rotation.x = -0.12;
     fores.push(f);
     // Workers: long sleeves and gloves; staff: bare forearms and hands.
-    add(f, g.fore!, worker ? M.cloth : M.skin, worker ? look.shirt : skin);
+    // (A suit has long sleeves too, with a white shirt cuff.)
+    add(f, g.fore!, worker || look.suit ? M.cloth : M.skin, worker || look.suit ? look.shirt : skin);
+    if (look.suit) add(f, g.cuff!, M.cloth, 0xffffff);
     if (worker) add(f, g.cuff!, M.cloth, 0x3a3d44);
     add(f, g.hand!, worker ? M.cloth : M.skin, worker ? 0x3a3d44 : skin);
   }

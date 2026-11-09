@@ -1179,6 +1179,13 @@ export class Sorter implements Scene3D {
       columnsSouth: COLUMNS,
     });
     this.party = new Party(this, v(PLATFORM_X - 0.6, PLATFORM_Y + 0.0, 0), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
+    // The manager (in a suit, no helmet) walks a round inside the loop, past the chute tables.
+    {
+      const zi = LOOP_ZH - 2.1;
+      const x0 = PLATFORM_X + 5.5;
+      const x1 = LX + STRAIGHT - 1.5;
+      this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
+    }
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.buildBoards();
