@@ -41,6 +41,8 @@ export interface HumanLook {
   cap?: number;
   skin?: number;
   hair?: number;
+  /** Over-ear headphones in this colour (someone who dances a little while working). */
+  headphones?: number;
 }
 
 // Shared geometry: built once. Front is +z. Each joint's parts are merged per
@@ -149,9 +151,14 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     // Father Christmas: a full white beard and moustache, and a sack over his shoulder.
     beard: merge(ell(0.085, 0.1, 0.06, 0, 0.66, 0.06, 12), ell(0.05, 0.018, 0.02, 0, 0.715, 0.1, 8)),
     sack: ell(0.2, 0.26, 0.17, 0.06, 0.48, -0.24, 12),
+    // Headphones: a band from ear to ear over the head (wider over a helmet) and the ear cups.
+    phonesBand: new THREE.TorusGeometry(0.112, 0.012, 6, 18, Math.PI).translate(0, 0.75, 0),
+    phonesBandH: new THREE.TorusGeometry(0.142, 0.012, 6, 18, Math.PI).translate(0, 0.75, 0),
+    phonesCups: merge(ell(0.03, 0.045, 0.04, -0.11, 0.745, 0, 10), ell(0.03, 0.045, 0.04, 0.11, 0.745, 0, 10)),
+    phonesCupsH: merge(ell(0.03, 0.045, 0.04, -0.14, 0.745, 0, 10), ell(0.03, 0.045, 0.04, 0.14, 0.745, 0, 10)),
   };
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
-  for (const key of ['head', 'eyes', 'face', 'hair', 'hairLong', 'hairTail', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
+  for (const key of ['head', 'eyes', 'face', 'hair', 'hairLong', 'hairTail', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard', 'phonesBand', 'phonesBandH', 'phonesCups', 'phonesCupsH']) geo[key]!.translate(0, -NECK_Y, 0);
   return geo;
 }
 
@@ -180,6 +187,8 @@ const sharedMats = new WeakMap<FloorKit, Record<'cloth' | 'skin' | 'boots' | 'ha
 
 /** Every person built (their root), so a click can pick one to follow. */
 export const HUMANS: THREE.Object3D[] = [];
+/** The joints of every person, by their root (for gestures played on top of their own animation). */
+export const RIGS = new Map<THREE.Object3D, Human>();
 
 export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: number; ry: number }): Human {
   const g = shapes();
@@ -286,6 +295,12 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(f, g.hand!, worker ? M.cloth : M.skin, worker ? 0x3a3d44 : skin);
   }
   for (const l of [legL, legR]) add(l, g.crease!, M.cloth, look.trousers);
+  if (look.headphones) {
+    // Over-ear headphones: a band over the head (over the helmet for workers) and two cups.
+    const h = look.helmet !== undefined;
+    add(head, h ? g.phonesBandH! : g.phonesBand!, M.dark);
+    add(head, h ? g.phonesCupsH! : g.phonesCups!, M.hard, look.headphones);
+  }
   k.blobUnder(root, 0.8, 0.6);
   HUMANS.push(root);
   if (at) {
@@ -293,5 +308,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     root.rotation.y = at.ry;
     k.put(root);
   }
-  return { root, torso, armL, armR, foreL: fores[0]!, foreR: fores[1]!, head, legL, legR };
+  const human = { root, torso, armL, armR, foreL: fores[0]!, foreR: fores[1]!, head, legL, legR };
+  RIGS.set(root, human);
+  return human;
 }

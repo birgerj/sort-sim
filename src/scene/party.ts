@@ -40,7 +40,7 @@ const glowTex = (() => {
 
 export class Party {
   private group = new THREE.Group();
-  private dj: Human;
+  readonly dj: Human;
   private djBase: THREE.Vector3;
   private panel: THREE.MeshBasicMaterial;
   private fans: THREE.InstancedMesh;
@@ -55,6 +55,18 @@ export class Party {
   private readonly q = new THREE.Quaternion();
   private readonly t = new THREE.Vector3();
   private readonly up = new THREE.Vector3(0, 1, 0);
+
+  private boosted = false;
+
+  /** Another load of confetti now (the DJ was tapped). */
+  boost(): void {
+    this.boosted = true;
+  }
+
+  /** Where the booth is (for tapping it). */
+  get booth(): THREE.Vector3 {
+    return this.djBase;
+  }
 
   constructor(
     k: FloorKit,
@@ -171,9 +183,10 @@ export class Party {
     });
     this.spots.instanceMatrix.needsUpdate = true;
     (this.spots.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.5 * s.kick;
-    // Confetti when the groove comes in (bar 8 of every 32), falling over the loop.
+    // Confetti when the groove comes in (bar 8 of every 32), falling over the loop; or when the DJ is tapped.
     const bar = Math.floor(s.bar);
-    if (bar % 32 === 8 && bar !== this.lastDrop) {
+    if ((bar % 32 === 8 && bar !== this.lastDrop) || this.boosted) {
+      this.boosted = false;
       this.lastDrop = bar;
       const [x0, x1, z0, z1] = this.area;
       this.bits = [];

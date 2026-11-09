@@ -40,10 +40,14 @@ export class Crowd {
   private readonly a = new THREE.Matrix4();
   private readonly o = new THREE.Object3D();
   private readonly c = new THREE.Color();
+  /** The conga line: who is in it (front first), and the floor it winds round. */
+  private conga: number[] = [];
+  private floor: [number, number, number, number];
 
   /** The dance floor: x0…x1, z0…z1 (inside the loop). */
   constructor(k: FloorKit, x0: number, x1: number, z0: number, z1: number, count: number) {
     k.put(this.group, 'night');
+    this.floor = [x0, x1, z0, z1];
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.05 });
     const mk = (geo: THREE.BufferGeometry, m: THREE.Material = mat) => {
       const im = new THREE.InstancedMesh(geo, m, count);
@@ -111,7 +115,38 @@ export class Crowd {
     this.tiles.frustumCulled = false;
     this.group.add(this.tiles);
     for (const im of [...Object.values(this.parts), this.tiles]) im.userData.noInk = true;
+    // Fourteen dancers from all over the floor join the conga line when it starts.
+    for (let n = 0; n < 14; n++) this.conga.push(Math.floor(((n + 0.5) / 14) * count));
   }
+
+  /**
+   * Where a conga dancer is now (null: not in the line). Every 24 bars, for 36 beats: four beats to
+   * join, a long winding round of the dance floor, four beats back to their place.
+   */
+  private congaAt(n: number, d: Dancer, bt: number, out: { x: number; z: number; yaw: number; w: number }): boolean {
+    const t = (((bt - 48) % 96) + 96) % 96;
+    if (t >= 36) return false;
+    // A loop at the DJ's end of the floor (the west end), where people look most.
+    const [x0, , z0, z1] = this.floor;
+    const rx = 9;
+    const cx = x0 + 2 + rx;
+    const cz = (z0 + z1) / 2;
+    const rz = (z1 - z0) / 2 - 1.4;
+    // The leader goes round at a steady walk; each one 0.8 m behind the one in front.
+    const avg = (rx + rz) / 2;
+    const a = (Math.max(0, Math.min(32, t) - 4) * 0.9 - n * 0.8) / avg + Math.PI * 0.5;
+    const px = cx + Math.cos(a) * rx;
+    const pz = cz + Math.sin(a) * rz * (1 + 0.25 * Math.sin(a * 3));
+    // Into the line and out of it again.
+    const w = Math.min(1, t / 4, (36 - t) / 4);
+    const e = w * w * (3 - 2 * w);
+    out.x = d.x + (px - d.x) * e;
+    out.z = d.z + (pz - d.z) * e;
+    out.yaw = Math.atan2(-Math.sin(a) * rx, Math.cos(a) * rz);
+    out.w = e;
+    return true;
+  }
+  private readonly cg = { x: 0, z: 0, yaw: 0, w: 0 };
 
   update(dt: number, bt: number, s: CrowdInput): void {
     void dt;
@@ -136,8 +171,20 @@ export class Crowd {
       const t = bt + d.phase * 0.25;
       const bounce = Math.abs(Math.sin(t * Math.PI)) * 0.1 * hype + s.kick * 0.04;
       const sway = Math.sin(t * Math.PI * 0.5) * (d.style === 2 ? 0.35 : 0.12);
-      o.position.set(d.x, bounce, d.z);
-      o.rotation.set(0, d.yaw + sway, Math.sin(t * Math.PI) * 0.06);
+      const n = this.conga.indexOf(i);
+      const cg = n >= 0 && this.congaAt(n, d, bt, this.cg) ? this.cg : null;
+      if (cg) {
+        // In the conga: hands on the shoulders of the one in front, a kick to the side on every fourth beat.
+        let dy = cg.yaw - d.yaw;
+        while (dy > Math.PI) dy -= 2 * Math.PI;
+        while (dy < -Math.PI) dy += 2 * Math.PI;
+        const kick = Math.floor(bt) % 4 === 3 ? Math.sin((bt % 1) * Math.PI) : 0;
+        o.position.set(cg.x, bounce * 0.6, cg.z);
+        o.rotation.set(0, d.yaw + dy * cg.w, (Math.sin(t * Math.PI) * 0.06 + kick * 0.18) * (n % 2 ? 1 : -1));
+      } else {
+        o.position.set(d.x, bounce, d.z);
+        o.rotation.set(0, d.yaw + sway, Math.sin(t * Math.PI) * 0.06);
+      }
       o.scale.setScalar(d.size);
       o.updateMatrix();
       this.m.copy(o.matrix);
@@ -157,7 +204,12 @@ export class Crowd {
         r = -2.8;
         l = 0.2 * Math.sin(t * Math.PI);
       }
-      const wave = d.style === 3 ? Math.sin(t * Math.PI) * 0.6 : 0;
+      if (cg) {
+        // Arms straight forward (onto the shoulders in front).
+        l += (-1.45 - l) * cg.w;
+        r += (-1.45 - r) * cg.w;
+      }
+      const wave = d.style === 3 && !cg ? Math.sin(t * Math.PI) * 0.6 : 0;
       this.a.makeTranslation(-0.3, 1.46, 0).multiply(new THREE.Matrix4().makeRotationX(l));
       this.parts.armL.setMatrixAt(i, this.a.premultiply(this.m));
       this.parts.handL.setMatrixAt(i, this.a);
@@ -166,7 +218,7 @@ export class Crowd {
       this.parts.armR.setMatrixAt(i, this.a);
       this.parts.handR.setMatrixAt(i, this.a);
       // Glow sticks for the wavers.
-      if (d.style === 3) {
+      if (d.style === 3 && !cg) {
         this.parts.stick.setMatrixAt(i, this.a);
         this.parts.stick.setColorAt(i, this.c.copy(s.cols[i % s.cols.length]!).multiplyScalar(1.5 + s.hat));
       } else {
