@@ -1390,3 +1390,25 @@ input[type='range'] {
 .g-how p {
   margin-top: 4px;
 }
+
+@media (max-width: 480px) {
+  .g-seed {
+    flex-wrap: wrap;
+  }
+  .g-seed input {
+    flex: 1 1 100%;
+  }
+  .g-seed button {
+    flex: 1 1 0;
+  }
+}
+
+.sheet .g-actions button {
+  white-space: normal;
+}
+
+@media (max-width: 480px) {
+  .sheet .g-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

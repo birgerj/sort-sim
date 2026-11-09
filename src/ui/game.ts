@@ -60,7 +60,9 @@ export class GameUi {
 
   constructor(private music: Music) {
     this.session = Session.fromUrl();
-    this.seed = this.session?.seed ?? dailySeed(COUNTRY, new Date().toISOString().slice(0, 10));
+    // A shared link (?seed=NL-7KQ2M0) opens the briefing on that night.
+    const shared = parseSeed(new URLSearchParams(location.search).get('seed') ?? '');
+    this.seed = this.session?.seed ?? shared ?? dailySeed(COUNTRY, new Date().toISOString().slice(0, 10));
     this.loadSeed(this.seed);
     const head = el('div', 'sheet-head');
     const close = el('button', 'sheet-close');
@@ -77,6 +79,7 @@ export class GameUi {
     // The caption moves down, under this dock.
     document.body.classList.add('has-game');
     if (this.session) document.body.classList.add('gaming');
+    else if (shared) this.show('briefing');
   }
 
   /** Every frame. */
@@ -250,6 +253,10 @@ export class GameUi {
       mk('World', "The world's night of the day: everyone, one hall", () => worldSeed(today)),
       mk('Random', 'A new night', () => randomSeed(this.seed.country)),
     );
+    const sh = el('button', '', 'Share');
+    sh.title = 'A link to this night, for others to play';
+    sh.onclick = () => void shareNight(formatSeed(this.seed), `Play night ${formatSeed(this.seed)} in Sort sim`, sh);
+    seedRow.append(sh);
     const country = COUNTRIES.find((c) => c.id === this.seed.country.id)!;
     b.append(
       seedRow,
@@ -546,7 +553,7 @@ export class GameUi {
       tiles.append(t);
     }
     b.append(tiles);
-    const row = el('div', 'cols3');
+    const row = el('div', 'cols4 g-actions');
     const again = el('button', '', 'Same night again');
     again.onclick = () => {
       Session.clearSaved();
@@ -560,10 +567,31 @@ export class GameUi {
       this.buildDock();
       this.show('briefing');
     };
+    const share = el('button', '', 'Share');
+    share.title = 'A link to this night, for others to play';
+    share.onclick = () => void shareNight(s.code, `${sc} on night ${s.code} in Sort sim. Can you beat it?`, share);
     const free = el('button', 'primary', 'Free run');
     free.onclick = () => (location.href = Session.exitUrl());
-    row.append(again, replan, free);
+    row.append(again, replan, share, free);
     b.append(row);
+  }
+}
+
+/** Share a link to a night (the system share sheet, else the clipboard). */
+async function shareNight(code: string, text: string, btn: HTMLButtonElement): Promise<void> {
+  const q = new URLSearchParams();
+  q.set('seed', code);
+  const url = `${location.origin}${location.pathname}?${q}`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Sort sim night shift', text, url });
+      return;
+    }
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    btn.textContent = 'Link copied';
+    setTimeout(() => (btn.textContent = 'Share'), 2000);
+  } catch {
+    /* cancelled or no clipboard */
   }
 }
 
