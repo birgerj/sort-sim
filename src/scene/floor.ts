@@ -142,6 +142,9 @@ interface RobotView {
   beat: number;
   /** Party spin, by night on a parking spot. */
   spin: number;
+  /** A little act of its own: a pirouette, a sulk (turn away, roll off, come back), a shake. Drawn only. */
+  egg: { kind: 'spin' | 'sulk' | 'shake'; t0: number } | null;
+  eggBeat: number;
   /**
    * The curve driven during the current beat: from S, bending at C, to E (a
    * quadratic Bezier). Robots run half a cell behind the grid, from the middle
@@ -447,6 +450,20 @@ export class RobotFloor {
     this.updateProjectors(dt, bt, s);
   }
 
+  /**
+   * Tapped: a pirouette (once or twice), and on the third tap in a row it sulks (turns its back
+   * and rolls off a little way for a while). One that is driving only shakes its body.
+   */
+  poke(k: number, taps: number, bt: number): 'spin' | 'sulk' | 'shake' {
+    const r = this.robots[k]!;
+    const b = this.fleet.bots.find((x) => x.k === k)!;
+    const parked = b.state === 'idle' && !b.path.length;
+    const kind = !parked ? 'shake' : taps >= 3 ? 'sulk' : 'spin';
+    if (r.egg?.kind === 'sulk' && kind !== 'sulk') return 'sulk';
+    r.egg = { kind, t0: bt };
+    return kind;
+  }
+
   private updateRobots(dt: number, bt: number, s: { kick: number; dayShown: boolean; cols: THREE.Color[]; dance?: boolean }): void {
     const ph = bt - Math.floor(bt);
     for (const b of this.fleet.bots) {
@@ -494,9 +511,40 @@ export class RobotFloor {
       const party = !s.dayShown && s.dance !== false && b.state === 'idle' && !b.path.length;
       r.spin = party ? (Math.floor(bt) + b.k) * (Math.PI / 2) + ease(ph) * (Math.PI / 2) : r.spin * Math.exp(-dt * 6);
       if (!party) r.spin %= Math.PI * 2;
-      r.g.position.set(x, 0, z);
-      r.g.rotation.y = r.yaw + (party ? r.spin : 0);
-      r.top.position.y = TOP_Y + (party ? 0.06 * s.kick : 0);
+      // Bored on its parking spot by day: now and then a pirouette.
+      const parked = b.state === 'idle' && !b.path.length && !moving;
+      if (beat !== r.eggBeat) {
+        r.eggBeat = beat;
+        if (s.dayShown && parked && !r.egg && Math.random() < 1 / 900) r.egg = { kind: 'spin', t0: beat };
+      }
+      let ex = 0;
+      let ez = 0;
+      let eyaw = 0;
+      let hop = 0;
+      if (r.egg) {
+        const u = bt - r.egg.t0;
+        if (r.egg.kind === 'spin') {
+          // A full turn in two beats, with a little hop of the top.
+          eyaw = ease(Math.min(1, u / 2)) * Math.PI * 2;
+          hop = 0.05 * Math.sin(Math.min(1, u / 2) * Math.PI);
+          if (u >= 2) r.egg = null;
+        } else if (r.egg.kind === 'shake') {
+          // Busy: just a shake of the body, no.
+          eyaw = Math.sin(u * Math.PI * 4) * 0.25 * (1 - Math.min(1, u));
+          if (u >= 1) r.egg = null;
+        } else {
+          // Sulk: turn its back, roll off a little way, stay there a while, then come back.
+          const turn = ease(Math.min(1, u / 1.5)) - ease(Math.min(1, Math.max(0, (u - 8.5) / 1.5)));
+          eyaw = turn * Math.PI;
+          const off = ease(Math.min(1, Math.max(0, (u - 1.5) / 1.5))) - ease(Math.min(1, Math.max(0, (u - 6.5) / 2)));
+          ex = Math.sin(r.yaw + eyaw) * 0.6 * off;
+          ez = Math.cos(r.yaw + eyaw) * 0.6 * off;
+          if (u >= 10) r.egg = null;
+        }
+      }
+      r.g.position.set(x + ex, 0, z + ez);
+      r.g.rotation.y = r.yaw + (party ? r.spin : 0) + eyaw;
+      r.top.position.y = TOP_Y + (party ? 0.06 * s.kick : 0) + hop;
       r.glow.copy(s.cols[b.k % s.cols.length]!).multiplyScalar(0.4 + s.kick * (party ? 1.2 : 0.7));
       // Number plates on both sides, and the underglow, follow the robot.
       r.g.updateMatrix();
@@ -813,7 +861,7 @@ export class RobotFloor {
       const gm = new THREE.Color(0x3a7bff);
       const yaw = b.i === 0 ? Math.PI / 2 : -Math.PI / 2;
       const at = v(cellX(b.i), 0, cellZ(b.j));
-      this.robots.push({ g, top, glow: gm, num, yaw, yawFrom: yaw, yawTo: yaw, beat: -1, spin: 0, S: at.clone(), C: at.clone(), E: at.clone(), ease: { in: false, out: false } });
+      this.robots.push({ g, top, glow: gm, num, yaw, yawFrom: yaw, yawTo: yaw, beat: -1, spin: 0, egg: null, eggBeat: -1, S: at.clone(), C: at.clone(), E: at.clone(), ease: { in: false, out: false } });
     }
   }
 

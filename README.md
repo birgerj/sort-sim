@@ -90,6 +90,39 @@ Everything moves on the beat of the music: belts move 2 m per beat, parcels
 are diverted on beats, robots move one cell per beat, forklifts and workers
 do one move per beat.
 
+## Easter eggs
+
+Little jokes for those who look closely, or tap things:
+
+- **Dock 6** has a picker who does not walk: he throws the parcels into the
+  cages. Except fragile ones: those he carries over on tiptoe.
+- **Dock 3**'s picker wears headphones and nods along while working, with a
+  little dance when idle. Tap him and he is caught: stock-still, then very busy.
+- Now and then a **Mexican wave** runs along the docks, a loader nearly trips
+  on a longer walk, a missort earns a facepalm, and after a cleardown the
+  loader stretches. When the music turns to acid techno, someone plays air
+  guitar.
+- A **rubber duck** comes through very rarely (for the developer; it quacks
+  when tapped). A parcel on its third round of the loop turns a little green
+  and sways.
+- A parcel with **little legs** sometimes jumps off a pickup table and makes a
+  run for it, until someone catches it and carries it back.
+- A **ginger cat** sleeps in odd places (a break-area chair, the pallet stack,
+  the cardboard bale, a bin lid) and wanders between them. Tap it and it bolts.
+- In the break area someone is on the phone, pacing, and takes selfies.
+  Walkers passing each other give a **high five** (and sometimes miss). Tap the
+  **coffee machine** and people nearby come over for a coffee.
+- The cleaner sometimes draws a **heart** on the floor inside the loop with
+  the scrubber; it dries up after a while.
+- Someone hides behind the pigeonholes at **manual sorting** and peeks out at
+  the camera.
+- **Taps:** a person waves (once), bows (twice) or does a cartwheel (three
+  times in a row). A forklift honks a note of the chord that is playing; keep
+  tapping for a riff. A parked robot does a pirouette; on the third tap it
+  sulks off. Parked robots also spin now and then when they are bored.
+- **At night:** a conga line winds round the DJ's end of the dance floor every
+  24 bars; tap the DJ for an airhorn and an extra load of confetti.
+
 ## Logistics
 
 - **Hub time** starts at 18:00; a beat is 15 seconds of hub time.

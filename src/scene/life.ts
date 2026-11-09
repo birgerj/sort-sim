@@ -13,8 +13,27 @@ import { buildForklift } from './forklift';
 import { XMAS } from '../sim/season';
 import { buildHuman, type Human } from './people';
 import { gait, relaxArms, settle, sit, swingArms } from './motion';
+import { ANTICS, type ActKind } from './antics';
 
 type V2 = [number, number];
+
+/** One step of a walker's detour from its round (a coffee, a chase): go somewhere, then maybe do something there. */
+export interface Errand {
+  /** Where to go: a point, or a function that gives it every frame (null: stay). */
+  to?: V2 | (() => V2 | null);
+  /** Metres per beat (default: walking pace). */
+  speed?: number;
+  /** Beats to stay after arriving. */
+  wait?: number;
+  /** Face this point while staying. */
+  face?: V2;
+  /** Play this act on arriving. */
+  act?: ActKind;
+  /** Called on arriving. */
+  then?: () => void;
+  /** Arms out in front, carrying something. */
+  carry?: boolean;
+}
 
 /** A closed polyline on the floor, walked at constant speed. */
 class Route {
@@ -46,9 +65,20 @@ interface Walker {
   /** Metres per beat. */
   speed: number;
   s: number;
+  /** Where on the round it started, and the beats spent off the round (on errands). */
+  s0: number;
+  away: number;
   yaw: number;
   /** Seated (a driver): no walking legs. */
   seated?: THREE.Group;
+  /** A detour in progress, step by step; when done it walks back to where it left its round. */
+  errand?: { steps: Errand[]; i: number; until: number; arrived: boolean };
+  /** Where it is while on an errand, and its step phase. */
+  x: number;
+  z: number;
+  gait: number;
+  /** No high five again before this beat. */
+  cool: number;
 }
 
 export interface LifeLayout {
@@ -72,6 +102,17 @@ export interface LifeLayout {
 export class Life {
   private walkers: Walker[] = [];
   private group = new THREE.Group();
+  private lastBt = 0;
+  /** The scrubber, and the shiny trail it leaves when it draws a heart on the floor. */
+  private scrubber: Walker | null = null;
+  private trail!: THREE.InstancedMesh;
+  private trailMat!: THREE.MeshBasicMaterial;
+  private trailN = 0;
+  private trailFrom: V2 | null = null;
+  private drawing = false;
+  private trailDone = -1;
+  private nextDoodle = 48;
+  private readonly o = new THREE.Object3D();
 
   constructor(
     private k: FloorKit,
@@ -84,13 +125,22 @@ export class Life {
     this.buildBreakArea();
     this.buildExtras();
     this.buildFloorNames();
+    this.buildTrail();
   }
 
   update(dt: number, bt: number): void {
-    void dt;
+    const db = Math.max(0, Math.min(1, bt - this.lastBt));
+    this.lastBt = bt;
     for (const w of this.walkers) {
-      w.s = bt * w.speed;
+      if (w.errand) {
+        w.away += db;
+        this.runErrand(w, bt, db, dt);
+        continue;
+      }
+      w.s = w.s0 + (bt - w.away) * w.speed;
       const p = w.route.at(w.s);
+      w.x = p.x;
+      w.z = p.z;
       let d = p.yaw - w.yaw;
       while (d > Math.PI) d -= 2 * Math.PI;
       while (d < -Math.PI) d += 2 * Math.PI;
@@ -119,13 +169,242 @@ export class Life {
       } else swingArms(w.h, swing, 1);
       settle(w.h, dt);
     }
+    this.highFives(bt);
+    this.updateTrail(bt);
+    // Now and then the cleaner draws a heart on the floor with the scrubber (inside the loop, by day).
+    if (this.group.visible && bt >= this.nextDoodle) {
+      this.nextDoodle = bt + 160 + Math.random() * 160;
+      if (Math.random() < 0.7) this.doodle();
+    }
+  }
+
+  /** Walkers on their rounds who are free (not driving, not on an errand), with their position. */
+  private free(): Walker[] {
+    // (Not someone with a tablet or a sack in their hands.)
+    return this.walkers.filter((w) => !w.seated && !w.errand && w.h.root.parent && !w.h.armR.userData.hold && !w.h.armR.userData.wave);
+  }
+
+  /** Send a walker on a detour; afterwards it walks back to its round. */
+  send(w: Walker, steps: Errand[]): void {
+    w.errand = { steps, i: 0, until: -1, arrived: false };
+    w.x = w.h.root.position.x;
+    w.z = w.h.root.position.z;
+  }
+
+  /** The nearest free walker within `max` metres of (x, z) (by day only), or null. */
+  nearest(x: number, z: number, max = 30): Walker | null {
+    if (!this.group.visible) return null;
+    let best: Walker | null = null;
+    let bd = max;
+    for (const w of this.free()) {
+      const d = Math.hypot(w.x - x, w.z - z);
+      if (d < bd) {
+        bd = d;
+        best = w;
+      }
+    }
+    return best;
+  }
+
+  /** The person of a walker (for acts). */
+  human(w: Walker): Human {
+    return w.h;
+  }
+
+  /** Coffee! Up to three walkers nearby wander over to the coffee machine, have a sip, and go back. */
+  coffee(): number {
+    if (!this.group.visible) return 0;
+    const at: V2 = [-41.5, 31.0];
+    const spots: V2[] = [[-41.5, 30.55], [-40.6, 30.25], [-42.4, 30.25]];
+    const ws = this.free()
+      .map((w) => ({ w, d: Math.hypot(w.x - at[0], w.z - at[1]) }))
+      .filter((x) => x.d < 45)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 3);
+    ws.forEach(({ w }, i) => {
+      // (Round the east side of the control room, then up to the machine.)
+      const via: V2[] = w.z < 22 ? [[-42.3, 18.6], [-42.3, 28.6]] : [];
+      this.send(w, [...via.map((to) => ({ to, speed: 1.1 })), { to: spots[i]!, speed: 0.9, face: at, wait: 1 + i }, { act: 'drink', face: at, wait: 5 }]);
+    });
+    return ws.length;
+  }
+
+  /** One step of an errand per frame: walk to its point, then do its thing and wait. */
+  private runErrand(w: Walker, bt: number, db: number, dt: number): void {
+    const e = w.errand!;
+    const st = e.steps[e.i];
+    // All steps done: back to the round, where it left it.
+    const home = w.route.at(w.s);
+    const to = st ? (typeof st.to === 'function' ? st.to() : st.to ?? null) : ([home.x, home.z] as V2);
+    const speed = st?.speed ?? Math.max(1, w.speed * 1.5);
+    let moved = 0;
+    if (!e.arrived && to) {
+      const dx = to[0] - w.x;
+      const dz = to[1] - w.z;
+      const d = Math.hypot(dx, dz);
+      const step = speed * db;
+      if (d <= step || d < 0.02) {
+        w.x = to[0];
+        w.z = to[1];
+        moved = d;
+        if (typeof st?.to !== 'function') this.arrive(w, bt);
+      } else {
+        w.x += (dx / d) * step;
+        w.z += (dz / d) * step;
+        moved = step;
+        this.turn(w, Math.atan2(dx, dz), dt);
+      }
+      // A function target (a moving thing) counts as reached when close.
+      if (typeof st?.to === 'function' && d < 0.55) this.arrive(w, bt);
+    } else if (!e.arrived) this.arrive(w, bt);
+    if (e.arrived && st?.face) this.turn(w, Math.atan2(st.face[0] - w.x, st.face[1] - w.z), dt);
+    if (e.arrived && bt >= e.until) {
+      if (!st) {
+        // Back on the round.
+        w.errand = undefined;
+      } else {
+        e.i++;
+        e.arrived = false;
+      }
+    }
+    const r = w.seated ?? w.h.root;
+    r.position.set(w.x, 0, w.z);
+    r.rotation.y = w.yaw;
+    if (w.seated) return;
+    // Steps as long as the stride: faster when running.
+    w.gait += moved / 0.75;
+    const swing = Math.sin(w.gait * Math.PI) * Math.min(0.8, 0.3 + speed * 0.15) * (moved > 0 ? 1 : 0);
+    w.h.legL.rotation.x = swing;
+    w.h.legR.rotation.x = -swing;
+    const carry = st?.carry;
+    w.h.armL.rotation.x = carry ? -1.3 : -swing * 0.8;
+    w.h.armR.rotation.x = carry ? -1.3 : w.h.armR.userData.hold ? -0.9 : swing * 0.8;
+    w.h.root.position.y = moved > 0 ? Math.abs(Math.cos(w.gait * Math.PI)) * 0.03 * Math.min(2, speed) : 0;
+  }
+
+  private arrive(w: Walker, bt: number): void {
+    const e = w.errand!;
+    if (e.arrived) return;
+    e.arrived = true;
+    const st = e.steps[e.i];
+    e.until = bt + (st?.wait ?? 0);
+    if (!st) return;
+    if (st.act) ANTICS.play(w.h, st.act, bt);
+    st.then?.();
+  }
+
+  private turn(w: Walker, want: number, dt: number): void {
+    let d = want - w.yaw;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    w.yaw += d * Math.min(1, dt * 8);
+  }
+
+  /** Two walkers passing each other give each other a high five (and now and then miss). */
+  private highFives(bt: number): void {
+    const ws = this.free();
+    for (let i = 0; i < ws.length; i++) {
+      for (let j = i + 1; j < ws.length; j++) {
+        const a = ws[i]!;
+        const b = ws[j]!;
+        if (bt < a.cool || bt < b.cool) continue;
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        // Coming towards each other, about a beat apart, passing side by side.
+        const fa = [Math.sin(a.yaw), Math.cos(a.yaw)];
+        const fb = [Math.sin(b.yaw), Math.cos(b.yaw)];
+        if (fa[0]! * fb[0]! + fa[1]! * fb[1]! > -0.8) continue;
+        const along = dx * fa[0]! + dz * fa[1]!;
+        const across = dx * Math.cos(a.yaw) - dz * Math.sin(a.yaw);
+        if (along < 0.9 || along > 1.5 || Math.abs(across) > 1.0 || Math.abs(across) < 0.3) continue;
+        const miss = Math.random() < 0.2;
+        ANTICS.play(a.h, 'highfive', bt, { side: Math.sign(across), miss });
+        // (The other one has the first one on the same side of its own body.)
+        ANTICS.play(b.h, 'highfive', bt, { side: Math.sign(across), miss });
+        a.cool = b.cool = bt + 12;
+      }
+    }
+  }
+
+  /** The scrubber leaves its round, draws a heart on the floor inside the loop, and goes back. */
+  private doodle(): void {
+    const w = this.scrubber;
+    if (!w || w.errand) return;
+    const cx = -36;
+    const cz = 2.2;
+    const heart: V2[] = [];
+    // The classic heart curve, about 4 m wide, its point to the south (towards the camera's usual side).
+    for (let i = 0; i <= 28; i++) {
+      const t = (i / 28) * Math.PI * 2;
+      const hx = 16 * Math.sin(t) ** 3;
+      const hz = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      heart.push([cx + hx * 0.13, cz - hz * 0.13]);
+    }
+    const steps: Errand[] = [{ to: [cx, 10.9], speed: 0.8 }, { to: [cx, 5.6], speed: 0.6 }, { to: heart[0]!, speed: 0.6, then: () => this.startTrail() }];
+    for (const p of heart.slice(1)) steps.push({ to: p, speed: 0.55 });
+    steps.push({ to: heart[0]!, speed: 0.55, then: () => this.stopTrail() }, { to: [cx, 5.6], speed: 0.6 }, { to: [cx, 10.9], speed: 0.8 });
+    this.send(w, steps);
+  }
+
+  private startTrail(): void {
+    this.trailN = 0;
+    this.trail.count = 0;
+    this.trailFrom = null;
+    this.drawing = true;
+    this.trailDone = -1;
+    this.trailMat.opacity = 0.6;
+  }
+
+  private stopTrail(): void {
+    this.drawing = false;
+    this.trailDone = this.lastBt;
+  }
+
+  /** Lay the trail behind the scrubber's brush while it draws; let it dry (fade) afterwards. */
+  private updateTrail(bt: number): void {
+    const w = this.scrubber;
+    if (w && this.drawing) {
+      // The brush is behind the driver.
+      const bx = w.x - Math.sin(w.yaw) * 0.8;
+      const bz = w.z - Math.cos(w.yaw) * 0.8;
+      if (!this.trailFrom || Math.hypot(bx - this.trailFrom[0], bz - this.trailFrom[1]) > 0.18) {
+        if (this.trailN < TRAIL_MAX) {
+          this.o.position.set(bx, 0.016, bz);
+          this.o.rotation.set(-Math.PI / 2, 0, -w.yaw);
+          this.o.updateMatrix();
+          this.trail.setMatrixAt(this.trailN++, this.o.matrix);
+          this.trail.count = this.trailN;
+          this.trail.instanceMatrix.needsUpdate = true;
+        }
+        this.trailFrom = [bx, bz];
+      }
+    }
+    if (this.trailDone >= 0) {
+      // It dries in about 40 beats.
+      const f = (bt - this.trailDone) / 40;
+      this.trailMat.opacity = 0.6 * Math.max(0, 1 - f);
+      if (f >= 1) {
+        this.trail.count = 0;
+        this.trailDone = -1;
+      }
+    }
+  }
+
+  private buildTrail(): void {
+    // Wet floor: a shiny, pale blue sheen, see-through.
+    this.trailMat = new THREE.MeshBasicMaterial({ color: 0x7fa8cf, transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    this.trail = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.0, 0.32), this.trailMat, TRAIL_MAX);
+    this.trail.count = 0;
+    this.trail.frustumCulled = false;
+    this.trail.userData.noInk = true;
+    this.group.add(this.trail);
   }
 
   /** Someone walking a round along `pts` (metres per beat), for routes the scene knows best. */
   addWalker(look: Parameters<typeof buildHuman>[1], pts: V2[], speed: number): void {
     const h = buildHuman(this.k, look);
     this.group.add(h.root);
-    this.walkers.push({ h, route: new Route(pts), speed, s: 0, yaw: 0 });
+    this.walkers.push(walker(h, new Route(pts), speed, 0));
   }
 
   // ---------- people and the scrubber ----------
@@ -144,7 +423,7 @@ export class Life {
         h.armR.userData.hold = true;
       }
       const route = new Route(pts);
-      this.walkers.push({ h, route, speed, s: phase * route.len, yaw: 0 });
+      this.walkers.push(walker(h, route, speed, phase * route.len));
     };
     // Team leader with a tablet, round the manual sorting and control room.
     walk({ shirt: 0x6b3fd1, trousers: 0x22283f, cap: 0x1d1d1f }, [[-44, 15.3], [-26, 15.3], [-26, 17.3], [-44, 17.3]], 0.7, 0, true);
@@ -154,10 +433,11 @@ export class Life {
       const h = buildHuman(k, { shirt: 0xc8102e, trousers: 0xc8102e, skin: 0xf0cfb0, hair: 0xffffff, santa: true });
       this.group.add(h.root);
       h.armR.userData.wave = true;
-      this.walkers.push({ h, route: new Route([[-55, 15], [-46.5, 15], [-46.5, 18.3], [-55, 18.3]]), speed: 0.35, s: 0, yaw: 0 });
+      this.walkers.push(walker(h, new Route([[-55, 15], [-46.5, 15], [-46.5, 18.3], [-55, 18.3]]), 0.35, 0));
     }
     walk({ shirt: 0x2fa58f, trousers: 0x3a3d44, vest: 0xc8ff3a, helmet: 0xffffff }, [[-58, 12.6], [-28, 12.6], [-28, 13.6], [-58, 13.6]], 0.6, 0.2);
-    walk({ shirt: 0xf3f4f6, trousers: 0x22283f, vest: 0xf2a51a, helmet: 0xf2c200 }, [[-58, 12.6], [-28, 12.6], [-28, 13.6], [-58, 13.6]], 0.6, 0.7);
+    // (The other way round, a little to the side: they pass each other, and give each other a high five.)
+    walk({ shirt: 0xf3f4f6, trousers: 0x22283f, vest: 0xf2a51a, helmet: 0xf2c200 }, [[-28, 13.2], [-58, 13.2], [-58, 13.0], [-28, 13.0]], 0.6, 0.7);
     // Cleaner on a ride-on scrubber, under the high infeeds.
     const sc = new THREE.Group();
     this.group.add(sc);
@@ -181,7 +461,8 @@ export class Life {
     driver.root.position.y = 0.0;
     sc.add(seat);
     seat.position.y = 0;
-    this.walkers.push({ h: { ...driver, root: new THREE.Group() }, route: new Route([[-57, 10.6], [-28, 10.6], [-28, 11.4], [-57, 11.4]]), speed: 0.5, s: 0, yaw: 0, seated: sc });
+    this.scrubber = { ...walker({ ...driver, root: new THREE.Group() }, new Route([[-57, 10.6], [-28, 10.6], [-28, 11.4], [-57, 11.4]]), 0.5, 0), seated: sc };
+    this.walkers.push(this.scrubber);
   }
 
   // ---------- static details ----------
@@ -364,6 +645,13 @@ export class Life {
     name('ROBOT ZONE', 40, 31.8, 10, 0, '#1755fe');
     name('STORAGE', 112, 12, 8, Math.PI / 2, '#2fa58f');
   }
+}
+
+/** Most pieces of trail a heart takes. */
+const TRAIL_MAX = 260;
+
+function walker(h: Human, route: Route, speed: number, s0: number): Walker {
+  return { h, route, speed, s: s0, s0, away: 0, yaw: 0, x: 0, z: 0, gait: 0, cool: 0 };
 }
 
 // ---------- textures ----------

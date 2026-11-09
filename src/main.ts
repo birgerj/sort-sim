@@ -24,6 +24,7 @@ import { Hud, loadSettings, type TimeMode } from './ui/hud';
 import { Pwa } from './ui/pwa';
 import { WalkControls } from './ui/walk';
 import { GameUi } from './ui/game';
+import { ANTICS } from './scene/antics';
 
 const q = new URLSearchParams(location.search);
 
@@ -166,7 +167,7 @@ function frame(now: number): void {
     bpm: music.bpm,
   });
   // Hall sounds: effects near the camera, and the belts' hum.
-  for (const sd of scene.takeSounds()) music.sfx(sd.kind, sd.vol);
+  for (const sd of scene.takeSounds()) music.sfx(sd.kind, sd.vol, sd.n);
   music.setHum(scene.humLevel());
   // The music follows how busy the hub is: 60 BPM ambient at the lowest rate, up to 160 BPM
   // techno with an acid line at the highest; it moves a few BPM per bar.
@@ -192,4 +193,4 @@ requestAnimationFrame((t) => {
 });
 
 // For the console and the screenshot script.
-Object.assign(window, { sortsim: { scene, music, settings, setTod: (t: number) => (tod = t) } });
+Object.assign(window, { sortsim: { scene, music, settings, antics: ANTICS, setTod: (t: number) => (tod = t) } });

@@ -43,6 +43,10 @@ import { XMAS } from '../sim/season';
 import { Party } from './party';
 import { Roof, ceilingWithLights, roofLights } from './roof';
 import { Crowd } from './crowd';
+import { ANTICS } from './antics';
+import { Eggs } from './eggs';
+import { RIGS } from './people';
+import type { Sfx } from '../audio/music';
 import { defaultNightFx, type NightFx } from './nightFx';
 import { Batcher } from './batch';
 import { Trucks } from './trucks';
@@ -668,6 +672,39 @@ function noise(g: CanvasRenderingContext2D, w: number, h: number, base: number, 
   g.putImageData(id, 0, 0);
 }
 
+/** A seasick parcel's green (third round on the loop). */
+const SICK = new THREE.Color(0x8fd14f);
+
+/**
+ * A rubber duck in a unit box (scaled per parcel like the others), facing +z: body, tail,
+ * head, wings, an orange beak and black eyes (as vertex colours; the yellow is the instance colour).
+ */
+function duckGeometry(): THREE.BufferGeometry {
+  const ell = (rx: number, ry: number, rz: number, x: number, y: number, z: number, col: [number, number, number]) => {
+    const g = new THREE.SphereGeometry(1, 18, 12).scale(rx, ry, rz).translate(x, y, z).toNonIndexed();
+    const n = g.attributes.position!.count;
+    g.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: n }, () => col).flat(), 3));
+    return g;
+  };
+  const W: [number, number, number] = [1, 1, 1];
+  const parts = [
+    ell(0.44, 0.3, 0.46, 0, -0.2, -0.04, W),
+    // The tail, pointing up at the back.
+    ell(0.16, 0.2, 0.14, 0, -0.04, -0.42, W),
+    ell(0.26, 0.26, 0.25, 0, 0.22, 0.18, W),
+    ell(0.1, 0.17, 0.3, -0.37, -0.16, -0.06, W),
+    ell(0.1, 0.17, 0.3, 0.37, -0.16, -0.06, W),
+    ell(0.13, 0.05, 0.13, 0, 0.14, 0.44, [1, 0.55, 0.9]),
+    ell(0.045, 0.05, 0.03, -0.12, 0.3, 0.4, [0.05, 0.05, 0.05]),
+    ell(0.045, 0.05, 0.03, 0.12, 0.3, 0.4, [0.05, 0.05, 0.05]),
+  ];
+  const g = mergeGeometries(parts)!;
+  // Sit it on the bottom of the box: nothing below −0.5.
+  g.computeBoundingBox();
+  g.translate(0, -0.5 - g.boundingBox!.min.y, 0);
+  return g;
+}
+
 /** 'dock': at a truck dock, moved by the Docks (worker or slide into a roll cage). */
 type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual' | 'held';
 
@@ -680,8 +717,8 @@ export interface Parcel {
   /** Glow colour once scanned: destination colour, or the track colour for lead parcels. */
   glow: THREE.Color;
   lead: boolean;
-  /** 0 box, 1 polybag, 2 tube. */
-  shape: 0 | 1 | 2;
+  /** 0 box, 1 polybag, 2 tube, 3 a rubber duck (very rarely; it quacks when tapped). */
+  shape: 0 | 1 | 2 | 3;
   scanned: boolean;
   flash: number;
   /** Chute index, or −1 for the store. */
@@ -998,7 +1035,7 @@ export class Sorter implements Scene3D {
 
   // Parcels.
   private parcels: Parcel[] = [];
-  /** Parcels by shape (0 box, 1 polybag, 2 tube): one instanced mesh and glow buffer each. */
+  /** Parcels by shape (0 box, 1 polybag, 2 tube, 3 duck): one instanced mesh and glow buffer each. */
   private shapes: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute }[] = [];
   private labelMesh!: THREE.InstancedMesh;
   /** Displays on the scan tunnels. */
@@ -1061,6 +1098,8 @@ export class Sorter implements Scene3D {
   private party!: Party;
   private roof!: Roof;
   private crowd!: Crowd;
+  /** The little jokes hidden in the hall. */
+  private eggs!: Eggs;
   /** Instanced parts of repeated models (robots, people, forklifts, cages, contact shadows). */
   private batcher!: Batcher;
   /** Trailers behind the dock doors: north 0–19 (roll cages), then the open south doors (boxes). */
@@ -1316,6 +1355,9 @@ export class Sorter implements Scene3D {
     }
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
+    this.eggs = new Eggs(this);
+    this.eggs.link({ life: this.life, docks: this.docks, party: this.party, floor: this.floor, tableY: DECK_Y });
+    ANTICS.build(this);
     this.buildBoards();
     this.buildDay();
     this.roof = new Roof(this, ROOF_LIGHTS, HH);
@@ -1520,6 +1562,8 @@ export class Sorter implements Scene3D {
     });
     const bar = i.playing && i.bar !== undefined ? i.bar : bt / 4;
 
+    // People's little acts: give back their owners' own pose before anyone animates them.
+    ANTICS.pre();
     if (crossed) {
       for (let b = Math.floor(prev) + 1; b <= Math.floor(bt); b++) this.onBeat(b);
     }
@@ -1581,7 +1625,10 @@ export class Sorter implements Scene3D {
       fullBoxes: this.floor.bins.filter((b) => !b.open).length,
       speed: this.speed,
     });
-    this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown, dance: this.fx.dance });
+    this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown, dance: this.fx.dance, bpm: this.bpmNow });
+    this.eggs.update(dt, bt, this.dayShown !== false, this.camera.position);
+    // ...and their acts on top, once everyone has been animated.
+    ANTICS.post(bt);
     this.updateCamera(dt, bar, i.travelSpeed);
     this.bakeShadows();
     if (this.shadowMode === 'live') {
@@ -1795,7 +1842,14 @@ export class Sorter implements Scene3D {
       const m = o as THREE.Mesh;
       if (!m.isMesh || !m.castShadow) return;
       const im = m as THREE.InstancedMesh;
-      list.push({ m, w: m.matrixWorld.clone(), v: im.isInstancedMesh ? im.instanceMatrix.version : 0 });
+      // (The jokes move only now and then (the cat, the runaway parcel): never in the baked shadow.)
+      let o2: THREE.Object3D | null = m;
+      let joke = false;
+      while (o2) {
+        if (o2 === this.eggs?.group) joke = true;
+        o2 = o2.parent;
+      }
+      list.push({ m, w: joke ? new THREE.Matrix4().makeScale(0, 0, 0) : m.matrixWorld.clone(), v: im.isInstancedMesh ? im.instanceMatrix.version : 0 });
     });
     this.moverWatch = { list, until: this.time + 1.5 };
   }
@@ -1961,6 +2015,8 @@ export class Sorter implements Scene3D {
   private newParcel(): Parcel | null {
     if (this.parcels.length >= MAX_PARCELS) return null;
     const r = Math.random();
+    // Very rarely: a rubber duck, on its own, with a label round its neck.
+    if (r < 0.0025) return this.addParcel(this.duckParcel());
     // Flat envelopes, soft polybags, tubes and boxes.
     const env = r < 0.12;
     const bag = !env && r < 0.3;
@@ -2016,6 +2072,51 @@ export class Sorter implements Scene3D {
       dead: false,
     };
     if (p.gift) p.col.set(pick([0xc8102e, 0x1f7a3a, 0xe8b923, 0x1755fe, 0xd6339a, 0xf3f4f6]));
+    return this.addParcel(p);
+  }
+
+  /** A rubber duck: yellow, about the size of a small parcel, and for the developer. */
+  private duckParcel(): Parcel {
+    return {
+      id: this.nextId++,
+      w: 0.32,
+      h: 0.34,
+      d: 0.4,
+      kg: 0.12,
+      tags: [],
+      born: this.hubTime(),
+      col: new THREE.Color(0xffd21f),
+      glow: new THREE.Color(),
+      lead: false,
+      shape: 3,
+      scanned: false,
+      flash: 0,
+      dest: 0,
+      pc: 0,
+      mode: 'fixed',
+      pathKind: 'lane',
+      lane: 0,
+      t0: 0,
+      t1: 1,
+      ease: 0,
+      sPrev: 0,
+      sIn: 0,
+      tIn: 0,
+      divertAt: 0,
+      tray: -1,
+      from: new THREE.Vector3(),
+      to: new THREE.Vector3(),
+      off: new THREE.Vector3(),
+      shuttle: 0,
+      pos: new THREE.Vector3(),
+      q: new THREE.Quaternion(),
+      yawQ: new THREE.Quaternion().setFromAxisAngle(UP, rnd(-0.25, 0.25)),
+      vel: new THREE.Vector3(),
+      dead: false,
+    };
+  }
+
+  private addParcel(p: Parcel): Parcel {
     this.assign(p);
     p.labelCell = this.freeCells.pop() ?? 0;
     if (p.labelCell) this.drawLabel(p.labelCell, p);
@@ -2689,7 +2790,7 @@ export class Sorter implements Scene3D {
   private writeParcels(): void {
     const kick = 0.55 + this.kick * 0.8;
     const o = this.o;
-    const counts = [0, 0, 0];
+    const counts = [0, 0, 0, 0];
     let labels = 0;
     let tapes = 0;
     let ribbons = 0;
@@ -2697,7 +2798,7 @@ export class Sorter implements Scene3D {
     for (const p of this.parcels) {
       const set = this.shapes[p.shape]!;
       const k = counts[p.shape]!;
-      if (k >= MAX_PARCELS) continue;
+      if (k >= (p.shape === 3 ? 16 : MAX_PARCELS)) continue;
       counts[p.shape]!++;
       this.instParcels[p.shape]![k] = p;
       this.n.set(0, 1, 0).applyQuaternion(p.q);
@@ -2705,8 +2806,14 @@ export class Sorter implements Scene3D {
       o.quaternion.copy(p.q);
       o.scale.set(p.w, p.h, p.d);
       o.updateMatrix();
+      // Seasick: a parcel on its third round (or more) turns a little green and sways on its tray.
+      const sick = p.mode === 'loop' && (p.laps ?? 0) >= 2;
+      if (sick) {
+        o.quaternion.multiply(this.qa.setFromAxisAngle(this.t.set(0, 0, 1), Math.sin(this.time * 5 + p.id) * 0.14));
+        o.updateMatrix();
+      }
       set.mesh.setMatrixAt(k, o.matrix);
-      set.mesh.setColorAt(k, p.col);
+      set.mesh.setColorAt(k, sick ? this.c.copy(p.col).lerp(SICK, 0.55 + 0.1 * Math.sin(this.time * 3 + p.id)) : p.col);
       if (p === this.follow) {
         // The followed parcel gets a blue outline (a slightly larger box drawn inside out).
         o.scale.set(p.w + 0.12, p.h + 0.12, p.d + 0.12);
@@ -2729,8 +2836,8 @@ export class Sorter implements Scene3D {
       glow[k * 3] = this.c.r + p.flash * 0.6;
       glow[k * 3 + 1] = this.c.g + p.flash * 0.6;
       glow[k * 3 + 2] = this.c.b + p.flash * 0.6;
-      // Shipping label on top (tubes have theirs wrapped round, not drawn).
-      if (p.shape === 2) continue;
+      // Shipping label on top (tubes have theirs wrapped round, not drawn; a duck has none).
+      if (p.shape >= 2) continue;
       // Boxes get a strip of tape along the top first.
       if (p.gift) {
         // A present: a ribbon both ways round the top.
@@ -4281,7 +4388,7 @@ export class Sorter implements Scene3D {
     plastic.roughness = 0.35;
     plastic.onBeforeCompile = mat.onBeforeCompile;
     plastic.customProgramCacheKey = () => 'parcel-plastic';
-    const geos = [
+    const geos: THREE.BufferGeometry[] = [
       // Slightly rounded boxes: a softer, more real silhouette than sharp cubes.
       new RoundedBoxGeometry(1, 1, 1, 2, 0.06),
       // Polybags: a soft pillow.
@@ -4289,11 +4396,18 @@ export class Sorter implements Scene3D {
       // Tubes, lying along their length.
       new THREE.CylinderGeometry(0.5, 0.5, 1, 18).rotateX(Math.PI / 2),
     ];
+    // The rubber duck: its own shiny plastic, with an orange beak and black eyes painted on (vertex colours).
+    geos.push(duckGeometry());
+    const duckMat = plastic.clone();
+    duckMat.vertexColors = true;
+    duckMat.roughness = 0.25;
+    duckMat.onBeforeCompile = mat.onBeforeCompile;
+    duckMat.customProgramCacheKey = () => 'parcel-duck';
     geos.forEach((geo, k) => {
       const glow = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS * 3), 3);
       glow.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aGlow', glow);
-      const mesh = new THREE.InstancedMesh(geo, k === 1 ? plastic : mat, MAX_PARCELS);
+      const mesh = new THREE.InstancedMesh(geo, k === 1 ? plastic : k === 3 ? duckMat : mat, k === 3 ? 16 : MAX_PARCELS);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.setColorAt(0, this.white);
       mesh.frustumCulled = false;
@@ -5133,17 +5247,61 @@ export class Sorter implements Scene3D {
   }
 
   /** Hall sounds since the last call, with a volume by distance from the camera. */
-  takeSounds(): { kind: 'horn' | 'beep' | 'buzz'; vol: number }[] {
-    const out: { kind: 'horn' | 'beep' | 'buzz'; vol: number }[] = [];
+  takeSounds(): { kind: Sfx; vol: number; n?: number }[] {
+    const out: { kind: Sfx; vol: number; n?: number }[] = [];
     const cam = this.camera.position;
-    for (const list of [this.trucks.sounds, this.yard.sounds] as { kind: 'horn' | 'beep' | 'buzz'; at: V3 }[][]) {
+    for (const list of [this.trucks.sounds, this.yard.sounds, this.eggs.sounds] as { kind: Sfx; at: V3; n?: number }[][]) {
+      const jokes = list === this.eggs.sounds;
       for (const sd of list) {
-        const vol = 1 - cam.distanceTo(sd.at) / 40;
-        if (vol > 0.05 && out.length < 4 && !out.some((o) => o.kind === sd.kind)) out.push({ kind: sd.kind, vol });
+        // (What was tapped is heard from further away: it is right there on the screen.)
+        const vol = jokes ? Math.max(0.35, 1 - cam.distanceTo(sd.at) / 80) : 1 - cam.distanceTo(sd.at) / 40;
+        if (vol > 0.05 && out.length < 4 && !out.some((o) => o.kind === sd.kind && o.kind !== 'tune')) out.push({ kind: sd.kind, vol, n: sd.n });
       }
       list.length = 0;
     }
     return out;
+  }
+
+  /**
+   * A tap on something that is a joke but not a person, robot or forklift (the cat, the
+   * coffee machine, the DJ booth, a runaway parcel): it reacts. True if something was hit.
+   */
+  tapEgg(clientX: number, clientY: number): boolean {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    let best: { kind: 'cat' | 'coffee' | 'dj' | 'runner'; at: V3 } | null = null;
+    let bd = 40;
+    for (const t of this.eggs.targets()) {
+      const w = this.p.copy(t.at);
+      const dist = w.distanceTo(this.camera.position);
+      w.project(this.camera);
+      if (w.z > 1 || w.z < -1) continue;
+      const sx = rect.left + ((w.x + 1) / 2) * rect.width;
+      const sy = rect.top + ((1 - w.y) / 2) * rect.height;
+      const d = Math.hypot(sx - clientX, sy - clientY) * (0.8 + dist / 120);
+      if (d < bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    if (best) this.eggs.tapThing(best.kind, this.bt);
+    return !!best;
+  }
+
+  /** A tapped robot, forklift or person reacts (a wave, a honk, a spin...). */
+  poke(t: { obj: THREE.Object3D; kind: 'robot' | 'forklift' | 'person' }): void {
+    if (t.kind === 'person') {
+      const h = RIGS.get(t.obj);
+      if (h) this.eggs.tapPerson(t.obj, h, this.bt, this.camera.position);
+    } else if (t.kind === 'forklift') this.eggs.tapForklift(t.obj);
+    else {
+      const k = this.floor.robots.findIndex((r) => r.g === t.obj);
+      if (k >= 0) this.eggs.tapRobot(k, t.obj, this.bt);
+    }
+  }
+
+  /** A tapped parcel: a rubber duck quacks. */
+  pokeParcel(p: Parcel): void {
+    if (p.shape === 3) this.eggs.quack(p.pos);
   }
 
   /** How loud the belts hum: with belt speed and how busy the hub is. */
@@ -5244,9 +5402,12 @@ export class Sorter implements Scene3D {
     const kg = `${p.kg.toFixed(1)} kg (vol ${vol.toFixed(1)})`;
     const note =
       p.reason === 'oversize' ? 'Too big or heavy for the sorter: to manual sorting' : p.reason === 'overflow' ? `Its chute stayed full (${p.laps ?? 0} rounds): to manual sorting` : p.noread ? 'Label could not be read: to manual sorting' : p.missorted ? 'Sent to the wrong dock by mistake: it will go back' : '';
+    const address = addressFor(p.id, p.pc, city);
+    // The rubber duck is for whoever wrote all this.
+    if (p.shape === 3) address.name = 'The developer';
     return {
       id: String(p.id).padStart(8, '0'),
-      address: addressFor(p.id, p.pc, city),
+      address,
       route,
       where: this.parcelWhere(p),
       kg,
@@ -5289,7 +5450,7 @@ export class Sorter implements Scene3D {
 
   private readonly ray = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
-  private readonly instParcels: Parcel[][] = [[], [], []];
+  private readonly instParcels: Parcel[][] = [[], [], [], []];
 
   setRate(perMin: number): void {
     this.rate = clamp(perMin, 0, Sorter.MAX_RATE);
