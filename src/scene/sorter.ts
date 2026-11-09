@@ -3335,6 +3335,16 @@ export class Sorter implements Scene3D {
     this.realMaps.push({ m, own: m.map, real: map, col: m.color.clone(), realCol: new THREE.Color(color), rough: m.roughness, realRough: roughness });
   }
 
+  /** Compile the shaders of what is on show now, without blocking where the browser allows it. */
+  async warmUp(): Promise<void> {
+    try {
+      this.batcher.update();
+      await this.renderer.compileAsync(this.scene, this.camera);
+    } catch {
+      /* the first frame compiles them instead */
+    }
+  }
+
   isRealistic(): boolean {
     return this.real;
   }

@@ -42,6 +42,15 @@ function showProblem(title: string, detail: string): void {
 window.addEventListener('error', (e) => showProblem('Something went wrong', `${e.message}\n${e.filename?.split('/').pop() ?? ''}:${e.lineno}:${e.colno}`));
 window.addEventListener('unhandledrejection', (e) => showProblem('Something went wrong', String((e.reason as Error)?.stack ?? e.reason)));
 const app = document.getElementById('app')!;
+// The loading screen (in index.html) is up; let the browser paint it before the hall is built,
+// which keeps the page busy for a few seconds on a phone.
+const loading = document.getElementById('loading');
+const loadingSay = (text: string) => {
+  const m = loading?.querySelector('.msg');
+  if (m) m.textContent = text;
+};
+const nextPaint = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+await nextPaint();
 const scene = new Sorter();
 app.append(scene.canvas);
 scene.canvas.addEventListener('webglcontextlost', (e) => {
@@ -164,7 +173,18 @@ function frame(now: number): void {
   game?.frame(dt);
   requestAnimationFrame(frame);
 }
-requestAnimationFrame(frame);
+// Compile the shaders before the first frame (in parallel where the browser can), with the
+// loading screen still up; it fades out once the hall has been drawn.
+loadingSay('Preparing the graphics…');
+await nextPaint();
+await scene.warmUp();
+requestAnimationFrame((t) => {
+  frame(t);
+  if (loading) {
+    loading.style.opacity = '0';
+    setTimeout(() => loading.remove(), 700);
+  }
+});
 
 // For the console and the screenshot script.
 Object.assign(window, { sortsim: { scene, music, settings, setTod: (t: number) => (tod = t) } });
