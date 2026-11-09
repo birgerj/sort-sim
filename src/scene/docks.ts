@@ -683,7 +683,7 @@ export class Docks {
     this.fetchEmpty(d, c, aisle);
   }
 
-  update(dt: number, bt: number, s: { kick: number; snare: number; dayShown: boolean; bpm?: number }): void {
+  update(dt: number, bt: number, s: { kick: number; snare: number; dayShown: boolean; dance?: boolean; bpm?: number }): void {
     // The Mexican wave: each one goes up on their beat (not with a parcel in the hands).
     for (let i = this.waveQueue.length - 1; i >= 0; i--) {
       const q = this.waveQueue[i]!;
@@ -772,7 +772,7 @@ export class Docks {
     this.handlers.shipped(d.chute);
   }
 
-  private animateWorker(d: Dock, w: Worker, dt: number, bt: number, ph: number, s: { kick: number; snare: number; dayShown: boolean }): void {
+  private animateWorker(d: Dock, w: Worker, dt: number, bt: number, ph: number, s: { kick: number; snare: number; dayShown: boolean; dance?: boolean }): void {
     const k = Math.min(1, dt * 12);
     const st = w.step;
     let pos: V3 = w.root.position.clone().setY(0);
@@ -861,7 +861,7 @@ export class Docks {
         this.q.setFromAxisAngle(UP, w.yaw);
         w.parcel.q.copy(this.q);
       }
-    } else if (!s.dayShown) {
+    } else if (!s.dayShown && s.dance !== false) {
       // Nothing to do at night: dance. Bounce on the kick, arms up in turns.
       dance = true;
       const beat = Math.floor(bt);

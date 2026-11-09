@@ -33,7 +33,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | File | What |
 |---|---|
 | `src/main.ts` | Wires scene + music + HUD; URL parameters; frame loop; time of day (`tod` 0 day … 1 night). Exposes `window.sortsim` for the console and the screenshot script. |
-| `src/ui/hud.ts`, `src/ui/style.css` | Start screen, caption, control bar (departments, camera, time, sound), keys, auto-hide, settings in localStorage (`sortsim.settings`). |
+| `src/ui/hud.ts`, `src/ui/style.css` | Start screen, caption, the dock (tabs Go to / Camera / Hub / Night / More, each with a panel that slides up above it; one layout for phones and desktops), keys, auto-hide with a mouse, settings in localStorage (`sortsim.settings`). |
 | `src/audio/composer.ts` | The song as data: seeded, pure, testable. D minor, 32-bar form (intro / groove / breakdown), four styles by `mood`: ambient, deep, house, acid techno. |
 | `src/audio/music.ts` | WebAudio synths and the clock; the tempo can change bar by bar (`setTempo`, 60–160 BPM, `bars` map), and the composer's mood follows it. The clock runs without sound too. `frame()` returns beats, drum envelopes, chord colours and the notes that just sounded (latency-compensated). |
 | `src/scene/types.ts` | `SceneInput` (what the scene gets every frame) and control types. |
@@ -59,6 +59,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/xmas.ts` | Christmas decorations (`XMAS` from `src/sim/season.ts`, read at load): trees, garlands, light strings, wreaths, candy canes, stars, snowflakes, market. Hats and Father Christmas in `people.ts`/`life.ts`, forklift lights in `forklift.ts`, gift parcels (`gift`, `ribbonMesh`) in `sorter.ts`, bells in `music.ts`, countdown in `screens.ts`. |
 | `src/scene/antics.ts` | `ANTICS`: short acts any person can play on top of their own animation (wave, bow, cartwheel, facepalm, stretch, near-stumble, air guitar, phone call, selfie, high five, peek, sip of coffee...). `pre()` at the start of the frame gives back the owner's pose, `post(bt)` after all owners blends the act over it, so owners never notice; props (phones, cups) are batched and hang in a hidden group until a hand takes one. `RIGS` (people.ts) maps a person's root to its joints. |
 | `src/scene/eggs.ts` | `Eggs`: the hidden jokes that are not owned elsewhere (the cat, the runaway parcel, the break-area person, the peeker) and what a tap does to a person, robot, forklift, the cat, the coffee machine or the DJ. Its `sounds` go through `takeSounds`. The others live with their owners: the thrower, dancer, Mexican wave, stretch, stumble, air guitar and facepalm in `docks.ts`; errands (coffee, chasing the runaway parcel), high fives and the scrubber's heart in `life.ts`; robot pirouettes and sulks in `floor.ts`; the conga in `crowd.ts`; the DJ's boost in `party.ts`; the rubber duck (parcel shape 3) and seasick parcels in `sorter.ts`. README lists them all. |
+| `src/scene/nightFx.ts` | What the night shows (`NightFx`): parcel glow 0…1 and a switch per party effect, presets Party / Calm / Dark. `Sorter.setNightFx` applies it; the HUD's Night effects panel (only shown while the night look is on) edits and stores it. |
 | `src/scene/party.ts` | Night party: DJ booth on the maintenance platform inside the loop's west end (`PLATFORM_X`), laser fans, mirror-ball floor spots, confetti on the drop. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
@@ -156,6 +157,10 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   rounded boxes, where `inkify` would miss the silhouette.
 - `box(key, mat, x, y, z, sx, sy, sz)` adds a box to an instanced batch per
   key+material, flushed with `flushBoxes()`: use it for static clutter.
+- Night effects can be switched off (`NightFx`): register a night-only object
+  with a switch in `fxObjs`, or read `this.fx` where it is animated. Keep
+  lights dimmed rather than hidden (a change in the number of lights
+  recompiles every material).
 - Night lights are `MeshBasicMaterial` with colours above 1 so bloom picks
   them up. By day, tone mapping is off and walls are flat basic materials.
 

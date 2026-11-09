@@ -135,7 +135,8 @@ export class Eggs {
     this.cat.root.getWorldPosition(this.w);
     out.push({ kind: 'cat', at: this.w.clone().setY(this.w.y + 0.2) });
     if (this.day) out.push({ kind: 'coffee', at: COFFEE_MACHINE });
-    else out.push({ kind: 'dj', at: this.links.party.booth.clone().setY(this.links.party.booth.y + 1.0) });
+    // (Only when the DJ is on: the night effects can switch the booth off.)
+    else if (this.links.party.dj.root.visible) out.push({ kind: 'dj', at: this.links.party.booth.clone().setY(this.links.party.booth.y + 1.0) });
     if (this.run.state !== 'off') out.push({ kind: 'runner', at: this.runner.root.position.clone().setY(this.runner.root.position.y + 0.25) });
     return out;
   }

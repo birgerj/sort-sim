@@ -142,6 +142,8 @@ Sort sim is a progressive web app: install it from the browser (the **Install ap
 
 ## Controls
 
+The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go to**, **Camera**, **Hub**, **Night** (only while the night look is on) and **More**. Tapping a tab opens its panel above the dock; tap it again, the ✕, the hall or `Esc` to close it.
+
 | Control | Keys |
 |---|---|
 | Go to a department | `1`–`9`, `0` |
@@ -152,17 +154,18 @@ Sort sim is a progressive web app: install it from the browser (the **Install ap
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |
 | Sound on/off and volume (in Settings) | `M` |
 | Hide the controls | `H` |
-| Settings…: time of day, sound, graphics quality (Low / Normal / High / Ultra), Christmas and country | button (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
+| Night tab (only at night): presets Party / Calm / Dark, how brightly parcels glow, and on/off for crowd, DJ, lasers, mirror ball, confetti, projector show, robot glow, dancing, haze, strobes and bloom; remembered | button (`?night=party\|calm\|dark`) |
+| More: time of day, sound, graphics quality (Low / Normal / High / Ultra), Christmas, country, install, full screen, hide controls | tab (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
 
-Click or tap a robot, forklift or person to follow it with the camera. Click or tap a parcel to see its shipping label (a made-up recipient: a common surname of the country with a first name, or initials in the Netherlands, at a street in the parcel's town, real ones in the Netherlands; written the way that country writes addresses) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
+Click or tap a robot, forklift or person to follow it with the camera. Click or tap a parcel to see its shipping label (a made-up recipient: a common surname of the country with a first name, or initials in the Netherlands, at a street in the parcel's town, real ones in the Netherlands; written the way that country writes addresses) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view.
 
 The music follows the parcels per minute: its tempo moves (3 BPM per bar) between 60 BPM at the lowest rate and 160 BPM at the highest, and its style with it, four of them: ambient with warm pads below 82 BPM, deep (thin pads, soft beat) up to 112, pounding house (claps, open hats, off-beat bass, chord stabs, no pads) up to 136, and acid techno above. The whole hall runs on the beat, so it speeds up and slows down with the music.
 
-The control bar hides after three seconds without mouse movement, a tap or a key (also when the pointer rests on it); move the mouse or tap to bring it back.
+With a mouse, the dock fades after three seconds without movement or a key and comes back when the mouse moves; on touch screens it stays. **Hide controls** (More, or key `H`) hides everything; click or tap the hall to bring it back.
 
 URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow|walk`,
 `?speed=0.5|1|2|4`, `?rate=<parcels per minute>`, `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
-(no controls: for recordings), `?quality=low|high`.
+(no controls: for recordings), `?quality=low|high`, `?night=party|calm|dark`.
 
 ## Development
 

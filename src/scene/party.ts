@@ -131,6 +131,16 @@ export class Party {
     for (const m of [this.fans, this.spots, this.confetti]) m.userData.noInk = true;
   }
 
+  /** What of the party shows: the booth and DJ, laser fans, mirror-ball floor spots, confetti. */
+  setShow(on: { dj: boolean; lasers: boolean; ball: boolean; confetti: boolean }): void {
+    for (const c of this.group.children) {
+      if (c === this.fans) c.visible = on.lasers;
+      else if (c === this.spots) c.visible = on.ball;
+      else if (c === this.confetti) c.visible = on.confetti;
+      else c.visible = on.dj;
+    }
+  }
+
   update(dt: number, bt: number, s: PartyInput): void {
     if (s.dayShown) return;
     const o = this.o;
