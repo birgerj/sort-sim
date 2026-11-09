@@ -811,3 +811,277 @@ input[type='range'] {
 .group[hidden] {
   display: none;
 }
+
+/* Walking and flying: controls over the hall, above the menu dock. */
+.walk-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --walk-bottom: calc(16px + 64px + 20px + env(safe-area-inset-bottom));
+}
+
+.walk-ui[hidden],
+.hud.off .walk-ui {
+  display: none;
+}
+
+.walk-top {
+  position: absolute;
+  top: calc(56px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, calc(100% - 24px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.walk-pill,
+.walk-seg {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 22px;
+  background: rgba(18, 19, 23, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.walk-pill {
+  padding: 0 14px;
+  font-weight: 600;
+}
+
+.walk-pill svg {
+  width: 16px;
+  height: 16px;
+}
+
+.walk-alt {
+  min-width: 80px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.walk-alt svg {
+  color: var(--teal-l);
+}
+
+.walk-seg {
+  padding: 3px;
+  gap: 0;
+}
+
+.walk-seg button {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 18px;
+  border-color: transparent;
+  background: transparent;
+  color: #c9ccd2;
+}
+
+.walk-seg button.on {
+  background: var(--teal);
+  border-color: var(--teal-l);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* The stick: shown on touch screens; it rests bottom left and jumps under the thumb. */
+.walk-stick {
+  display: none;
+  position: absolute;
+  left: 94px;
+  top: calc(100% - var(--walk-bottom) - 74px);
+  width: 148px;
+  height: 148px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.32);
+  background: rgba(18, 19, 23, 0.3);
+  opacity: 0.75;
+  transition: opacity 0.2s;
+}
+
+.walk-ui.touch .walk-stick {
+  display: block;
+}
+
+.walk-stick.live {
+  opacity: 1;
+}
+
+.walk-stick.run {
+  border-color: var(--teal-l);
+}
+
+.walk-ring {
+  position: absolute;
+  inset: 26px;
+  border-radius: 50%;
+  background: rgba(18, 19, 23, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.walk-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(244, 245, 247, 0.92);
+  border: 2px solid var(--teal-l);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%);
+}
+
+.walk-rocker {
+  position: absolute;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: var(--walk-bottom);
+  width: 68px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 34px;
+  background: rgba(18, 19, 23, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.walk-rocker button {
+  height: 64px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  font-size: 11px;
+  touch-action: none;
+}
+
+.walk-rocker button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.walk-rocker button.on {
+  background: var(--teal);
+  border-color: var(--teal-l);
+}
+
+.walk-hint {
+  display: none;
+  position: absolute;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(18, 19, 23, 0.78);
+  font-size: 12px;
+  transition: opacity 0.6s;
+}
+
+.walk-ui.touch .walk-hint {
+  display: block;
+}
+
+.walk-hint.gone,
+.walk-keys.gone {
+  opacity: 0;
+}
+
+.walk-hint-stick {
+  left: 20px;
+  bottom: calc(var(--walk-bottom) + 160px);
+}
+
+.walk-hint-look {
+  left: 50%;
+  top: 42%;
+  border: 1px dashed rgba(255, 255, 255, 0.28);
+}
+
+.walk-hint-rocker {
+  right: 16px;
+  bottom: calc(var(--walk-bottom) + 150px);
+}
+
+/* Mouse and keyboard: a card with the keys, fading after a while. */
+.walk-keys {
+  position: absolute;
+  left: 16px;
+  bottom: var(--walk-bottom);
+  width: 280px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(18, 19, 23, 0.82);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: opacity 1s;
+}
+
+.walk-ui.touch .walk-keys {
+  display: none;
+}
+
+.walk-keys-grid {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 13px;
+  color: #c9ccd2;
+}
+
+.walk-keys .k {
+  display: flex;
+  gap: 3px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.walk-keys kbd {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  font: 600 12px system-ui, sans-serif;
+  text-align: center;
+}
+
+.walk-keys p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Short screens (a phone on its side): smaller controls. */
+@media (max-height: 500px) {
+  .walk-top {
+    top: calc(12px + env(safe-area-inset-top));
+  }
+  .walk-rocker button {
+    height: 52px;
+  }
+  .walk-hint-stick,
+  .walk-hint-rocker {
+    display: none !important;
+  }
+}
