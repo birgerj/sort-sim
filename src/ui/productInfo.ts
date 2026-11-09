@@ -18,23 +18,6 @@ export interface StopInfo {
   sim: string;
 }
 
-const ROBOTS: StopInfo = {
-  family: 'Flexible Sorting Solutions',
-  title: 'Robotic Sorting',
-  intro: [
-    'Robotic Sorting uses autonomous mobile robots to automate parcel sorting in flexible and scalable logistics environments.',
-    'Traditional sorting operations often rely on fixed infrastructure that is difficult to adapt when volumes fluctuate. Robotic Sorting replaces static systems with intelligent robots that transport and sort parcels dynamically across the sorting floor.',
-  ],
-  products: [],
-  points: [
-    'Flexible sorting infrastructure: sorting in virtually any existing location, without fixed conveyor systems',
-    'Scalable sorting capacity: increase throughput by simply adding robots',
-    'Real-time adaptability to changing sorting requirements',
-    'Versatile handling of parcels, NMOs, tubes and other non-standard items',
-  ],
-  sim: 'Robots take parcels from the pickup tables and tip them into the box for their postcode; one-way lanes and reservations keep them out of each other’s way.',
-};
-
 export const STOP_INFO: Record<string, StopInfo> = {
   infeeds: {
     family: 'Sorting Orchestration Solutions',
@@ -122,9 +105,57 @@ export const STOP_INFO: Record<string, StopInfo> = {
     ],
     sim: 'Above each dock belt a projector shows the postcodes of the next parcels; the worker walks each one to the right roll cage.',
   },
-  'pickup stations': ROBOTS,
-  bins: ROBOTS,
-  robot: ROBOTS,
+  'pickup stations': {
+    family: 'Flexible Sorting Solutions',
+    title: 'Robotic Sorting',
+    intro: [
+      'Robotic Sorting uses autonomous mobile robots to automate parcel sorting in flexible and scalable logistics environments.',
+      'Traditional sorting operations often rely on fixed infrastructure that is difficult to adapt when volumes fluctuate. Robotic Sorting replaces static systems with intelligent robots that transport and sort parcels dynamically across the sorting floor.',
+    ],
+    products: [],
+    points: [
+      'Rapid deployment, without major infrastructure changes',
+      'Reduced labor dependency: manual sorting tasks automated',
+      'Versatile handling of parcels, NMOs, tubes and other non-standard items',
+    ],
+    sim: 'Chutes from the loop end at long pickup tables. A robot takes the next parcel, the projector shows its postcode, and off it goes.',
+  },
+  bins: {
+    family: 'Flexible Sorting Solutions',
+    title: 'A fleet that scales',
+    intro: [
+      'With robots instead of fixed conveyors, the sorting floor itself becomes flexible: destinations can be added, moved or re-planned without rebuilding the hall.',
+      'Capacity grows with the fleet. Need more throughput for the peak? Add robots.',
+    ],
+    products: [
+      {
+        name: 'Robotic Sorting',
+        text: 'Autonomous mobile robots that transport and sort parcels dynamically across the sorting floor, for highly flexible and future-proof operations.',
+      },
+    ],
+    points: [
+      'Flexible sorting infrastructure: sorting in virtually any existing location, without fixed conveyor systems',
+      'Scalable sorting capacity: increase throughput by simply adding robots',
+      'Real-time adaptability to changing sorting requirements',
+    ],
+    sim: 'The robot floor is a grid with one-way lanes. Each robot reserves its path cell by cell, drives to the box for its postcode, tips the parcel in and parks.',
+  },
+  robot: {
+    family: 'Edge AI Platform',
+    title: 'Edge Platform',
+    intro: [
+      'The Edge Platform runs directly at the edge, close to cameras, sensors and machines within the sorting environment.',
+      'Applications and operational services run inside the sorting facility, near the equipment that generates the data. Time-critical decisions happen immediately, and operations continue even when the connection to central or cloud systems is limited.',
+    ],
+    products: [],
+    points: [
+      'Ultra-low latency for immediate operational responses',
+      'On-site decision-making where the data is generated',
+      'Local resilience: sorting continues when the network is disrupted',
+      'Optimized for AI models, robotics control and other time-sensitive processes',
+    ],
+    sim: 'You are riding along: every beat this robot gets its next move, steering around the others to its box and back to the pickup tables.',
+  },
   'manual sorting': {
     family: 'Vision AI Solutions',
     title: 'Exceptions',
