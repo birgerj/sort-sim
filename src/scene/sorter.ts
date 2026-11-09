@@ -5025,10 +5025,13 @@ export class Sorter implements Scene3D {
     else {
       // Only stops that belong to the look on screen (no empty DJ booth by day).
       const night = this.isNight();
-      const ok = this.pois.map((_, i) => i).filter((i) => {
+      const inLook = this.pois.map((_, i) => i).filter((i) => {
         const w = this.pois[i]!.when;
         return !w || (w === 'night') === night;
       });
+      // With product info on, only the stops that have a card (if any fit this look).
+      const withInfo = this.dwellFor ? inLook.filter((i) => this.dwellFor!(this.pois[i]!.name) !== undefined) : [];
+      const ok = withInfo.length ? withInfo : inLook;
       const fresh = ok.filter((i) => !this.recent.includes(i));
       k = pick(fresh.length ? fresh : ok);
     }

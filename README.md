@@ -121,7 +121,7 @@ The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go 
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |
 | Sound on/off and volume (in Settings) | `M` |
 | Hide the controls | `H` |
-| Product info (demo): a card describing the product behind each tour stop; the tour waits until it is read, with Pause and Next stop | More › Product info (`?info=0\|1`) |
+| Product info (demo): a card describing the product behind each tour stop; the tour only visits stops with a card and waits until it is read, with Pause and Next stop | More › Product info (`?info=0\|1`) |
 | Night tab (only at night): presets Party / Calm / Dark, how brightly parcels glow, and on/off for crowd, DJ, lasers, mirror ball, confetti, projector show, robot glow, dancing, haze, strobes and bloom; remembered | button (`?night=party\|calm\|dark`) |
 | More: time of day, sound, graphics quality (Low / Normal / High / Ultra), Christmas, country, install, full screen, hide controls | tab (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
 
