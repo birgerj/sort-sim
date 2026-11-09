@@ -551,3 +551,57 @@ export function trayWear(m: THREE.MeshStandardMaterial): void {
   const key = m.customProgramCacheKey.bind(m);
   m.customProgramCacheKey = () => `${key()}-traywear`;
 }
+
+/**
+ * Specks and stains on the belts, only in the realistic day: dark rubber and dirt specks, a few
+ * larger grease marks and pale cardboard dust, in the belt texture's own space so they travel
+ * with the belt. A faint shade that changes slowly over the hall keeps two belts from looking
+ * alike. (The material needs a map: the belt texture.)
+ */
+export function beltWear(m: THREE.MeshStandardMaterial): void {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
+    sh.uniforms.uReal = REAL;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vBw;')
+      .replace(
+        '#include <worldpos_vertex>',
+        `#include <worldpos_vertex>
+        {
+          vec4 wp = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            wp = instanceMatrix * wp;
+          #endif
+          vBw = (modelMatrix * wp).xz;
+        }`,
+      );
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uReal;\nvarying vec2 vBw;\n${NOISE}`)
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        #ifdef USE_MAP
+        if (uReal > 0.001) {
+          // u across the belt (0…1), v along it (one unit per 1.2 m, moving with the belt).
+          vec2 b = vec2(vMapUv.x * 1.2, vMapUv.y * 1.2);
+          float speck = smoothstep(0.9, 0.96, rdNoise(b * 46.0)) * step(0.45, rdNoise(b * 9.0 + 3.0));
+          float dust = smoothstep(0.88, 0.95, rdNoise(b * 25.0 + 17.0));
+          // Grease and rubber smears: long along the belt, short across.
+          float grease = smoothstep(0.58, 0.75, rdFbm(b * vec2(4.0, 0.9) + 5.0));
+          // Most dirt down the middle, where parcels ride.
+          float mid = 1.0 - smoothstep(0.25, 0.5, abs(vMapUv.x - 0.5));
+          vec3 col = diffuseColor.rgb;
+          col *= 1.0 - 0.3 * speck;
+          col = mix(col, vec3(0.6, 0.54, 0.46), 0.22 * dust * mid);
+          col *= 1.0 - 0.28 * grease * (0.4 + 0.6 * mid);
+          col *= 0.92 + 0.16 * rdFbm(vBw * 0.08);
+          diffuseColor.rgb = mix(diffuseColor.rgb, col, uReal);
+          roughnessFactor = mix(roughnessFactor, clamp(roughnessFactor - 0.25 * grease + 0.1 * dust, 0.1, 1.0), uReal);
+        }
+        #endif`,
+      );
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${key()}-beltwear`;
+}

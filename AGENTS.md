@@ -195,6 +195,8 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   robots). The sorter's trays are dark grey in Day, each worn its own way
   (`trayWear`: shade, streaks, scratches, dirt, worn patch, from `gl_InstanceID`,
   in tray space). Never name a GLSL variable `patch` (reserved).
+  Belts are grey rubber in Day (`drawBelt(..., real)`) with specks, smears and
+  dust (`beltWear`, in the belt texture's moving space).
   A light vignette and warm/cool finish (`gradePass`) runs only in
   Day. The Day hall is built the first time Day is chosen.
 - **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`

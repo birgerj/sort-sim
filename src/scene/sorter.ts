@@ -33,7 +33,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
-import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks } from './realDay';
+import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -544,13 +544,14 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   return t;
 }
 /** Belt surface: dark rubber by night, light rollers by day. */
-function drawBelt(t: THREE.CanvasTexture, day: boolean): void {
+/** The belt surface: white slats in the drawn day, mid-grey rubber in the realistic day, dark at night. */
+function drawBelt(t: THREE.CanvasTexture, day: boolean, real = false): void {
   const c = t.image as HTMLCanvasElement;
   const g = c.getContext('2d');
   if (!g) return;
-  g.fillStyle = day ? '#eef0f3' : '#1f2125';
+  g.fillStyle = real && day ? '#7b8087' : day ? '#eef0f3' : '#1f2125';
   g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = day ? '#c4cad1' : '#34373d';
+  g.fillStyle = real && day ? '#62666c' : day ? '#c4cad1' : '#34373d';
   for (let y = 0; y < c.height; y += 8) g.fillRect(0, y, c.width, day ? 2 : 3);
   t.needsUpdate = true;
 }
@@ -3291,7 +3292,7 @@ export class Sorter implements Scene3D {
     if (this.mirror) this.mirror.visible = !show && hq;
     // Flat, bright colours for the drawn day; filmic tone mapping for the photo-like day and the club.
     this.renderer.toneMapping = show && !this.real ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
-    drawBelt(this.beltTex, show);
+    drawBelt(this.beltTex, show, this.real);
   }
 
   private buildHall(): void {
@@ -3572,6 +3573,9 @@ export class Sorter implements Scene3D {
     });
     this.beltTex.repeat.set(1, 1 / 1.2);
     const beltMat = this.theme(new THREE.MeshStandardMaterial({ map: this.beltTex, roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide }), 0xffffff);
+    // Realistic day: the grey rubber of the texture as it is, with specks and stains.
+    this.themed[this.themed.length - 1]!.rc = new THREE.Color(0xffffff);
+    beltWear(beltMat);
     const frameMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x2b5ea8, roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide }), DAY.teal);
     const chuteTex = brushed().clone();
     chuteTex.repeat.set(1, 1 / 3);
