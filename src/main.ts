@@ -9,6 +9,7 @@
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
  *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
  *   night=party|calm|dark  what the night shows (Night effects panel; remembered otherwise)
+ *   game=NL-7KQ2M0         play that night (with plan=…&reserve=…: the player's door plan)
  *   quality=low|normal|high|ultra  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
@@ -20,6 +21,7 @@ import { NIGHT_PRESETS, normalizeNightFx } from './scene/nightFx';
 import { Hud, loadSettings, type TimeMode } from './ui/hud';
 import { Pwa } from './ui/pwa';
 import { WalkControls } from './ui/walk';
+import { GameUi } from './ui/game';
 
 const q = new URLSearchParams(location.search);
 const app = document.getElementById('app')!;
@@ -50,6 +52,9 @@ music.setMuted(settings.muted);
 let hudQuality = () => {};
 const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi, onQuality: () => hudQuality() });
 document.body.append(hud.root);
+// The night-shift game: its own dock at the top of the screen (see ui/game.ts).
+const game = showUi ? new GameUi(music) : null;
+if (game) document.body.append(game.root);
 // Walk and fly controls sit under the menu (an open panel may cover them).
 hud.root.prepend(walk.root);
 const pwa = new Pwa(hud.root, music);
@@ -101,6 +106,7 @@ function frame(now: number): void {
   if (music.paused) {
     f.notes.length = 0;
     hud.update();
+    game?.frame(dt);
     requestAnimationFrame(frame);
     return;
   }
@@ -130,6 +136,7 @@ function frame(now: number): void {
   const r = Math.max(0, Math.min(1, (scene.rate - 20) / 780));
   music.setTempo(60 + 100 * Math.sqrt(r));
   hud.update();
+  game?.frame(dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

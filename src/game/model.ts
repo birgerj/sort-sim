@@ -50,8 +50,9 @@ export interface Result {
   late: number;
   fullTrailers: number;
   moves: number;
-  /** Per hour: parcels lost or stranded so far (for the HUD's "on course" line). */
+  /** Per hour: parcels lost or stranded so far, and trailers that left full. */
   lateByHour: number[];
+  fullByHour: number[];
 }
 
 export const MAX_SWAPS = 1;
@@ -61,7 +62,7 @@ export const MAX_FORKLIFT = 2;
 export const MAX_GO = 1;
 /** The spare trailer after a go: a short one, a quarter of the room. */
 const SPARE = 0.25;
-/** Door swaps unlock at 00:00 (hour 2): the plan stands for the first two hours. */
+/** Door swaps unlock at 02:00 (hour 4): the plan stands for the first half of the night. */
 export const SWAP_FROM = 4;
 
 export function validPlan(p: Plan): boolean {
@@ -74,7 +75,10 @@ export function validPlan(p: Plan): boolean {
  * Plays the night. `actual` false = the forecast only (the briefing's estimate):
  * no drift, the late inbound as announced, no unannounced events.
  */
-export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true, what?: { unsure: number }): Result {
+export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true, what?: { unsure: number }, seenUntil?: number): Result {
+  // With seenUntil: the night as known at that hour (what has shown so far, the
+  // forecast and the announced events after it). For live previews in the HUD.
+  const sees = (h: number) => actual && (seenUntil === undefined || h <= seenUntil);
   const C = night.cities;
   const n = C.length;
   const doors = plan.doors.map((d) => Array<number>(HOURS).fill(d));
@@ -83,7 +87,7 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
     PROFILE.map((p, h) => {
       let v = c.forecast * p;
       if (!actual && what && c.unsure && h >= 2) v *= 1 + what.unsure; // a planner's what-if
-      if (actual && c.drift && h >= c.driftFrom) {
+      if (sees(c.driftFrom) && c.drift && h >= c.driftFrom) {
         const rest = PROFILE.slice(c.driftFrom).reduce((a, b) => a + b, 0);
         v *= 1 + c.drift / rest; // the whole night's drift lands after it shows
       }
@@ -95,8 +99,8 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
   const doorFactor = C.map(() => Array<number>(HOURS).fill(1)); // share of the hour a door can load
   let lateIn = 0;
   for (const e of night.events) {
-    if (e.kind === 'lateInbound') lateIn = actual ? e.actual : e.forecast;
-    if (!actual && !announced(e)) continue;
+    if (e.kind === 'lateInbound') lateIn = sees(e.hour) ? e.actual : e.forecast;
+    if (!sees(e.hour) && !announced(e)) continue;
     if (e.kind === 'robotsDown') for (let h = e.hour; h < Math.min(HOURS, e.hour + e.hours); h++) robotH[h] = robotH[h]! * (1 - e.share);
     if (e.kind === 'lateTrailer') doorFactor[e.city]![e.hour] = 0;
     if (e.kind === 'earlyCutoff') doorFactor[e.city]![7] = 0.5;
@@ -145,6 +149,7 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
   let late = 0;
   let full = 0;
   const lateByHour: number[] = [];
+  const fullByHour: number[] = [];
   const storeOf = Array<number>(n).fill(0);
 
   for (let h = 0; h < HOURS; h++) {
@@ -231,13 +236,14 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
       }
     }
     lateByHour.push(late);
+    fullByHour.push(full);
   }
   // 06:00: whatever is still in the hall misses its truck.
   late += recirc + store + robotQ + chute.reduce((a, b) => a + b, 0);
   lateByHour[HOURS - 1] = late;
-  const total = C.reduce((a, c) => a + c.forecast * (1 + (actual ? c.drift : 0)), 0) + lateIn;
+  const total = C.reduce((a, c) => a + c.forecast * (1 + (sees(c.driftFrom) ? c.drift : 0)), 0) + lateIn;
   late = Math.min(late, total);
   const on = total - late;
   const raw = Math.round(on * POINTS.onTime + late * POINTS.late + full * POINTS.fullTrailer - holdCost);
-  return { raw, onTime: on / total, late: Math.round(late), fullTrailers: full, moves: moves.length, lateByHour };
+  return { raw, onTime: on / total, late: Math.round(late), fullTrailers: full, moves: moves.length, lateByHour, fullByHour };
 }

@@ -44,11 +44,40 @@ export function planDoors(pops: number[], doors: number, most = 4): number[] {
   return best;
 }
 
-/** Doors per north city (see planDoors). */
-export const DOORS_PER_CITY = planDoors(CITIES.map((c) => c.pop), 20);
-/** Cities at the north doors (roll cages) and at the south doors (robot boxes, the next 20). */
-export const NORTH_CITIES = CITIES.slice(0, DOORS_PER_CITY.length);
-export const SOUTH_CITIES = CITIES.slice(DOORS_PER_CITY.length, DOORS_PER_CITY.length + 20);
+/** Doors per north city as the hall is built (see planDoors), and the cities the hall serves. */
+const STANDING = planDoors(CITIES.map((c) => c.pop), 20);
+/** The night-shift game's cities, in its order: the north cities, then the next 20. */
+export const GAME_CITIES = CITIES.slice(0, STANDING.length + 20);
+
+/**
+ * A night-shift game re-signs the doors to the player's plan (?game=…&plan=4.3.3.2.0…:
+ * per game city 0 = robots, 1–4 north doors). Invalid or absent: the hall as built.
+ */
+function gamePlan(): number[] | null {
+  try {
+    const q = new URLSearchParams(globalThis.location?.search ?? '');
+    if (!q.get('game')) return null;
+    const p = (q.get('plan') ?? '').split('.').map(Number);
+    const ok =
+      p.length === GAME_CITIES.length &&
+      p.every((n) => Number.isInteger(n) && n >= 0 && n <= 4) &&
+      p.reduce((a, b) => a + b, 0) === 20 &&
+      p.filter((n) => n === 0).length <= 20;
+    return ok ? p : null;
+  } catch {
+    return null;
+  }
+}
+const PLAN = gamePlan();
+
+/** Doors per north city, west to east. */
+export const DOORS_PER_CITY = PLAN ? PLAN.filter((n) => n > 0) : STANDING;
+/** Cities at the north doors (roll cages) and at the south doors (robot boxes, 20 doors). */
+export const NORTH_CITIES = PLAN ? GAME_CITIES.filter((_, i) => PLAN[i]! > 0) : CITIES.slice(0, STANDING.length);
+export const SOUTH_CITIES = PLAN
+  ? // The robot cities, and the country's next towns on any doors left over.
+    [...GAME_CITIES.filter((_, i) => PLAN[i] === 0), ...CITIES.slice(GAME_CITIES.length)].slice(0, 20)
+  : CITIES.slice(STANDING.length, STANDING.length + 20);
 /** The city (index in NORTH_CITIES) of each north door, west to east: a city's doors side by side. */
 export const DOCK_CITY: number[] = DOORS_PER_CITY.flatMap((n, i) => Array.from({ length: n }, () => i));
 
