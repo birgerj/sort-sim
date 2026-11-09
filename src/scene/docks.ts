@@ -788,7 +788,7 @@ export class Docks {
     w.head.rotation.y += (headTurn - w.head.rotation.y) * k * 0.4;
     w.head.rotation.x += (nod - w.head.rotation.x) * k * 0.6;
     // Legs and pelvis: one step per beat (each worker a little out of phase), knees down when crouching.
-    const swing = gait(w, dt, Math.PI * bt + w.phase, speed);
+    const swing = gait(w, dt, Math.PI * bt + w.phase, speed, dance);
     crouch(w, squat);
     // Arms: the hands on the parcel's sides, or on the cage's push bar; otherwise posed as above.
     const holding = st && w.parcel && (st.pose === 'pick' || st.pose === 'carry' || st.pose === 'drop');

@@ -33,7 +33,7 @@ import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
 import { Life } from './life';
-import { HUMANS } from './people';
+import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
 import { Xmas } from './xmas';
 import { XMAS } from '../sim/season';
@@ -1086,7 +1086,7 @@ export class Sorter implements Scene3D {
     this.gtao.enabled = false;
     this.gtao.blendIntensity = 0.85;
     this.composer.addPass(this.gtao);
-    this.ink = new InkPass(this.scene, this.camera);
+    this.ink = new InkPass(this.scene, this.camera, INK_MASK_LAYER);
     this.composer.addPass(this.ink);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.55, 0.6);
     this.composer.addPass(this.bloom);

@@ -18,41 +18,84 @@ const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 /** A narrow bump around `c` (1 there, falling off on both sides). */
 const bump = (q: number, c: number) => Math.max(0, Math.cos(q - c)) ** 6;
 
+/** Part of a stride (two steps) a foot is on the floor. */
+const STANCE = 0.62;
+/** Ankle height standing (hip height minus the straight leg). */
+const ANKLE_Y = HIP_Y - L1 - L2;
+const smooth01 = (x: number) => {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
 /**
- * Walk (or stand, with speed 0). `phase` runs π per step, so `Math.PI * bt`
- * is one step per beat; `speed` is metres per step, which sets the stride so
- * the feet roughly keep to the floor. Returns the arm swing (−1…1, already
+ * Where a foot is at stride phase `ph` (0…1; 0: heel lands in front): forward of the hip,
+ * ankle height, and its pitch to the floor (+ is toes down).
+ */
+function footAt(ph: number, stride: number, lift: number): { z: number; y: number; pitch: number } {
+  if (ph < STANCE) {
+    // On the floor, moving back under the body at walking speed (so it stays put on the
+    // floor): heel down first (toes up), the heel rising at the end to push off.
+    const u = ph / STANCE;
+    const heel = smooth01((u - 0.62) / 0.38);
+    return { z: stride * (0.27 - 0.62 * u), y: ANKLE_Y + 0.05 * heel * heel, pitch: -0.22 * (1 - smooth01(u / 0.16)) + 0.55 * heel };
+  }
+  // In the air: forward on an eased arc, highest early (toe clearance), toes up to land.
+  const u = (ph - STANCE) / (1 - STANCE);
+  const e = 0.5 - 0.5 * Math.cos(Math.PI * u);
+  return {
+    z: stride * (-0.35 + 0.62 * e),
+    y: ANKLE_Y + 0.05 * (1 - u) ** 2 + lift * Math.sin(Math.PI * Math.min(1, u * 1.15)) ** 1.4,
+    pitch: 0.55 * (1 - smooth01(u / 0.35)) - 0.22 * smooth01((u - 0.6) / 0.4),
+  };
+}
+
+/**
+ * Walk (or stand, with speed 0). `phase` runs π per step, so `Math.PI * bt` is one step
+ * per beat; `speed` is metres per step. The feet are placed, not swung: each stands still
+ * on the floor while the body passes over it (it moves back at exactly the walking
+ * speed), then lifts and swings forward on an arc; the legs reach their feet by IK, and
+ * the hips rise and fall smoothly (lowest as a heel lands), held below what both legs can
+ * reach. `inPlace`: stepping on the spot (dancing). Returns the arm swing (−1…1, already
  * scaled by how much the person walks): left arm back when it is positive.
  */
-export function gait(h: Human, dt: number, phase: number, speed: number): number {
+export function gait(h: Human, dt: number, phase: number, speed: number, inPlace = false): number {
   const m = h.m;
   const e = Math.min(1, dt * 6);
   m.walk += ((speed > 0.04 ? 1 : 0) - m.walk) * e;
-  // Half a step ahead of the hip at heel strike: sin(stride) · leg = step / 2.
-  const want = speed > 0.04 ? clamp(Math.asin(Math.min(0.8, speed / 2 / (L1 + L2))), 0.14, 0.42) : m.amp;
+  // The stride (two steps), eased; on the spot, a little shuffle.
+  const want = speed > 0.04 ? (inPlace ? 0.08 : 2 * speed) : 0;
   m.amp += (want - m.amp) * e;
   const W = m.walk;
-  const a = m.amp * W;
-  const s = a / 0.4;
-  for (const [leg, knee, q, key] of [
-    [h.legL, h.kneeL, phase, 'footL'],
-    [h.legR, h.kneeR, phase + Math.PI, 'footR'],
+  const stride = m.amp;
+  const s = Math.min(1, stride / 1.05);
+  const ph = (((phase / (2 * Math.PI)) % 1) + 1) % 1;
+  const lift = 0.07 * W;
+  const feet = [footAt(ph, stride, lift), footAt((ph + 0.5) % 1, stride, lift)] as const;
+  // Hips: a smooth wave, softly held below what both legs can reach.
+  const reachL = L1 + L2 - 0.012;
+  let limit = HIP_Y;
+  for (const f of feet) limit = Math.min(limit, f.y + Math.sqrt(Math.max(0, reachL * reachL - f.z * f.z)));
+  const wave = HIP_Y - W * (0.012 + 0.05 * s * (0.5 + 0.5 * Math.cos(4 * Math.PI * (ph - 0.02))));
+  const k = 0.025;
+  const hk = Math.max(k - Math.abs(wave - limit), 0) / k;
+  const hipY = Math.min(wave, limit) - hk * hk * k * 0.25;
+  for (const [leg, knee, f, key] of [
+    [h.legL, h.kneeL, feet[0], 'footL'],
+    [h.legR, h.kneeR, feet[1], 'footR'],
   ] as const) {
-    // Hip: forward with sin q. Knee: bent most in the swing, as the thigh
-    // passes under the hip (the foot clears the floor), a little in the stance. Foot: toes up at heel
-    // strike, heel up at push-off.
-    leg.rotation.x = -a * Math.sin(q);
-    knee.rotation.x = W * (0.06 + 0.1 * s * bump(q, Math.PI / 2 + 0.3)) + Math.min(1, s) * 0.85 * Math.max(0, Math.cos(q - 0.1)) ** 3;
-    m[key] = s * (-0.22 * bump(q, Math.PI / 2) + 0.38 * bump(q, -Math.PI / 2 + 0.25));
+    legTo(leg, knee, f.y - hipY, f.z);
+    m[key] = W * f.pitch;
   }
-  // Pelvis: highest when the legs pass, over the standing leg, turned with the
-  // forward leg, dropping on the swinging side. The chest turns against it.
-  m.px = 0.022 * W * Math.cos(phase);
-  m.py = W * (0.018 * Math.cos(2 * phase) - 0.012);
-  m.pyaw = 0.11 * s * Math.sin(phase);
-  m.proll = 0.045 * s * Math.cos(phase);
-  h.chest.rotation.y = -1.9 * m.pyaw;
-  return s * Math.sin(phase);
+  // Pelvis: over the standing foot, the swinging side dropping a little, turned with the
+  // forward leg; the chest turns against it.
+  const side = Math.sin(2 * Math.PI * (ph - 0.08));
+  m.px = 0.022 * W * side;
+  m.py = hipY - HIP_Y;
+  m.pyaw = 0.075 * W * s * Math.cos(2 * Math.PI * ph);
+  m.proll = -0.035 * W * s * side;
+  h.chest.rotation.y = -1.5 * m.pyaw;
+  // Arms swing against the legs, a little behind them in time.
+  return W * s * Math.cos(2 * Math.PI * (ph - 0.06));
 }
 
 /** The usual arm swing while walking (when the arms are free): shoulders and elbows, eased by `k`. */
