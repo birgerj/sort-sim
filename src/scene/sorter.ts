@@ -26,7 +26,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
-import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z } from './floor';
+import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z, TABLE as MANUAL_TABLE } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -52,7 +52,7 @@ import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
 import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import type { FleetEvent } from '../sim/robotFleet';
+import { FLOOR, type FleetEvent } from '../sim/robotFleet';
 
 type V3 = THREE.Vector3;
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -755,9 +755,26 @@ interface Poi {
   name: string;
   /** Shown as a department to go to (the others are tour stops only). */
   dept?: string;
-  at: (pos: V3, look: V3) => boolean;
-  /** Hold still when hovering here (e.g. to read a screen), instead of turning slowly round. */
-  still?: boolean;
+  /** Where the camera wants to be and what it looks at; `since` is beats since arrival (0 while flying there). */
+  at: (pos: V3, look: V3, since: number) => boolean;
+  /**
+   * How the camera hovers once there:
+   * orbit: turns slowly all the way round what it looks at (the default);
+   * still: holds the view `at` gives (it may still follow a moving thing);
+   * arc: swings gently to and fro, about 20° each way;
+   * track: rides along with what `at` gives, closely (riding, chasing).
+   */
+  hover?: 'orbit' | 'still' | 'arc' | 'track';
+  /** How quickly the camera catches up with `at` while hovering (per second; default 1.2). */
+  rate?: number;
+  /** Only shown in this look (the fly tour skips it in the other one). */
+  when?: 'day' | 'night';
+  /** Chooses what to look at (the busiest dock, the next robot) before flying there. */
+  pick?: () => void;
+  /** While visiting: time to move on to the next one (it picks again and flies there). */
+  next?: (since: number) => boolean;
+  /** Beats to stay on the fly tour (default 6–11). */
+  dwell?: number;
 }
 
 interface Tour {
@@ -780,6 +797,13 @@ const CRUISE_Y = 7.2;
 const SIGN_MAX_Y = 8.05;
 /** Highest the flying camera may go. */
 const FLY_MAX_Y = 8.0;
+/** Metres per beat for the lap above the loop (a lap takes about two minutes at 120 BPM). */
+const LAP_M = 3;
+/** The top-down pan over the robot floor: east–west from end to end, along its middle, metres per beat. */
+const PAN_X0 = FLOOR.x0 + 2;
+const PAN_X1 = FLOOR.x0 + FLOOR.ni * FLOOR.cs - 2;
+const PAN_Z = FLOOR.z0 + (FLOOR.nj * FLOOR.cs) / 2;
+const PAN_M = 1.5;
 /** Things the tour must fly around at cruise height: x, z, radius. */
 const TOUR_OBSTACLES: [number, number, number][] = [
   [-50, 1.9, 2.4],
@@ -2299,6 +2323,7 @@ export class Sorter implements Scene3D {
         p.missorted = true;
       }
     }
+    if (p.dest >= 0 && p.dest < 40) this.lastChute = p.dest;
     if (p.dest >= 0) this.inbound.set(p.dest, (this.inbound.get(p.dest) ?? 0) + 1);
     if (p.dest >= 0 && !this.stationOf.has(p.dest)) this.dockLoad.set(p.dest, (this.dockLoad.get(p.dest) ?? 0) + p.d + GAP);
     this.freeTrays(p, p.dest >= 0 ? this.chutes[p.dest]!.side : 1);
@@ -2878,7 +2903,7 @@ export class Sorter implements Scene3D {
     this.want.y = Math.min(this.want.y, FLY_MAX_Y);
     this.want.x = clamp(this.want.x, WX + 1.5, EX - 1.5);
     this.want.z = clamp(this.want.z, NZ + 1.5, HZ - 1.5);
-    const k = this.first ? 1 : 1 - Math.exp(-dt * (p ? 2.6 : 1.2));
+    const k = this.first ? 1 : 1 - Math.exp(-dt * (p ? 2.6 : th ? 1.2 : this.camRate));
     this.camera.position.lerp(this.want, k);
     this.look.lerp(this.wantLook, this.first ? 1 : 1 - Math.exp(-dt * 3.2));
     this.first = false;
@@ -4324,66 +4349,322 @@ export class Sorter implements Scene3D {
         return true;
       },
     });
+    const tmp = new THREE.Vector3();
+    const tan = new THREE.Vector3();
+    const nrm = new THREE.Vector3();
+    /** The loop position nearest to the camera, so a ride starts where we are. */
+    const nearestS = (): number => {
+      const c = this.camera.position;
+      let best = 0;
+      let bd = Infinity;
+      for (let s = 0; s < LOOP_LEN; s++) {
+        loopAt(s, tmp, tan);
+        const d = (tmp.x - c.x) ** 2 + (tmp.z - c.z) ** 2;
+        if (d < bd) {
+          bd = d;
+          best = s;
+        }
+      }
+      return best;
+    };
+    // What the moving stops have chosen to look at (set by their `pick`).
+    let lapS = 0;
+    let chuteK = 0;
+    let dockK = 0;
+    let stationK = 0;
+    let panX = 0;
+    let panDir = 1;
+    let boxBin = 0;
+    let rideOff = 0;
+    let liftK = 0;
+    let liftHadJob = false;
+    let botK = -1;
+    let botDropping = false;
+    /** The truck behind a north dock door. */
+    const truckAt = (x: number) => this.trucks.docks.find((d) => d.x === x && d.wallZ === NZ);
+    // The robot floor, for the top-down pan: east–west extent and its middle (north–south).
+    const FX0 = PAN_X0;
+    const FX1 = PAN_X1;
     this.pois = [
-      fixed('infeeds', v(-33, 7.4, -17), v(-40, 3.6, -9.5), 'Infeed'),
+      { ...fixed('infeeds', v(-33, 7.4, -17), v(-40, 3.6, -9.5), 'Infeed'), hover: 'still' },
       fixed('scan tunnels', v(-36, 4.2, -22), v(-44, 1.4, -30.5), 'Scanning'),
-      fixed('loop scanner', v(-30, 6, -15.5), v(LX + LOOP_TUNNELS[0]!, 4.3, -LOOP_ZH)),
-      fixed('loop', v(-14, 8, 3), v(LCX, 3, 0), 'Sorter loop'),
-      fixed('chutes', v(30, 5, -25), v(22, 1.5, -14), 'Chutes'),
-      fixed('docks', v(DOCK_X[2]! + 6, 3.6, -23), v(DOCK_X[2]!, 1.2, -31), 'Docks'),
-      fixed('store', v(LIFT_X - 6, 5, -7), v(LIFT_X + 2, 4.5, 0), 'Storage'),
-      fixed('lift', v(LIFT_X - 4.5, 3.5, 4), v(LIFT_X, 4, 0)),
-      fixed('pickup stations', v(44, 4.2, 11), v(41, 1.2, 17.5), 'Robot stations'),
-      fixed('projectors', v(36, 6.6, 13.5), v(41, 5.8, 19)),
-      fixed('bins', v(60, 3.8, 21), v(44, 0.8, 28), 'Robot floor'),
-      fixed('parking', v(-24, 4, 16.5), v(-33, 0.5, 23.5), 'Robot parking'),
-      fixed('manual sorting', v(103.5, 3.6, 16.5), v(109, 1, 22), 'Manual sorting'),
-      { ...fixed('control room', v(-48, 2.85, 17.2), v(-48, 2.75, 21.6), 'Control room'), still: true },
-      fixed('boxes', v(28, 4.2, 25.5), v(32, 0.8, 32), 'Boxes & trucks'),
-      fixed('dj', v(-40, 5.2, 3), v(PLATFORM_X, PLATFORM_Y + 1.2, 0)),
-      fixed('platform', v(-41, 4.6, -5), v(PLATFORM_X, PLATFORM_Y, 0)),
-      fixed('dance floor', v(LCX - 30, 6.5, -5), v(LCX - 10, 1.2, 1), 'Dance floor'),
+      {
+        // One lap above the inside edge of the loop, at cruise height, looking ahead and down.
+        name: 'loop',
+        dept: 'Sorter loop',
+        hover: 'track',
+        rate: 4,
+        dwell: Math.ceil(LOOP_LEN / LAP_M),
+        pick: () => {
+          lapS = nearestS();
+        },
+        at: (p, l, since) => {
+          const s = lapS + since * LAP_M;
+          loopAt(s, p, tan);
+          outward(tan, nrm);
+          p.addScaledVector(nrm, -3).setY(CRUISE_Y);
+          loopAt(s + 14, l, tan);
+          l.setY(2.5);
+          return true;
+        },
+      },
+      {
+        // The chute that last took a parcel off the loop: from beyond its foot, looking back up it.
+        name: 'chutes',
+        dept: 'Chutes',
+        hover: 'still',
+        pick: () => {
+          chuteK = this.lastChute;
+        },
+        next: (since) => since > 8 && this.lastChute !== chuteK,
+        at: (p, l) => {
+          const path = this.chutes[chuteK]?.path;
+          if (!path) return false;
+          const a = path.pts[0]!;
+          const b = path.pts[path.pts.length - 1]!;
+          const d = tmp.set(b.x - a.x, 0, b.z - a.z).normalize();
+          l.lerpVectors(a, b, 0.55);
+          l.y = Math.max(1.4, l.y);
+          p.copy(b).addScaledVector(d, 7);
+          p.x += -d.z * 4;
+          p.z += d.x * 4;
+          p.y = 5;
+          return true;
+        },
+      },
+      {
+        // The busiest dock (long belt queue, full cages, truck about to leave): its worker, cages and trailer.
+        name: 'docks',
+        dept: 'Docks',
+        hover: 'arc',
+        pick: () => {
+          let best = -Infinity;
+          this.docks.docks.forEach((d, i) => {
+            const tr = truckAt(d.x);
+            const away = tr && tr.state !== 'open' && tr.state !== 'cleardown';
+            const score = d.queue.length + 6 * this.docks.cageFill(d.x) + (tr?.state === 'cleardown' ? 4 : 0) - (away ? 20 : 0);
+            if (score > best) {
+              best = score;
+              dockK = i;
+            }
+          });
+        },
+        // When its truck leaves, go to the next busiest.
+        next: (since) => {
+          const d = this.docks.docks[dockK];
+          return since > 4 && !!d && truckAt(d.x)?.state === 'leaving';
+        },
+        at: (p, l) => {
+          const d = this.docks.docks[dockK];
+          if (!d) return false;
+          p.set(d.x + 2, 3.8, -22);
+          l.set(d.x, 1.2, -31);
+          return true;
+        },
+      },
+      // Square on to the rack (the lift is in the middle of it).
+      { ...fixed('store', v(LIFT_X - 12, 5.5, 0), v(RACK_X0, 5, 0), 'Storage'), hover: 'still' },
+      {
+        // The pickup table with the longest queue.
+        name: 'pickup stations',
+        dept: 'Robot stations',
+        pick: () => {
+          let best = -1;
+          this.stationQueue.forEach((q, i) => {
+            if (q.length > best) {
+              best = q.length;
+              stationK = i;
+            }
+          });
+        },
+        at: (p, l) => {
+          const st = this.floor.stations[stationK];
+          if (!st) return false;
+          l.set(st.x, 1.2, st.z);
+          p.set(st.x + 3, 4.2, st.z - 6.5);
+          return true;
+        },
+      },
+      {
+        // High above the robot floor, looking down, panning slowly from end to end (parking included).
+        name: 'bins',
+        dept: 'Robot floor',
+        hover: 'track',
+        rate: 3,
+        dwell: 32,
+        pick: () => {
+          panX = clamp(this.camera.position.x, FX0, FX1);
+          panDir = panX - FX0 < FX1 - panX ? 1 : -1;
+        },
+        at: (p, l, since) => {
+          const span = FX1 - FX0;
+          const u = (((panX - FX0) * panDir + since * PAN_M) % (2 * span) + 2 * span) % (2 * span);
+          const f = u > span ? 2 * span - u : u;
+          const x = panDir > 0 ? FX0 + f : FX1 - f;
+          p.set(x, FLY_MAX_Y - 0.1, PAN_Z - 1.2);
+          l.set(x, 0, PAN_Z + 0.6);
+          return true;
+        },
+      },
+      {
+        // Over the worker's shoulder, towards the pigeonholes.
+        name: 'manual sorting',
+        dept: 'Manual sorting',
+        hover: 'still',
+        at: (p, l) => {
+          const x = this.manual.workerX();
+          p.set(x - 0.6, 2.6, MANUAL_TABLE.z + 0.2);
+          l.set(x + 0.2, 1.3, MANUAL_TABLE.z + 2.7);
+          return true;
+        },
+      },
+      { ...fixed('control room', v(-48, 2.85, 17.2), v(-48, 2.75, 21.6), 'Control room'), hover: 'still' },
+      {
+        // The box door where a forklift is swapping a box (or the fullest box).
+        name: 'boxes',
+        dept: 'Boxes & trucks',
+        pick: () => {
+          const f = this.yard.lifts.find((x) => x.job !== null);
+          if (f) boxBin = f.job!;
+          else {
+            let best = -1;
+            this.floor.bins.forEach((b, i) => {
+              if (b.vol > best) {
+                best = b.vol;
+                boxBin = i;
+              }
+            });
+          }
+        },
+        next: (since) => since > 8 && !this.yard.lifts.some((x) => x.job === boxBin),
+        at: (p, l) => {
+          const b = this.floor.bins[boxBin];
+          if (!b) return false;
+          l.set(b.x, 0.8, 32);
+          p.set(b.x - 4, 4.2, 25.5);
+          return true;
+        },
+      },
+      {
+        // Round the crowd, a step on every beat (a turn per 16 bars), inside the loop.
+        name: 'dance floor',
+        dept: 'Dance floor',
+        when: 'night',
+        hover: 'track',
+        rate: 2,
+        at: (p, l) => {
+          const b = Math.floor(this.bt);
+          const a = (b + easeIO(this.bt - b)) * ((Math.PI * 2) / 64);
+          l.set(LCX - 10, 1.2, 0);
+          p.set(l.x + Math.cos(a) * 22, 6.5, Math.sin(a) * 5.5);
+          return true;
+        },
+      },
+      // Behind the DJ, over the shoulder: the decks and the crowd beyond.
+      { ...fixed('dj', v(PLATFORM_X - 2.0, PLATFORM_Y + 1.95, 0.45), v(PLATFORM_X + 2.4, PLATFORM_Y + 0.9, -0.15)), hover: 'still', when: 'night' },
       fixed('break', v(-29, 3.2, 26.8), v(-36.5, 0.8, 31.2)),
       {
+        // Standing on a tray: eye height above it, at tray speed, looking ahead.
         name: 'loop ride',
         dept: 'Ride the loop',
-        // Alongside the trays, at tray speed, looking ahead.
+        hover: 'track',
+        rate: 14,
+        dwell: 48,
+        pick: () => {
+          rideOff = Math.round(nearestS() - this.ct * BEAT_M);
+        },
         at: (p, l) => {
-          const s = this.ct * BEAT_M + 6;
-          loopAt(s + 8, l, this.t);
-          loopAt(s, p, this.t);
-          outward(this.t, this.n);
-          p.addScaledVector(this.n, 2.6).setY(LOOP_Y + 1.6);
-          l.setY(LOOP_Y);
+          const s = this.ct * BEAT_M + rideOff;
+          loopAt(s, p, tan);
+          p.y = LOOP_Y + 1.6;
+          loopAt(s + 10, l, tan);
+          l.y = LOOP_Y + 0.9;
           return true;
         },
       },
       {
+        // Behind a forklift on a job; on to the next one when it is done.
         name: 'forklift',
         dept: 'Forklifts',
+        hover: 'track',
+        rate: 4,
+        dwell: 24,
+        pick: () => {
+          const i = this.yard.lifts.findIndex((x) => x.job !== null);
+          liftK = Math.max(0, i);
+          liftHadJob = i >= 0;
+          const f = this.yard.lifts[liftK];
+          if (f) this.chaseStart(f.g.position, f.yaw);
+        },
+        next: () => (liftHadJob ? this.yard.lifts[liftK]?.job === null : this.yard.lifts.some((x) => x.job !== null)),
         at: (p, l) => {
-          const f = this.yard.lifts.find((x) => x.job !== null) ?? this.yard.lifts[0];
+          const f = this.yard.lifts[liftK];
           if (!f) return false;
-          l.copy(f.g.position).setY(1.4);
-          p.copy(l).add(this.t.set(-4, 2.4, 4));
+          this.chase(tmp.copy(f.g.position).setY(1.4), 5, 2.4, 0.35, 1, p, l);
           return true;
         },
       },
       {
+        // Behind a robot from its pickup to its drop, then the next robot.
         name: 'robot',
         dept: 'Ride a robot',
+        hover: 'track',
+        rate: 4,
+        dwell: 24,
+        pick: () => {
+          const bots = this.floor.fleet.bots;
+          const busy = bots.filter((b) => b.state === 'toDrop' || b.state === 'toPick');
+          const b = busy[this.tourRobot++ % Math.max(1, busy.length)] ?? bots[0];
+          botK = b ? b.k : -1;
+          botDropping = false;
+          if (b) this.chaseStart(tmp, this.floor.robotTop(b.k, tmp));
+        },
+        next: (since) => {
+          const bots = this.floor.fleet.bots;
+          const b = bots.find((x) => x.k === botK);
+          if (!b) return true;
+          if (b.state === 'toDrop') botDropping = true;
+          const working = (x: typeof b) => x.state === 'toPick' || x.state === 'toDrop';
+          // Parked with nothing to do (at start-up): go to one that is working, once there is one.
+          if (!botDropping && !working(b)) return since > 4 && bots.some(working);
+          return botDropping && b.state !== 'toDrop';
+        },
         at: (p, l) => {
-          const busy = this.floor.fleet.bots.filter((b) => b.state === 'toDrop' || b.state === 'toPick');
-          const b = busy[this.tourRobot % Math.max(1, busy.length)] ?? this.floor.fleet.bots[0];
-          if (!b) return false;
-          this.floor.robotTop(b.k, l);
-          l.y = 1.2;
-          p.copy(l).add(this.t.set(-3.2, 2.6, -3.2));
+          if (botK < 0) return false;
+          this.floor.robotTop(botK, tmp);
+          tmp.y = 0.9;
+          this.chase(tmp, 3, 1.6, 0.3, 2, p, l);
           return true;
         },
       },
     ];
     this.camera.position.set(-50, 6, -20);
+  }
+
+  /** The chase camera (robots, forklifts): its direction of travel and where the thing was last frame. */
+  private chaseFwd = new THREE.Vector3(1, 0, 0);
+  private chaseLast = new THREE.Vector3();
+  private chaseVel = new THREE.Vector3();
+  private chaseDt = 0;
+  /** Index of the chute (0–39) that last took a parcel off the loop. */
+  private lastChute = 0;
+
+  private chaseStart(at: V3, yaw: number): void {
+    this.chaseLast.copy(at);
+    this.chaseFwd.set(Math.sin(yaw), 0, Math.cos(yaw));
+  }
+
+  /** Behind a moving thing at `c` and a little to the side, looking where it goes; `turn` is how fast the view swings round. */
+  private chase(c: V3, back: number, up: number, side: number, turn: number, pos: V3, look: V3): void {
+    const vel = this.chaseVel.copy(c).sub(this.chaseLast).setY(0);
+    this.chaseLast.copy(c);
+    if (this.chaseDt > 0 && vel.lengthSq() > 1e-6) this.chaseFwd.lerp(vel.normalize(), 1 - Math.exp(-this.chaseDt * turn)).normalize();
+    const f = this.chaseFwd;
+    pos.copy(c).addScaledVector(f, -back);
+    pos.x += -f.z * back * side;
+    pos.z += f.x * back * side;
+    pos.y = c.y + up;
+    look.copy(c).addScaledVector(f, 2);
   }
 
   private tourRobot = 0;
@@ -4582,12 +4863,16 @@ export class Sorter implements Scene3D {
     const k = this.pois.findIndex((p) => p.name === id);
     if (k < 0) return;
     this.visitPoi = k;
-    if (jump && this.pois[k]!.at(this.want, this.wantLook)) {
-      // Straight there (start-up and screenshots): no flight.
-      this.camera.position.copy(this.want);
-      this.look.copy(this.wantLook);
-      this.camera.lookAt(this.look);
-      this.tour = null;
+    const poi = this.pois[k]!;
+    if (jump) {
+      poi.pick?.();
+      if (poi.at(this.want, this.wantLook, 0)) {
+        // Straight there (start-up and screenshots): no flight.
+        this.camera.position.copy(this.want);
+        this.look.copy(this.wantLook);
+        this.camera.lookAt(this.look);
+        this.tour = { poi: k, curve: new THREE.CatmullRomCurve3([this.want.clone(), this.want.clone().add(v(0, 0.1, 0))]), len: 0.01, s: 0.01, lookFrom: this.wantLook.clone(), dwell: poi.dwell ?? 8, arrivedAt: this.bt, offset: new THREE.Vector3().subVectors(this.want, this.wantLook) };
+      } else this.tour = null;
     }
     this.camMode = 'visit';
     this.follow = null;
@@ -4603,19 +4888,28 @@ export class Sorter implements Scene3D {
     return this.camMode;
   }
 
+  /** How quickly the camera catches up with where the tour wants it (per second). */
+  private camRate = 1.2;
+
   /** Fly mode: travel at cruise height to a random stop, hover and look around, then on to the next. */
   private flyTour(dt: number, travel: number): void {
     const t = this.tour;
+    this.camRate = 1.2;
+    this.chaseDt = dt;
     const speed = 6.5 * clamp(travel / 0.4, 0.4, 2.5);
     const staying = this.camMode === 'visit' && t?.poi === this.visitPoi;
-    if (!t || (this.camMode === 'visit' && t.poi !== this.visitPoi) || (!staying && t.s >= t.len && this.bt - t.arrivedAt > t.dwell)) {
+    const since = t && t.s >= t.len ? this.bt - t.arrivedAt : 0;
+    const moveOn = !t
+      || (this.camMode === 'visit' && t.poi !== this.visitPoi)
+      || (staying ? t.s >= t.len && !!this.pois[t.poi]!.next?.(since) : t.s >= t.len && since > t.dwell);
+    if (moveOn) {
       this.planTour(t);
       return this.flyTour(dt, travel);
     }
     const poi = this.pois[t.poi]!;
     const pos = this.p;
     const look = this.n;
-    if (!poi.at(pos, look)) {
+    if (!poi.at(pos, look, since)) {
       this.tour = null;
       return;
     }
@@ -4629,16 +4923,26 @@ export class Sorter implements Scene3D {
       const settle = smooth01((u - 0.55) / 0.45);
       this.wantLook.lerp(look, settle);
       if (u < 0.2) this.wantLook.lerp(t.lookFrom, 1 - u / 0.2);
+      // The curve ends where the stop was when we set off; if it moves (a ride, a robot), close in on where it is now.
+      this.want.lerp(pos, smooth01((u - 0.6) / 0.4));
       if (t.s >= t.len) {
         t.arrivedAt = this.bt;
-        t.offset.subVectors(this.want, look);
+        t.offset.subVectors(pos, look);
       }
-    } else {
-      // Hover: turn slowly around what we look at, following it if it moves.
-      const a = this.pois[t.poi]?.still ? 0 : (this.bt - t.arrivedAt) * 0.04;
-      this.want.copy(t.offset).applyAxisAngle(UP, a).add(look);
-      this.wantLook.copy(look);
+      return;
     }
+    const hover = poi.hover ?? 'orbit';
+    if (hover === 'still' || hover === 'track') {
+      // Hold the view the stop gives (following it if it moves).
+      this.want.copy(pos);
+      this.camRate = poi.rate ?? (hover === 'track' ? 4 : 1.2);
+    } else {
+      // Turn around what we look at: all the way round slowly, or a gentle swing to and fro.
+      const a = hover === 'arc' ? 0.35 * Math.sin((since * Math.PI * 2) / 32) : since * 0.04;
+      this.want.copy(t.offset).applyAxisAngle(UP, a).add(look);
+      this.camRate = poi.rate ?? 1.2;
+    }
+    this.wantLook.copy(look);
   }
 
   private planTour(prev: Tour | null): void {
@@ -4646,17 +4950,23 @@ export class Sorter implements Scene3D {
     const lookFrom = prev ? this.wantLook.clone() : v(0, 2, 0);
     let k = 0;
     if (this.camMode === 'visit') k = this.visitPoi;
-    else
-      for (let tries = 0; tries < 20; tries++) {
-        k = Math.floor(Math.random() * this.pois.length);
-        if (!this.recent.includes(k)) break;
-      }
+    else {
+      // Only stops that belong to the look on screen (no empty DJ booth by day).
+      const night = this.isNight();
+      const ok = this.pois.map((_, i) => i).filter((i) => {
+        const w = this.pois[i]!.when;
+        return !w || (w === 'night') === night;
+      });
+      const fresh = ok.filter((i) => !this.recent.includes(i));
+      k = pick(fresh.length ? fresh : ok);
+    }
     this.recent.push(k);
     if (this.recent.length > 5) this.recent.shift();
-    if (this.pois[k]!.name === 'robot') this.tourRobot++;
+    const poi = this.pois[k]!;
+    poi.pick?.();
     const pos = new THREE.Vector3();
     const look = new THREE.Vector3();
-    if (!this.pois[k]!.at(pos, look)) pos.copy(from);
+    if (!poi.at(pos, look, 0)) pos.copy(from);
     const pts = [from];
     const flat = Math.hypot(pos.x - from.x, pos.z - from.z);
     if (flat > 12) {
@@ -4685,7 +4995,7 @@ export class Sorter implements Scene3D {
     if (clean.length < 2) clean.push(pos.clone().add(this.t.set(0, 0.1, 0)));
     const curve = new THREE.CatmullRomCurve3(clean, false, 'centripetal');
     const len = curve.getLength();
-    this.tour = { poi: k, curve, len: Number.isFinite(len) && len > 0.01 ? len : 0.01, s: 0, lookFrom, dwell: 6 + Math.floor(Math.random() * 6), arrivedAt: 0, offset: new THREE.Vector3() };
+    this.tour = { poi: k, curve, len: Number.isFinite(len) && len > 0.01 ? len : 0.01, s: 0, lookFrom, dwell: poi.dwell ?? 6 + Math.floor(Math.random() * 6), arrivedAt: 0, offset: new THREE.Vector3() };
     if (!(len > 0.01)) {
       // Already there: hover.
       this.tour.s = this.tour.len;

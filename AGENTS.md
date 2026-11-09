@@ -216,6 +216,10 @@ the simulation:
 ## Gotchas
 
 - `CatmullRomCurve3` breaks on repeated points; `planTour` removes them.
+- Tour stops (`Poi` in `sorter.ts`, built in `buildCamera`): `hover` says how the camera
+  stays (orbit, still, arc, track), `pick` chooses what to look at before flying there
+  (busiest dock, a working robot), `next` moves on while visiting, `when` keeps a stop to
+  day or night (the fly tour skips it in the other look), `dwell` sets the beats on the tour.
 - The first animation frame can have a negative dt; it is clamped.
 - Parcels' `pos` is the base of the parcel, not its centre.
 - `SceneInput.beats` can jump (tab hidden); the scene re-phases instead of

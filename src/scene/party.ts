@@ -5,6 +5,7 @@ import * as THREE from 'three';
 
 import type { FloorKit } from './floor';
 import { buildHuman, type Human } from './people';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export interface PartyInput {
   kick: number;
@@ -50,6 +51,10 @@ export class Party {
   private confetti: THREE.InstancedMesh;
   private bits: { p: THREE.Vector3; v: THREE.Vector3; r: THREE.Euler; spin: THREE.Vector3; life: number }[] = [];
   private lastDrop = -1;
+  /** CD deck jog wheels, their play/cue buttons and the mixer's level meters (animated to the music). */
+  private jogs: THREE.Mesh[] = [];
+  private buttons: THREE.MeshBasicMaterial[] = [];
+  private meters: THREE.Mesh[] = [];
   private readonly o = new THREE.Object3D();
   private readonly c = new THREE.Color();
   private readonly q = new THREE.Quaternion();
@@ -76,8 +81,44 @@ export class Party {
       return m;
     };
     add(new THREE.BoxGeometry(0.7, 1.0, 1.9), black, 0.6, 0.5, 0);
-    for (const dz of [-0.55, 0.55]) add(new THREE.CylinderGeometry(0.2, 0.2, 0.04, 24), grey, 0.6, 1.02, dz);
-    add(new THREE.BoxGeometry(0.3, 0.06, 0.4), grey, 0.6, 1.03, 0);
+    // Two CD decks and a four-channel mixer between them, the near edge towards the DJ (−x).
+    const deck = k.std(0x1b1c20, 0.35, 0.5, 0x2a2c31);
+    const metal = k.std(0x8a8f99, 0.3, 0.9, 0xc3c8ce);
+    const top = 1.0;
+    const glow = (color: number) => new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(2.2) });
+    for (const dz of [-0.62, 0.62]) {
+      add(new THREE.BoxGeometry(0.46, 0.08, 0.34), deck, 0.6, top + 0.04, dz);
+      // The jog wheel: a metal platter with a ring and a lit marker that turns.
+      const jog = add(new THREE.CylinderGeometry(0.115, 0.12, 0.025, 32), metal, 0.56, top + 0.095, dz);
+      const mark = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.006, 0.012), glow(0x5be0ff));
+      mark.position.set(0.05, 0.015, 0);
+      jog.add(mark);
+      this.jogs.push(jog);
+      // The screen (tilted towards the DJ), play and cue buttons, the pitch fader.
+      const screen = add(new THREE.PlaneGeometry(0.1, 0.07), glow(0x3a8cff), 0.76, top + 0.1, dz);
+      screen.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+      screen.rotateX(-0.5);
+      for (const [bz, col] of [[-0.11, 0x5bff8a], [-0.05, 0xffa21a]] as const) {
+        const b = add(new THREE.CylinderGeometry(0.022, 0.022, 0.012, 16), glow(col), 0.42, top + 0.086, dz + bz * Math.sign(dz));
+        this.buttons.push(b.material as THREE.MeshBasicMaterial);
+      }
+      add(new THREE.BoxGeometry(0.16, 0.012, 0.012), metal, 0.62, top + 0.086, dz + 0.14 * Math.sign(dz));
+    }
+    // Mixer: four channels of knobs and faders, a crossfader and level meters that jump on the kick.
+    add(new THREE.BoxGeometry(0.42, 0.09, 0.3), deck, 0.6, top + 0.045, 0);
+    const knobs: THREE.BufferGeometry[] = [];
+    const faders: THREE.BufferGeometry[] = [];
+    for (let c = 0; c < 4; c++) {
+      const z = -0.105 + c * 0.07;
+      for (let r = 0; r < 4; r++) knobs.push(new THREE.CylinderGeometry(0.013, 0.015, 0.02, 12).translate(0.73 - r * 0.055, 0, z));
+      faders.push(new THREE.BoxGeometry(0.025, 0.02, 0.03).translate(0.46, 0, z));
+      const vu = add(new THREE.BoxGeometry(0.008, 0.004, 0.012), glow(0x5bff8a), 0.52, top + 0.093, z + 0.025);
+      vu.geometry.translate(0.004, 0, 0);
+      this.meters.push(vu);
+    }
+    faders.push(new THREE.BoxGeometry(0.02, 0.02, 0.05).translate(0.4, 0, 0));
+    add(mergeGeometries(knobs)!, metal, 0, top + 0.1, 0).position.x = dj.x;
+    add(mergeGeometries(faders)!, metal, 0, top + 0.1, 0).position.x = dj.x;
     this.panel = new THREE.MeshBasicMaterial({ color: 0x000000 });
     add(new THREE.PlaneGeometry(1.8, 0.8), this.panel, 0.96, 0.5, 0).rotation.y = Math.PI / 2;
     // Speaker stacks behind the DJ, facing the hall.
@@ -141,6 +182,12 @@ export class Party {
     d.legL.rotation.x = -0.1 * s.kick;
     d.legR.rotation.x = 0.1 * s.kick;
     this.panel.color.copy(s.cols[Math.floor(bt) % s.cols.length]!).multiplyScalar(0.6 + s.kick * 1.4);
+    // Decks: the jog wheels turn (one a little faster: beat matching), play blinks on the beat, cue on the off-beat.
+    this.jogs.forEach((j, i) => (j.rotation.y = -bt * (1.6 + i * 0.03)));
+    const beatOn = bt % 1 < 0.5;
+    this.buttons.forEach((m, i) => m.color.setHex(i % 2 === 0 ? 0x5bff8a : 0xffa21a).multiplyScalar(beatOn === (i % 2 === 0) ? 2.2 : 0.25));
+    // Level meters: up on the kick, a little different per channel.
+    this.meters.forEach((m, i) => (m.scale.x = 1 + 10 * Math.min(1, s.kick * (0.8 + 0.1 * i) + 0.15 * s.energy)));
     // Laser fans: switched off (they crossed the whole hall); kept for an easy return.
     const on = false && s.energy > 0.5;
     const sweep = Math.sin((s.bar % 2) * Math.PI) * 0.6;

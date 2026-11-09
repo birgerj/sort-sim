@@ -108,6 +108,11 @@ export class ManualSort {
     return onTheWay + here < cap && this.fill.some((f) => f < CUBBY_CAP);
   }
 
+  /** Where the worker stands along the table (x), for the camera. */
+  workerX(): number {
+    return this.now.x;
+  }
+
   /** Called when the worker sticks a new label on a parcel (to redraw it). */
   relabel: (it: Item) => void = () => {};
 
