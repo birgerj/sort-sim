@@ -1,7 +1,9 @@
 /**
  * The controls over the canvas: a start screen (sound needs a click), the
- * caption, department buttons, camera, time of day and music. Settings are
- * remembered in localStorage; URL parameters override them for one visit.
+ * caption, and a dock of tabs at the bottom (Go to, Camera, Hub, Night at night,
+ * More) whose panels slide up above it. The same layout on phones and desktops;
+ * keys do most things on a desktop. Settings are remembered in localStorage; URL
+ * parameters override them for one visit.
  */
 import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
@@ -11,6 +13,8 @@ import { XMAS } from '../sim/season';
 import { NIGHT_PRESETS, NIGHT_SWITCHES, presetOf, type NightFx, type NightPreset } from '../scene/nightFx';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
+type Tab = 'go' | 'camera' | 'hub' | 'night' | 'more';
+const TAB_TITLES: Record<Tab, string> = { go: 'Go to', camera: 'Camera', hub: 'Hub', night: 'Night effects', more: 'More' };
 
 export interface Settings {
   time: TimeMode;
@@ -60,7 +64,14 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 export class Hud {
   readonly root = el('div', 'hud');
   private caption = el('div', 'caption');
-  private bar = el('div', 'bar');
+  /** The dock: the tabs, always at the bottom. */
+  private bar = el('nav', 'bar dock');
+  /** The panel of the open tab, above the dock. */
+  private sheet = el('section', 'sheet');
+  private sheetTitle = el('h2');
+  private sheets = new Map<Tab, HTMLElement>();
+  private tabs = new Map<Tab, HTMLButtonElement>();
+  private open: Tab | null = null;
   private deptBtns = new Map<string, HTMLButtonElement>();
   private camBtns = new Map<string, HTMLButtonElement>();
   private timeBtns = new Map<TimeMode, HTMLButtonElement>();
@@ -73,13 +84,13 @@ export class Hud {
   /** The shipping label of a clicked parcel. */
   private card: { el: HTMLElement; p: Parcel; where: HTMLElement } | null = null;
   private hideTimer = 0;
-  private menuBtn!: HTMLButtonElement;
   /** Group for the app buttons (install, full screen). */
   appGroup!: HTMLElement;
   private hidden = false;
-  /** The night controls: only in the bar while the night look is on screen. */
-  private nightGroup!: HTMLElement;
-  private nightPanel: { el: HTMLElement; presets: Map<NightPreset, HTMLButtonElement>; switches: Map<string, HTMLButtonElement>; glow: HTMLInputElement } | null = null;
+  /** The night controls (the Night tab is only in the dock while the night look is on screen). */
+  private nightCtl!: { presets: Map<NightPreset, HTMLButtonElement>; switches: Map<string, HTMLButtonElement>; glow: HTMLInputElement };
+  /** Touch screens: the dock stays up (no mouse to bring it back). */
+  private readonly touch = window.matchMedia?.('(pointer: coarse)').matches ?? false;
 
   constructor(
     private scene: Sorter,
@@ -87,23 +98,13 @@ export class Hud {
     readonly settings: Settings,
     private opts: { showStart: boolean; showUi: boolean; onQuality: () => void },
   ) {
-    // A menu button (top right): on touch screens the bar only comes up with it, so swiping to
-    // look around does not bring the menu up by accident.
-    this.menuBtn = el('button', 'menu', '☰ Menu');
-    this.menuBtn.onclick = () => {
-      if (this.hidden) this.wake(true);
-      else this.hide();
-    };
-    this.root.append(this.caption, this.bar, this.menuBtn);
+    this.root.append(this.caption, this.sheet, this.bar);
     if (!opts.showUi) this.root.classList.add('off');
     this.buildBar();
     if (opts.showStart) this.root.append(this.startScreen());
     this.bindKeys();
-    // Mouse movement brings the bar back; touches on the hall do not (use the menu button).
-    const wake = (e: PointerEvent) => {
-      if (e.pointerType === 'touch' && !this.bar.contains(e.target as Node)) return;
-      this.wake();
-    };
+    // Mouse movement brings the dock back (on touch screens it never goes).
+    const wake = () => this.wake();
     window.addEventListener('pointermove', wake);
     window.addEventListener('pointerdown', wake);
     this.wake();
@@ -128,8 +129,10 @@ export class Hud {
     }
     for (const [v, b] of this.qualityBtns) b.classList.toggle('on', v === this.settings.quality);
     const night = this.scene.isNight();
-    if (this.nightGroup.hidden === night) this.nightGroup.hidden = !night;
-    if (!night && this.nightPanel) this.toggleNight();
+    const nt = this.tabs.get('night')!;
+    if (nt.hidden === night) nt.hidden = !night;
+    if (!night && this.open === 'night') this.openTab(null);
+    if (this.open === 'night') this.refreshNight();
     const most = this.scene.infeedCapacity();
     const q = this.scene.backlog;
     const txt = `${this.settings.rate}/min · ${Math.round(this.music.bpm)} BPM ${MOODS[this.music.mood]}${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
@@ -172,42 +175,119 @@ export class Hud {
     };
     quiet.onclick = () => s.remove();
     row.append(go, quiet);
-    card.append(row, el('p', 'keys', 'Keys: 1–9, 0 departments · A auto · F fly · P follow · V walk (WASD, drag to look, Shift run, Esc stop) · [ ] belt speed · D day · N night · C cycle · M sound · H hide'));
+    card.append(row, el('p', 'keys', 'Keys: 1–9, 0 departments · A auto · F fly · P follow · V walk (WASD, drag to look, Shift run, Esc stop) · [ ] belt speed · D day · N night · C cycle · M sound · H hide · Esc closes a panel'));
     s.append(card);
     return s;
   }
 
-  private group(label: string): HTMLElement {
-    const g = el('div', 'group');
-    g.append(el('span', 'label', label));
-    this.bar.append(g);
-    return g;
+  /** One dock tab: icon and label; tapping it opens its panel, tapping again closes it. */
+  private tab(id: Tab, label: string, icon: string, title: string): void {
+    const b = el('button', 'tab');
+    b.type = 'button';
+    b.title = title;
+    b.setAttribute('aria-expanded', 'false');
+    // (Icons are this file's own constant SVG markup.)
+    b.innerHTML = `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`;
+    b.append(el('span', '', label));
+    b.onclick = () => this.openTab(this.open === id ? null : id);
+    this.bar.append(b);
+    this.tabs.set(id, b);
+  }
+
+  /** Open a tab's panel above the dock (null closes it). */
+  private openTab(id: Tab | null): void {
+    if (id && (this.panel || this.stats)) {
+      if (this.panel) this.togglePanel();
+      if (this.stats) this.toggleStats();
+    }
+    this.open = id;
+    for (const [t, b] of this.tabs) {
+      b.classList.toggle('on', t === id);
+      b.setAttribute('aria-expanded', String(t === id));
+    }
+    for (const [t, sec] of this.sheets) sec.hidden = t !== id;
+    this.sheet.classList.toggle('show', !!id);
+    if (id) this.sheetTitle.textContent = TAB_TITLES[id];
+    if (id === 'night') this.refreshNight();
+    this.wake();
+  }
+
+  /** A titled row in a panel. */
+  private row(sec: HTMLElement, label: string, help?: string): HTMLElement {
+    const r = el('div', 'set-row');
+    r.append(el('span', 'set-label', label));
+    const opts = el('div', 'set-opts');
+    r.append(opts);
+    if (help) r.append(el('span', 'set-help', help));
+    sec.append(r);
+    return opts;
+  }
+
+  private section(id: Tab): HTMLElement {
+    const sec = el('div', `sheet-body sheet-${id}`);
+    sec.hidden = true;
+    this.sheet.append(sec);
+    this.sheets.set(id, sec);
+    return sec;
   }
 
   private buildBar(): void {
-    const depts = this.group('Go to');
-    depts.classList.add('depts');
+    this.bar.setAttribute('aria-label', 'Menu');
+    this.tab('go', 'Go to', '<path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>', 'Departments (keys 1–9, 0)');
+    this.tab('camera', 'Camera', '<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 11l5-3v8l-5-3"/>', 'Camera: auto, fly, follow, walk (keys A, F, P, V)');
+    this.tab('hub', 'Hub', '<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>', 'Parcels per minute, belt speed, cleardown, figures');
+    this.tab('night', 'Night', '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>', 'Night effects: glowing parcels and the party');
+    this.tabs.get('night')!.hidden = true;
+    this.tab('more', 'More', '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>', 'Time of day, sound, graphics, Christmas, country, app');
+
+    // The panel above the dock: a title with a close button, and one body per tab.
+    const head = el('div', 'sheet-head');
+    const close = el('button', 'sheet-close');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Close');
+    close.title = 'Close (Esc)';
+    close.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    close.onclick = () => this.openTab(null);
+    head.append(this.sheetTitle, close);
+    this.sheet.append(head);
+    this.sheet.setAttribute('aria-label', 'Menu panel');
+
+    // Go to: the departments.
+    const go = this.section('go');
+    const grid = el('div', 'depts');
     this.scene.departments().forEach((d, n) => {
       const b = el('button', '', d.label);
       b.title = n < 10 ? `Key ${(n + 1) % 10}` : '';
       b.onclick = () => this.scene.visit(d.id);
-      depts.append(b);
+      grid.append(b);
       this.deptBtns.set(d.id, b);
     });
-    const cam = this.group('Camera');
-    for (const [id, label] of [['auto', 'Auto'], ['fly', 'Fly'], ['follow', 'Follow'], ['walk', 'Walk']] as const) {
-      const b = el('button', '', label);
+    go.append(grid);
+
+    // Camera.
+    const cam = this.section('camera');
+    const cams = el('div', 'cams');
+    for (const [id, label, sub, key] of [
+      ['auto', 'Auto', 'Switches every 8 bars', 'A'],
+      ['fly', 'Fly', 'A tour of the hall', 'F'],
+      ['follow', 'Follow', 'Ride along with a parcel', 'P'],
+      ['walk', 'Walk', 'On foot: WASD, or thumbs', 'V'],
+    ] as const) {
+      const b = el('button', 'cam');
+      b.title = `Key ${key}`;
+      b.append(el('b', '', label), el('span', '', sub));
       b.onclick = () => this.scene.setControl('cam', id);
-      cam.append(b);
+      cams.append(b);
       this.camBtns.set(id, b);
     }
-    const next = el('button', '', 'Next parcel');
+    const next = el('button', 'wide', 'Next parcel');
+    next.title = 'Key P';
     next.onclick = () => this.scene.setControl('next', true);
-    cam.append(next);
-    const hub = this.group('Hub');
-    const clear = el('button', '', 'Cleardown…');
-    clear.title = 'Choose dock doors whose trucks should leave now';
-    clear.onclick = () => this.togglePanel();
+    cam.append(cams, next, el('p', 'set-help', 'Click or tap a robot, forklift or person in the hall to follow it; a parcel to see its label.'));
+
+    // Hub: how busy, how fast, cleardown and figures.
+    const hub = this.section('hub');
+    const rateOpts = this.row(hub, 'Parcels per minute');
     const rate = el('input');
     rate.type = 'range';
     rate.min = '20';
@@ -222,37 +302,168 @@ export class Hud {
       saveSettings(this.settings);
     };
     this.scene.setRate(this.settings.rate);
-    const stats = el('button', '', 'Figures');
-    stats.title = 'Hub figures: throughput, dwell time, recirculation, departures (and a CSV download)';
-    stats.onclick = () => this.toggleStats();
-    hub.append(clear, stats, rate, this.rateOut);
-    const belt = this.group('Belt speed');
+    rateOpts.classList.add('stack');
+    rateOpts.append(rate, this.rateOut);
+    const belt = this.row(hub, 'Belt speed', 'Keys [ and ].');
+    belt.classList.add('cols4');
     for (const v of BELT_SPEEDS) {
       // 2 m per beat at the music's tempo.
       const ms = (v * 2 * this.music.bpm) / 60;
       const b = el('button', '', `${ms.toFixed(1)} m/s`);
-      b.title = `${v}× · keys [ and ]`;
+      b.title = `${v}×`;
       b.onclick = () => this.setSpeed(v);
       belt.append(b);
       this.speedBtns.set(v, b);
     }
-    // Time of day and music live in the settings panel; the sound button is kept here so the
-    // keys (M) and the start screen can update it.
+    const acts = el('div', 'cols2');
+    const clear = el('button', 'wide', 'Cleardown…');
+    clear.title = 'Choose dock doors whose trucks should leave now';
+    clear.onclick = () => {
+      this.openTab(null);
+      this.togglePanel();
+    };
+    const stats = el('button', 'wide', 'Figures');
+    stats.title = 'Hub figures: throughput, dwell time, recirculation, departures (and a CSV download)';
+    stats.onclick = () => {
+      this.openTab(null);
+      this.toggleStats();
+    };
+    acts.append(clear, stats);
+    hub.append(acts);
+
+    this.buildNight(this.section('night'));
+    this.buildMore(this.section('more'));
+  }
+
+  /** Night: presets, how brightly parcels glow, and a switch per party effect. */
+  private buildNight(sec: HTMLElement): void {
+    const set = (fx: NightFx) => {
+      this.settings.night = { ...fx };
+      this.scene.setNightFx(fx);
+      saveSettings(this.settings);
+      this.refreshNight();
+    };
+    const pb = this.row(sec, 'Preset', 'Party: everything. Calm: glowing parcels and machines, no party. Dark: only the working light.');
+    pb.classList.add('cols3');
+    const presets = new Map<NightPreset, HTMLButtonElement>();
+    for (const [id, label] of [['party', 'Party'], ['calm', 'Calm'], ['dark', 'Dark']] as const) {
+      const b = el('button', '', label);
+      b.onclick = () => set({ ...NIGHT_PRESETS[id] });
+      pb.append(b);
+      presets.set(id, b);
+    }
+    const gb = this.row(sec, 'Parcels glow', 'Every parcel glows in the colour of its destination (white until scanned), pulsing on the beat.');
+    gb.classList.add('stack');
+    const glow = el('input');
+    glow.type = 'range';
+    glow.min = '0';
+    glow.max = '1';
+    glow.step = '0.05';
+    glow.setAttribute('aria-label', 'How brightly the parcels glow');
+    glow.oninput = () => set({ ...this.scene.nightFx(), glow: Number(glow.value) });
+    gb.append(glow);
+    const sb = this.row(sec, 'Show');
+    sb.classList.add('chips');
+    const switches = new Map<string, HTMLButtonElement>();
+    for (const sw of NIGHT_SWITCHES) {
+      const b = el('button', '', sw.label);
+      b.onclick = () => {
+        const fx = this.scene.nightFx();
+        fx[sw.id] = !fx[sw.id];
+        set(fx);
+      };
+      sb.append(b);
+      switches.set(sw.id, b);
+    }
+    this.nightCtl = { presets, switches, glow };
+  }
+
+  /** More: time of day, sound, graphics quality, Christmas, country, and the app. */
+  private buildMore(sec: HTMLElement): void {
+    const tb = this.row(sec, 'Time of day', 'Day: clean production. Night: the party. Keys D, N, C.');
+    tb.classList.add('cols3');
+    for (const [id, label] of [['day', 'Day'], ['night', 'Night'], ['cycle', 'Day ↔ night']] as const) {
+      const b = el('button', '', label);
+      b.onclick = () => this.setTime(id);
+      tb.append(b);
+      this.timeBtns.set(id, b);
+    }
+    const mb = this.row(sec, 'Sound', 'Music that follows how busy the hub is, and the sounds of the hall. Key M; Space pauses everything.');
     this.soundBtn = el('button', '', 'Sound');
     this.soundBtn.onclick = () => this.toggleSound();
-    // Night: what the party shows. Only there at night (by day none of it is on screen).
-    this.nightGroup = this.group('Night');
-    const nb = el('button', '', 'Night effects…');
-    nb.title = 'Glowing parcels, and switch the party effects on or off';
-    nb.onclick = () => this.toggleNight();
-    this.nightGroup.append(nb);
-    this.nightGroup.hidden = true;
-    // The app: settings, install, full screen (from the PWA helper).
-    this.appGroup = this.group('App');
-    const set = el('button', '', 'Settings…');
-    set.title = 'Time of day, sound, graphics quality and the country the hub serves';
-    set.onclick = () => this.toggleSettings();
-    this.appGroup.append(set);
+    const vol = el('input');
+    vol.type = 'range';
+    vol.min = '0';
+    vol.max = '1';
+    vol.step = '0.01';
+    vol.value = String(this.settings.volume);
+    vol.setAttribute('aria-label', 'Volume');
+    vol.oninput = () => {
+      this.settings.volume = Number(vol.value);
+      this.music.setVolume(this.settings.volume);
+      saveSettings(this.settings);
+    };
+    mb.classList.add('inline');
+    mb.append(this.soundBtn, vol);
+    const qb = this.row(sec, 'Graphics quality', 'Low is fastest; High and Ultra add shadows, ambient occlusion and sharper lines.');
+    qb.classList.add('cols4');
+    for (const [id, label, title] of [
+      ['low', 'Low', 'Fastest: pixel ratio 1'],
+      ['normal', 'Normal', 'Outlines, flat shading, contact shadows'],
+      ['high', 'High', 'Also ambient occlusion, sun shadows, glossy night floor, depth of field'],
+      ['ultra', 'Ultra', 'For laptops and desktops: 2× supersampling, finer and wider shadows, more ambient occlusion'],
+    ] as const) {
+      const b = el('button', '', label);
+      b.title = title;
+      b.onclick = () => {
+        this.settings.quality = id;
+        saveSettings(this.settings);
+        this.opts.onQuality();
+      };
+      qb.append(b);
+      this.qualityBtns.set(id, b);
+    }
+    const xb = this.row(sec, 'Christmas', 'Trees, garlands, lights, presents, Father Christmas, a Christmas market, bells in the music. Restarts the hall.');
+    xb.classList.add('cols2');
+    for (const [on, label] of [[false, 'Off'], [true, 'On']] as const) {
+      const b = el('button', on === XMAS ? 'on' : '', label);
+      b.onclick = () => {
+        if (on === XMAS) return;
+        this.settings.xmas = on;
+        saveSettings(this.settings);
+        location.reload();
+      };
+      xb.append(b);
+    }
+    const country = el('select', 'country');
+    country.setAttribute('aria-label', 'Country the hub serves');
+    for (const k of COUNTRIES) {
+      const o = el('option', '', k.native === k.name ? k.name : `${k.name} · ${k.native}`);
+      o.value = k.id;
+      o.selected = k.id === COUNTRY.id;
+      country.append(o);
+    }
+    country.onchange = () => {
+      const id = country.value as CountryId;
+      if (id === COUNTRY.id) return;
+      this.settings.country = id;
+      saveSettings(this.settings);
+      // Docks, cages, boxes and signs are labelled when the hall is built: start again.
+      location.reload();
+    };
+    const cb = this.row(sec, 'Country', 'Its 40 largest towns get the 40 dock doors; names, streets and postcodes follow it. Changing it restarts the hall.');
+    cb.classList.add('stack');
+    cb.append(country);
+    // The app: install and full screen (added by the PWA helper), and hiding the controls.
+    this.appGroup = this.row(sec, 'App');
+    this.appGroup.classList.add('cols3');
+    const hide = el('button', '', 'Hide controls');
+    hide.title = 'Key H; click or tap the hall to bring them back';
+    hide.onclick = () => {
+      this.openTab(null);
+      this.root.classList.add('off');
+    };
+    this.appGroup.append(hide);
   }
 
   /** The cleardown panel: doors 1–40 with their destinations; pick some and start. */
@@ -263,8 +474,7 @@ export class Hud {
       return;
     }
     if (this.stats) this.toggleStats();
-    if (this.settingsPanel) this.toggleSettings();
-    if (this.nightPanel) this.toggleNight();
+    if (this.open) this.openTab(null);
     const p = el('div', 'panel');
     const head = el('div', 'head');
     head.append(el('h2', '', 'Cleardown'), el('p', '', 'Pick dock doors: their trucks leave with what they have, and new empty ones come. 1–20 roll cages, 21–40 robot boxes.'));
@@ -308,176 +518,8 @@ export class Hud {
     this.panelCount();
   }
 
-  /** The settings panel: graphics quality, and the country (names, towns, postcodes). */
-  private toggleSettings(): void {
-    if (this.settingsPanel) {
-      this.settingsPanel.remove();
-      this.settingsPanel = null;
-      this.qualityBtns.clear();
-      this.timeBtns.clear();
-      return;
-    }
-    if (this.panel) this.togglePanel();
-    if (this.stats) this.toggleStats();
-    if (this.nightPanel) this.toggleNight();
-    const p = el('div', 'panel settings');
-    const head = el('div', 'head');
-    head.append(el('h2', '', 'Settings'));
-    const q = el('div', 'set-row');
-    q.append(el('span', 'set-label', 'Graphics quality'));
-    const qb = el('div', 'set-opts');
-    for (const [id, label, title] of [
-      ['low', 'Low', 'Fastest: pixel ratio 1'],
-      ['normal', 'Normal', 'Outlines, flat shading, contact shadows'],
-      ['high', 'High', 'Also ambient occlusion, sun shadows, glossy night floor, depth of field'],
-      ['ultra', 'Ultra', 'For laptops and desktops: 2× supersampling, finer and wider shadows, more ambient occlusion'],
-    ] as const) {
-      const b = el('button', '', label);
-      b.title = title;
-      b.onclick = () => {
-        this.settings.quality = id;
-        saveSettings(this.settings);
-        this.opts.onQuality();
-      };
-      qb.append(b);
-      this.qualityBtns.set(id, b);
-    }
-    q.append(qb, el('span', 'set-help', 'Low is fastest; High and Ultra add shadows, ambient occlusion and sharper lines.'));
-    const t = el('div', 'set-row');
-    t.append(el('span', 'set-label', 'Time of day'));
-    const tb = el('div', 'set-opts');
-    for (const [id, label] of [['day', 'Day'], ['night', 'Night'], ['cycle', 'Day ↔ night']] as const) {
-      const b = el('button', '', label);
-      b.onclick = () => this.setTime(id);
-      tb.append(b);
-      this.timeBtns.set(id, b);
-    }
-    t.append(tb, el('span', 'set-help', 'Day: clean production. Night: the party. Keys D, N, C.'));
-    const m = el('div', 'set-row');
-    m.append(el('span', 'set-label', 'Sound'));
-    const mb = el('div', 'set-opts');
-    const vol = el('input');
-    vol.type = 'range';
-    vol.min = '0';
-    vol.max = '1';
-    vol.step = '0.01';
-    vol.value = String(this.settings.volume);
-    vol.setAttribute('aria-label', 'Volume');
-    vol.oninput = () => {
-      this.settings.volume = Number(vol.value);
-      this.music.setVolume(this.settings.volume);
-      saveSettings(this.settings);
-    };
-    mb.append(this.soundBtn, vol);
-    m.append(mb, el('span', 'set-help', 'Music that follows how busy the hub is, and the sounds of the hall. Key M; Space pauses everything.'));
-    const x = el('div', 'set-row');
-    x.append(el('span', 'set-label', 'Christmas'));
-    const xb = el('div', 'set-opts');
-    for (const [on, label] of [[false, 'Off'], [true, 'On']] as const) {
-      const b = el('button', on === XMAS ? 'on' : '', label);
-      b.onclick = () => {
-        if (on === XMAS) return;
-        this.settings.xmas = on;
-        saveSettings(this.settings);
-        location.reload();
-      };
-      xb.append(b);
-    }
-    x.append(xb, el('span', 'set-help', 'Trees, garlands, lights, wreaths, candy canes, stars, presents on the belts, Christmas hats, Father Christmas, a Christmas market, bells in the music and a countdown. Restarts the hall.'));
-    const c = el('div', 'set-row');
-    c.append(el('span', 'set-label', 'Country'));
-    const cb = el('div', 'set-opts');
-    for (const k of COUNTRIES) {
-      const b = el('button', k.id === COUNTRY.id ? 'on' : '', k.native === k.name ? k.name : `${k.name} · ${k.native}`);
-      b.onclick = () => {
-        if (k.id === COUNTRY.id) return;
-        this.settings.country = k.id;
-        saveSettings(this.settings);
-        // Docks, cages, boxes and signs are labelled when the hall is built: start again.
-        location.reload();
-      };
-      cb.append(b);
-    }
-    c.append(cb, el('span', 'set-help', 'Recipients, towns, streets and postcodes of that country: its 40 largest towns get the 40 dock doors. Changing it restarts the hall.'));
-    const row = el('div', 'row');
-    const close = el('button', '', 'Close');
-    close.onclick = () => this.toggleSettings();
-    row.append(close);
-    p.append(head, t, m, q, x, c, row);
-    this.root.append(p);
-    this.settingsPanel = p;
-  }
-
-  private settingsPanel: HTMLElement | null = null;
-
-  /** The night panel: presets, how brightly parcels glow, and a switch per party effect. */
-  private toggleNight(): void {
-    if (this.nightPanel) {
-      this.nightPanel.el.remove();
-      this.nightPanel = null;
-      return;
-    }
-    if (this.panel) this.togglePanel();
-    if (this.stats) this.toggleStats();
-    if (this.settingsPanel) this.toggleSettings();
-    const p = el('div', 'panel settings night');
-    const head = el('div', 'head');
-    head.append(el('h2', '', 'Night effects'));
-    const set = (fx: NightFx) => {
-      this.settings.night = { ...fx };
-      this.scene.setNightFx(fx);
-      saveSettings(this.settings);
-      this.refreshNight();
-    };
-    const pr = el('div', 'set-row');
-    pr.append(el('span', 'set-label', 'Preset'));
-    const pb = el('div', 'set-opts');
-    const presets = new Map<NightPreset, HTMLButtonElement>();
-    for (const [id, label] of [['party', 'Party'], ['calm', 'Calm'], ['dark', 'Dark']] as const) {
-      const b = el('button', '', label);
-      b.onclick = () => set({ ...NIGHT_PRESETS[id] });
-      pb.append(b);
-      presets.set(id, b);
-    }
-    pr.append(pb, el('span', 'set-help', 'Party: everything. Calm: glowing parcels and machines, no party. Dark: only the working light.'));
-    const gr = el('div', 'set-row');
-    gr.append(el('span', 'set-label', 'Parcels glow'));
-    const glow = el('input');
-    glow.type = 'range';
-    glow.min = '0';
-    glow.max = '1';
-    glow.step = '0.05';
-    glow.setAttribute('aria-label', 'How brightly the parcels glow');
-    glow.oninput = () => set({ ...this.scene.nightFx(), glow: Number(glow.value) });
-    gr.append(glow, el('span', 'set-help', 'Every parcel glows in the colour of its destination (white until scanned), pulsing on the beat.'));
-    const sr = el('div', 'set-row');
-    sr.append(el('span', 'set-label', 'Show'));
-    const sb = el('div', 'set-opts');
-    const switches = new Map<string, HTMLButtonElement>();
-    for (const sw of NIGHT_SWITCHES) {
-      const b = el('button', '', sw.label);
-      b.onclick = () => {
-        const fx = this.scene.nightFx();
-        fx[sw.id] = !fx[sw.id];
-        set(fx);
-      };
-      sb.append(b);
-      switches.set(sw.id, b);
-    }
-    sr.append(sb);
-    const row = el('div', 'row');
-    const close = el('button', '', 'Close');
-    close.onclick = () => this.toggleNight();
-    row.append(close);
-    p.append(head, pr, gr, sr, row);
-    this.root.append(p);
-    this.nightPanel = { el: p, presets, switches, glow };
-    this.refreshNight();
-  }
-
   private refreshNight(): void {
-    const n = this.nightPanel;
-    if (!n) return;
+    const n = this.nightCtl;
     const fx = this.scene.nightFx();
     const pre = presetOf(fx);
     for (const [id, b] of n.presets) b.classList.toggle('on', id === pre);
@@ -493,8 +535,7 @@ export class Hud {
       return;
     }
     if (this.panel) this.togglePanel();
-    if (this.settingsPanel) this.toggleSettings();
-    if (this.nightPanel) this.toggleNight();
+    if (this.open) this.openTab(null);
     const p = el('div', 'panel stats');
     const head = el('div', 'head');
     head.append(el('h2', '', 'Hub figures'));
@@ -619,6 +660,13 @@ export class Hud {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement)?.tagName === 'INPUT') return;
       const depts = this.scene.departments();
       const k = e.key.toLowerCase();
+      // Esc closes an open panel first (in walk mode too).
+      if (k === 'escape' && (this.open || this.panel || this.stats)) {
+        if (this.open) this.openTab(null);
+        else if (this.panel) this.togglePanel();
+        else this.toggleStats();
+        return;
+      }
       // Walking uses W A S D and the arrows itself.
       if (this.scene.cameraMode() === 'walk' && ['w', 'a', 's', 'd', 'escape', 'shift'].includes(k)) return;
       if (/^[0-9]$/.test(k)) {
@@ -651,7 +699,12 @@ export class Hud {
     let tap: { x: number; y: number; t: number } | null = null;
     const target = (canvas ?? window) as HTMLElement;
     target.addEventListener('pointerdown', (e: PointerEvent) => {
-      if ((e.target as HTMLElement).closest?.('.bar,.panel,.menu,.label-card')) return;
+      if ((e.target as HTMLElement).closest?.('.bar,.sheet,.panel,.label-card')) return;
+      // A tap on the hall with a panel open just closes the panel.
+      if (this.open) {
+        this.openTab(null);
+        return;
+      }
       tap = { x: e.clientX, y: e.clientY, t: performance.now() };
       if (this.scene.cameraMode() === 'walk') return;
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -662,6 +715,12 @@ export class Hud {
       const still = Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 8 && performance.now() - tap.t < 500;
       tap = null;
       if (!still) return;
+      // Controls hidden (key H, or Hide controls): a click or tap on the hall brings them back.
+      if (this.root.classList.contains('off') && this.opts.showUi) {
+        this.root.classList.remove('off');
+        this.wake();
+        return;
+      }
       const p = this.scene.pickParcel(e.clientX, e.clientY);
       if (p) this.showLabel(p);
       else {
@@ -723,14 +782,8 @@ export class Hud {
     this.scene.followParcel(p);
   }
 
-  private hide(): void {
-    clearTimeout(this.hideTimer);
-    this.hidden = true;
-    this.root.classList.add('idle');
-  }
-
-  /** Show the bar, and hide it again after three quiet seconds (a bit longer when opened with the menu button). */
-  private wake(long = false): void {
+  /** Show the dock, and dim it again after three quiet seconds (not on touch screens, nor with a panel open). */
+  private wake(): void {
     if (this.hidden) {
       this.hidden = false;
       this.root.classList.remove('idle');
@@ -741,11 +794,11 @@ export class Hud {
     // Any movement, tap or key brings it back.
     this.hideTimer = window.setTimeout(() => {
       if (this.bar.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement) return this.wake();
-      // Keep the controls up while the cleardown or figures panel is open.
-      if (this.panel || this.stats) return this.wake();
+      // Keep the controls up while a panel is open, and always on touch screens.
+      if (this.panel || this.stats || this.open || this.touch) return;
       this.hidden = true;
       this.root.classList.add('idle');
       (document.activeElement as HTMLElement | null)?.blur?.();
-    }, long ? 8000 : 3000);
+    }, 3000);
   }
 }

@@ -51,7 +51,7 @@ let hudQuality = () => {};
 const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi, onQuality: () => hudQuality() });
 document.body.append(hud.root);
 const pwa = new Pwa(hud.root, music);
-hud.appGroup.append(pwa.install, pwa.fullscreen);
+hud.appGroup.prepend(pwa.install, pwa.fullscreen);
 
 const ql = q.get('quality');
 if (ql === 'low' || ql === 'normal' || ql === 'high' || ql === 'ultra') settings.quality = ql;
