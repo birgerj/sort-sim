@@ -38,6 +38,7 @@ import { FORKLIFTS } from './forklift';
 import { Xmas } from './xmas';
 import { XMAS } from '../sim/season';
 import { Party } from './party';
+import { Roof, ceilingWithLights, roofLights } from './roof';
 import { Crowd } from './crowd';
 import { defaultNightFx, type NightFx } from './nightFx';
 import { Batcher } from './batch';
@@ -94,6 +95,8 @@ const NZ = -40;
 const HD = HZ - NZ;
 const HZC = (NZ + HZ) / 2;
 const HH = 11;
+/** Roof lights: tilted glass in the roof, two rows across the hall (see roof.ts). */
+const ROOF_LIGHTS = roofLights(WX, EX);
 /** Highest a flying visitor goes: eye a metre under the roof. */
 const WALK_MAX_ALT = HH - 1.7 - 1;
 const MAX_PARCELS = 1500;
@@ -995,6 +998,7 @@ export class Sorter implements Scene3D {
   private docks!: Docks;
   private life!: Life;
   private party!: Party;
+  private roof!: Roof;
   private crowd!: Crowd;
   /** Instanced parts of repeated models (robots, people, forklifts, cages, contact shadows). */
   private batcher!: Batcher;
@@ -1220,6 +1224,7 @@ export class Sorter implements Scene3D {
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.buildBoards();
     this.buildDay();
+    this.roof = new Roof(this, ROOF_LIGHTS, HH);
     this.buildCamera();
     this.batcher.build();
     this.setupShadows();
@@ -1467,6 +1472,7 @@ export class Sorter implements Scene3D {
     this.life.update(dt, bt);
     this.xmas?.update(bt, 1 - this.day, this.kick);
     this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown });
+    this.roof.update(bt, this.day, this.camera);
     this.party.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
     const bots = this.floor.fleet.bots;
     this.screens.updateMap(this.time, this.mapData(), this.camera.position.distanceTo(this.t.set(-48, 2.7, 21.5)) < 14);
@@ -3207,10 +3213,11 @@ export class Sorter implements Scene3D {
       this.put(w, 'night');
     }
     const ceilT = ribs.clone();
-    ceilT.repeat.set(Math.round(HW / 3), 1);
+    // Shape UVs are in metres: one rib tile per 3 m, ribs across the hall.
+    ceilT.repeat.set(1 / 3, 1 / 3);
     ceilT.rotation = Math.PI / 2;
     ceilT.needsUpdate = true;
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), new THREE.MeshStandardMaterial({ map: ceilT, color: 0x77777a, roughness: 0.9, metalness: 0.2 }));
+    const ceil = new THREE.Mesh(ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS), new THREE.MeshStandardMaterial({ map: ceilT, color: 0x77777a, roughness: 0.9, metalness: 0.2 }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil, 'night');
@@ -3240,7 +3247,8 @@ export class Sorter implements Scene3D {
       this.inkify(d, 40);
     }
     const spr = this.std(0xa01818, 0.5, 0.4, DAY.red);
-    for (const z of [-20, 0, 20]) {
+    // (Clear of the roof lights at z ±20.)
+    for (const z of [-17, 0, 17]) {
       const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, HW, 6), spr);
       pipe.rotation.z = Math.PI / 2;
       pipe.position.set(HCX, HH - 0.25, z);
@@ -4138,11 +4146,11 @@ export class Sorter implements Scene3D {
       w.rotation.y = Math.PI / 2;
       this.put(w);
     }
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), new THREE.MeshBasicMaterial({ color: DAY.ceiling, side: THREE.DoubleSide }));
+    const ceil = new THREE.Mesh(ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS), new THREE.MeshBasicMaterial({ color: DAY.ceiling, side: THREE.DoubleSide }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil);
-    // Rows of linear LED fixtures between the skylights, and cable trays along the hall.
+    // Rows of linear LED fixtures between the roof lights, and cable trays along the hall.
     const led = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const housing = this.std(0xb9c0c8, 0.5, 0.6, 0xb9c0c8);
     for (let x = WX + 10; x <= EX - 10; x += 10) {
@@ -4158,8 +4166,6 @@ export class Sorter implements Scene3D {
       for (const side of [-0.3, 0.3]) this.box('ctray', trayMat, HCX, HH - 1.55, z + side, HW - 4, 0.1, 0.02);
       for (let x = WX + 4; x < EX - 2; x += 6) this.box('ctrayrod', trayMat, x, HH - 0.8, z, 0.02, 1.6, 0.02);
     }
-    const sky = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    for (let x = WX + 7; x <= EX - 12; x += 10) for (const z of [-20, 0, 20]) this.box('sky', sky, x + 5, HH - 0.03, z, 6, 0.04, 4);
 
     // Monitoring: a purple workstation in front of the control room.
     const purple = this.std(DAY.purple, 0.8, 0.05);
