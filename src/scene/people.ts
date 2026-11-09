@@ -581,6 +581,29 @@ function bodyGeo(w: number, b: number, level: BodyLevel): THREE.BufferGeometry {
   }
   return g;
 }
+/** Work for spare moments after load (fine detail only seen up close), one job at a time. */
+const jobs: (() => void)[] = [];
+let jobsRunning = false;
+function later(job: () => void): void {
+  if (typeof window === 'undefined') return job();
+  jobs.push(job);
+  if (jobsRunning) return;
+  jobsRunning = true;
+  const idle = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+  const next = () => {
+    const t0 = performance.now();
+    // A few jobs per spare moment, up to about 8 ms.
+    while (jobs.length && performance.now() - t0 < 8) jobs.shift()!();
+    if (!jobs.length) {
+      jobsRunning = false;
+      return;
+    }
+    if (idle) idle(next, { timeout: 500 });
+    else setTimeout(next, 30);
+  };
+  setTimeout(next, 1500);
+}
+
 let fineQueued = false;
 function queueFine(w: number, b: number, mesh: THREE.SkinnedMesh): void {
   const key = bodyKey(w, b, 'fine');
@@ -892,9 +915,19 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const p = new THREE.Vector3();
   const fu = face % CELLS;
   const fv = CELLS - 1 - Math.floor(face / CELLS);
+  // The joints at rest, kept: a level baked later (the fine one, in spare moments) must be
+  // built in the same pose as the others, not in whatever pose the person is in by then.
+  const rest = new Map<THREE.Object3D, THREE.Matrix4>();
+  const restOf = (j: THREE.Object3D) => {
+    let m = rest.get(j);
+    if (!m) rest.set(j, (m = j.matrixWorld.clone()));
+    return m;
+  };
   const bakeGear = (parts: Part[]): THREE.BufferGeometry => {
     const geos = parts.map((part) => {
-      const geo = (part.geo.index ? part.geo.toNonIndexed() : part.geo.clone()).applyMatrix4(part.j.matrixWorld);
+      // Kept indexed (merging vertices afterwards was most of the load time).
+      const geo = part.geo.clone().applyMatrix4(restOf(part.j));
+      if (!geo.index) geo.setIndex([...Array(geo.attributes.position!.count).keys()]);
       const pos = geo.attributes.position as THREE.BufferAttribute;
       const n = pos.count;
       if (part.on) {
@@ -940,7 +973,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
       geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
       return geo;
     });
-    const g = mergeVertices(mergeGeometries(geos)!, 1e-5);
+    const g = mergeGeometries(geos)!;
     geos.forEach((x) => x.dispose());
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.3);
     return g;
@@ -956,10 +989,17 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const lod = new THREE.LOD();
   root.add(lod);
   const meshes: THREE.SkinnedMesh[] = [];
-  for (const level of LEVEL_NAMES) {
+  for (const b of bones) restOf(b);
+  let coarseGear: THREE.BufferGeometry | null = null;
+  for (const level of ['coarse', 'far', 'fine'] as BodyLevel[]) {
     const group = new THREE.Group();
     const bodyMesh = new THREE.SkinnedMesh(level === 'fine' ? bodyGeo(width, belly, 'coarse') : bodyGeo(width, belly, level), clothesMat);
-    const gearMesh = new THREE.SkinnedMesh(bakeGear(gearAt(shapes(level))), mat);
+    // The fine gear (only seen up close) is baked in spare moments after load; until then the
+    // coarse one stands in.
+    const gearGeo: THREE.BufferGeometry = level === 'fine' ? coarseGear! : bakeGear(gearAt(shapes(level)));
+    if (level === 'coarse') coarseGear = gearGeo;
+    const gearMesh = new THREE.SkinnedMesh(gearGeo, mat);
+    if (level === 'fine') later(() => (gearMesh.geometry = bakeGear(gearAt(shapes('fine')))));
     group.add(bodyMesh, gearMesh);
     for (const m of [bodyMesh, gearMesh]) {
       // People get no ink lines; the ink pass draws them as a mask (see `InkPass`).
@@ -968,6 +1008,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
       meshes.push(m);
     }
     lod.addLevel(group, LOD_DIST[level], 0.1);
+    lod.levels.sort((a, b) => a.distance - b.distance);
     if (level === 'fine') queueFine(width, belly, bodyMesh);
   }
   root.updateMatrixWorld(true);

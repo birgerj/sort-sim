@@ -84,14 +84,19 @@ export class WalkControls {
       }
       this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, stick };
       if (stick) this.placeStick(e.clientX, e.clientY);
-      canvas.setPointerCapture(e.pointerId);
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* the pointer is already gone */
+      }
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!this.active) return;
-      const d = this.drag?.id === e.pointerId ? this.drag : this.touch2?.id === e.pointerId ? { ...this.touch2, stick: !this.drag!.stick } : null;
+      const d = this.drag?.id === e.pointerId ? this.drag : this.drag && this.touch2?.id === e.pointerId ? { ...this.touch2, stick: !this.drag.stick } : null;
       if (!d) return;
       if (d.stick) {
-        const sx = this.drag!.stick ? this.drag! : this.touch2!;
+        const sx = this.drag?.stick ? this.drag : this.touch2;
+        if (!sx) return;
         this.stick.fwd = Math.max(-1, Math.min(1, -(e.clientY - sx.y) / STICK));
         this.stick.side = Math.max(-1, Math.min(1, (e.clientX - sx.x) / STICK));
         this.drawKnob();
@@ -111,7 +116,16 @@ export class WalkControls {
         return;
       }
       if (this.drag?.id !== e.pointerId) return;
-      if (this.drag.stick) this.releaseStick();
+      const wasStick = this.drag.stick;
+      if (wasStick) this.releaseStick();
+      // The first finger lifted while a second is still down: that one carries on with its job.
+      if (this.touch2) {
+        const t = this.touch2;
+        this.touch2 = null;
+        this.drag = { id: t.id, x: t.x, y: t.y, stick: !wasStick };
+        if (this.drag.stick) this.placeStick(t.x, t.y);
+        return;
+      }
       this.drag = null;
     };
     canvas.addEventListener('pointerup', end);
