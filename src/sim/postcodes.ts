@@ -106,11 +106,27 @@ export const rangeText = ([a, b]: [number, number]) => (a === b ? pcDigits(a) : 
 /** Which of the ranges holds postcode pc (−1 if none). */
 export const rangeOf = (ranges: [number, number][], pc: number) => ranges.findIndex(([a, b]) => pc >= a && pc <= b);
 
+/** During a night-shift game: tonight's share of the post per game city (GAME_CITIES order). */
+let gameWeights: number[] | null = null;
+export function setGameWeights(w: number[] | null): void {
+  gameWeights = w && w.length === GAME_CITIES.length && w.some((x) => x > 0) ? w : null;
+}
+
 /**
  * A random destination: a share `south` to the cities the robots serve, the
- * rest to the north cities (roll cages). Cities get post in proportion to their inhabitants.
+ * rest to the north cities (roll cages). Cities get post in proportion to their inhabitants
+ * (in a night-shift game: in proportion to tonight's volumes, whatever the plan).
  */
 export function randomPostcode(rnd: () => number = Math.random, south = 0.3): { pc: number; city: number; north: boolean } {
+  if (gameWeights) {
+    let x = rnd() * gameWeights.reduce((a, b) => a + b, 0);
+    let i = 0;
+    while (i < gameWeights.length - 1 && (x -= gameWeights[i]!) > 0) i++;
+    const c = GAME_CITIES[i]!;
+    const n = NORTH_CITIES.indexOf(c);
+    const all = areas(c);
+    return { pc: all[Math.floor(rnd() * all.length)]!, city: n >= 0 ? n : SOUTH_CITIES.indexOf(c), north: n >= 0 };
+  }
   const north = rnd() >= south;
   const list = north ? NORTH_CITIES : SOUTH_CITIES;
   // By inhabitants: a city twice as big gets twice the post.

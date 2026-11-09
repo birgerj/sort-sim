@@ -1364,3 +1364,29 @@ input[type='range'] {
   font-weight: 700;
   color: var(--teal-l);
 }
+
+.g-city .tg.sm {
+  display: none;
+}
+
+.g-city .tg.sm.hot {
+  color: #ff8a7a;
+}
+
+@media (max-width: 480px) {
+  .g-city .tg.sm {
+    display: block;
+  }
+}
+
+.g-how summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.g-how p {
+  margin-top: 4px;
+}

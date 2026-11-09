@@ -12,7 +12,8 @@
 import type { Music } from '../audio/music';
 import { COUNTRIES, COUNTRY } from '../sim/countries';
 import { announced, makeNight, type Night } from '../game/night';
-import { play, validPlan, MAX_DOORS, NORTH_DOORS, ROBOT_DOORS, SWAP_FROM, type Move, type Plan } from '../game/model';
+import { hourlyInbound, play, validPlan, MAX_DOORS, NORTH_DOORS, ROBOT_DOORS, SWAP_FROM, type Move, type Plan } from '../game/model';
+import { setGameWeights } from '../sim/postcodes';
 import { expected, par, RESERVES, shown, standingPlan, type Par } from '../game/par';
 import { dailySeed, formatSeed, parseSeed, randomSeed, worldSeed, type NightSeed } from '../game/seed';
 import { Session, type Speed } from '../game/session';
@@ -104,7 +105,11 @@ export class GameUi {
       this.lastPanel = now;
       this.draw();
     }
-    if (this.open === 'moves' && s.hour !== this.lastHour) this.draw();
+    if (s.hour !== this.lastHour) {
+      // The hall's parcels follow tonight's volumes, hour by hour.
+      setGameWeights(hourlyInbound(s.night, s.hour));
+      if (this.open === 'moves') this.draw();
+    }
     this.lastHour = s.hour;
     if (Math.floor(now / 30000) !== Math.floor((now - 250) / 30000)) s.save();
   }
@@ -248,8 +253,19 @@ export class GameUi {
     const country = COUNTRIES.find((c) => c.id === this.seed.country.id)!;
     b.append(
       seedRow,
-      el('p', 'g-note', `${country.name} hall · share the seed and others play the same night${country.id !== COUNTRY.id ? ' · starting opens this hall' : ''}`),
+      el('p', 'g-note', `${country.name} hall · share the seed and others play the same night${country.id !== COUNTRY.id ? ' · starting opens this hall' : ''}${bestScore(formatSeed(this.seed)) ? ` · your best ${bestScore(formatSeed(this.seed))}` : ''}`),
     );
+
+    const how = el('details', 'g-how');
+    how.append(
+      el('summary', '', 'How it works'),
+      el(
+        'p',
+        'g-note',
+        'Give every city robots (R, one south door) or 1–4 north doors: exactly 20 north doors, at most 20 robot cities. A north door sends two trailers a night, about 450 parcels; the robots take about 3 200 parcels all together. What does not fit goes into the store, then round the loop, and at 06:00 is late. Keep store space for the late inbound. During the night you can make a few moves; the score runs from 100 (the hall as it stands, no moves) to 1000 (the best night found).',
+      ),
+    );
+    b.append(how);
 
     // Announced on the timeline.
     const ann = n.events.filter(announced).map((e) => {
@@ -273,6 +289,9 @@ export class GameUi {
       const nm = el('span', 'nm', `${c.name}${c.unsure ? ' ±' : ''}`);
       nm.title = c.name;
       if (c.tag) nm.append(el('span', `tg ${c.tag.startsWith('+') ? 'up' : 'down'}`, c.tag));
+      // (Phones: volume and load under the name; the columns are hidden there.)
+      const per0 = p.doors[i] ? c.forecast / p.doors[i]! : 0;
+      nm.append(el('span', `tg sm${per0 > 450 ? ' hot' : ''}`, `${fmt(c.forecast)} · ${p.doors[i] ? `${fmt(per0)}/door` : 'robots'}`));
       const chips = el('div', 'chips');
       chips.setAttribute('role', 'group');
       chips.setAttribute('aria-label', `Plan for ${c.name}`);
@@ -385,7 +404,7 @@ export class GameUi {
   }
 
   /** One move block: title, what is left, controls, the effect it would have now, and Do. */
-  private moveBlock(title: string, note: string, controls: HTMLElement[], make: () => Move | null, why = ''): HTMLElement {
+  private moveBlock(title: string, note: string, controls: HTMLElement[], make: () => Move | null, why = '', idle = ''): HTMLElement {
     const s = this.session!;
     const box = el('div', 'g-move');
     const ttl = el('div', 'ttl');
@@ -402,7 +421,16 @@ export class GameUi {
         doIt.disabled = true;
         return;
       }
-      const d = s.score(s.projected([m])) - base;
+      const r0 = s.projected();
+      const r1 = s.projected([m]);
+      const d = s.score(r1) - base;
+      // A move that changes nothing (a trailer not full enough to leave) is not offered.
+      if (idle && r1.raw === r0.raw) {
+        delta.textContent = idle;
+        delta.className = 'g-delta';
+        doIt.disabled = true;
+        return;
+      }
       delta.textContent = `${d >= 0 ? '+' : ''}${d} expected`;
       delta.className = `g-delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}`;
       doIt.disabled = false;
@@ -461,6 +489,7 @@ export class GameUi {
         [goCity],
         () => ({ kind: 'go', hour: h, city: +goCity.value }),
         s.left('go') <= 0 ? 'used' : h !== 2 && h !== 6 ? 'not now' : '',
+        'not full enough',
       ),
     );
     b.append(
@@ -499,8 +528,11 @@ export class GameUi {
     const r = s.final();
     const sc = s.score(r);
     const planOnly = s.score(play(s.night, s.plan));
+    const best = bestScore(s.code);
+    if (sc > best) saveBest(s.code, sc);
     const head = el('div', 'g-score');
     head.append(el('span', 'g-big', String(sc)), el('span', 'g-grade', grade(sc)));
+    if (best > 0) head.append(el('span', 'g-note', sc > best ? `new best (was ${best})` : `best on this night ${best}`));
     b.append(head, el('p', 'g-note', `${s.code} · plan alone ${planOnly}, moves +${sc - planOnly} · 100 = the hall as it stands, 1000 = the best night found`));
     const tiles = el('div', 'g-tiles');
     for (const [v, l] of [
@@ -532,6 +564,24 @@ export class GameUi {
     free.onclick = () => (location.href = Session.exitUrl());
     row.append(again, replan, free);
     b.append(row);
+  }
+}
+
+const BEST = 'sortsim.best';
+function bestScore(code: string): number {
+  try {
+    return (JSON.parse(localStorage.getItem(BEST) ?? '{}') as Record<string, number>)[code] ?? 0;
+  } catch {
+    return 0;
+  }
+}
+function saveBest(code: string, score: number): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(BEST) ?? '{}') as Record<string, number>;
+    all[code] = score;
+    localStorage.setItem(BEST, JSON.stringify(all));
+  } catch {
+    /* no storage */
   }
 }
 

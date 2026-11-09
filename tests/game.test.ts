@@ -40,3 +40,20 @@ describe('scoring', () => {
     expect(shown(play(night, p.plan, p.moves).raw, p)).toBe(1000);
   });
 });
+
+describe('the hall follows the night', () => {
+  it('routes parcels by tonight’s weights', async () => {
+    const { GAME_CITIES, NORTH_CITIES, SOUTH_CITIES, randomPostcode, setGameWeights } = await import('../src/sim/postcodes');
+    const north = 2;
+    const south = GAME_CITIES.length - 1;
+    setGameWeights(GAME_CITIES.map((_, i) => (i === north ? 1 : 0)));
+    const a = randomPostcode();
+    expect(a.north).toBe(true);
+    expect(NORTH_CITIES[a.city]).toBe(GAME_CITIES[north]);
+    setGameWeights(GAME_CITIES.map((_, i) => (i === south ? 1 : 0)));
+    const b = randomPostcode();
+    expect(b.north).toBe(false);
+    expect(SOUTH_CITIES[b.city]).toBe(GAME_CITIES[south]);
+    setGameWeights(null);
+  });
+});

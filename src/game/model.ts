@@ -27,6 +27,15 @@ const WINDOWS = [
 ] as const;
 const FULL = 0.9;
 
+/** Tonight's real inbound per city in hour h (what the hall should see). */
+export function hourlyInbound(night: Night, h: number): number[] {
+  return night.cities.map((c) => {
+    let v = c.forecast * PROFILE[h]!;
+    if (c.drift && h >= c.driftFrom) v *= 1 + c.drift / PROFILE.slice(c.driftFrom).reduce((a, b) => a + b, 0);
+    return v;
+  });
+}
+
 export const POINTS = { onTime: 10, late: -30, fullTrailer: 150, hold: -100 };
 
 /** What the player can do during the night (hour 0 = 22:00–23:00). */
