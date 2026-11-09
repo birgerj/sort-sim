@@ -310,3 +310,147 @@ export function claddingNormal(): THREE.CanvasTexture {
     1.6,
   );
 }
+
+/** Panel joints and fine ribs of the sectional door (matches `sectionalDoor`). */
+export function sectionalDoorNormal(): THREE.CanvasTexture {
+  return normalFromHeight(
+    'sectional-door-n',
+    128,
+    256,
+    (x, y) => {
+      const py = y % 32;
+      // Groove at each panel joint, a slight bulge across each panel, fine vertical ribs.
+      if (py < 3) return 0;
+      const bulge = Math.sin((Math.PI * (py - 3)) / 29) * 0.6;
+      const rib = py > 6 && py < 28 && x % 8 === 0 ? 0.15 : 0;
+      // The windows sit flush in a recessed frame.
+      if (y >= 68 && y <= 90 && (x - 8) % 28 < 24) return (x - 8) % 28 < 2 || (x - 8) % 28 > 21 || y < 70 || y > 88 ? 0.2 : 0.35;
+      return 0.4 + bulge + rib;
+    },
+    1.4,
+  );
+}
+
+/** Gaps between the planks and raised grain of pallet wood (matches `palletWood`). */
+export function palletWoodNormal(): THREE.CanvasTexture {
+  return normalFromHeight(
+    'pallet-wood-n',
+    128,
+    128,
+    (x, y) => {
+      if (x % 42 < 2) return 0;
+      const grainLine = Math.sin(y * 1.6 + Math.sin(x * 0.05) * 2) * 0.12;
+      const nail = [[10, 20], [10, 108], [118, 20], [118, 108]].some(([nx, ny]) => Math.abs(x - nx! - 2) < 2 && Math.abs(y - ny! - 2) < 2);
+      return 0.7 + grainLine - (nail ? 0.25 : 0);
+    },
+    1.2,
+  );
+}
+
+/** Flutes, tape edges and the handle hole of a carton side (matches `cardboardSide`). */
+export function cardboardNormal(): THREE.CanvasTexture {
+  return normalFromHeight(
+    'cardboard-side-n',
+    256,
+    256,
+    (x, y) => {
+      // Handle hole: pressed in.
+      const hx = (x - 128) / 30;
+      const hy = (y - 196) / 9;
+      if (hx * hx + hy * hy < 1) return 0;
+      // Tape across the middle stands a little proud of the board; flutes show faintly.
+      const tape = y >= 112 && y <= 142 ? 0.12 : 0;
+      const flute = Math.sin((x * Math.PI) / 3) * 0.05;
+      // Slightly soft, dented edges.
+      const edge = Math.min(x, y, 255 - x, 255 - y) < 4 ? -0.15 : 0;
+      return 0.6 + tape + flute + edge;
+    },
+    1.0,
+  );
+}
+
+/**
+ * Stretch film over stacked cartons, for the realistic day: the cartons show through
+ * a milky, slightly blue film, with brighter bands where it is wound tighter.
+ * One tile covers a 1.2 m wrap face (cartons of 0.4 × 0.3 m).
+ */
+export function stretchFilm(): THREE.CanvasTexture {
+  return canvasTexture('stretch-film', 256, 256, (g) => {
+    grain(g, 256, 256, 185, 12, [0.9, 0.76, 0.58]);
+    // Carton seams and tape under the film.
+    g.strokeStyle = 'rgba(90,70,45,0.45)';
+    g.lineWidth = 2;
+    for (let y = 0; y <= 256; y += 64) {
+      const off = (y / 64) % 2 ? 42 : 0;
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(256, y);
+      g.stroke();
+      for (let x = off; x <= 256; x += 85) {
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x, y + 64);
+        g.stroke();
+      }
+    }
+    g.fillStyle = 'rgba(160,130,90,0.35)';
+    for (let y = 0; y < 256; y += 64) g.fillRect(0, y + 28, 256, 8);
+    // The film: milky over everything, brighter where wound twice.
+    g.fillStyle = 'rgba(225,232,240,0.22)';
+    g.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 18 + Math.floor(Math.random() * 14)) {
+      g.fillStyle = `rgba(245,248,252,${0.06 + Math.random() * 0.1})`;
+      g.fillRect(0, y, 256, 6 + Math.random() * 10);
+    }
+  });
+}
+
+/** Wrinkles of the stretch film: fine horizontal folds with a few creases across. */
+export function stretchFilmNormal(): THREE.CanvasTexture {
+  const ph = Array.from({ length: 8 }, () => Math.random() * 6.28);
+  return normalFromHeight(
+    'stretch-film-n',
+    256,
+    256,
+    (x, y) => {
+      // (Tile-periodic in x: whole sine periods over 256 px.)
+      const fold = Math.sin(y * 0.55 + Math.sin((x * 2 * Math.PI) / 256 + ph[0]!) * 1.5) * 0.08;
+      const band = Math.sin(y * 0.11 + ph[1]!) * 0.1;
+      const crease = Math.pow(Math.max(0, Math.sin((x * 6 * Math.PI) / 256 + ph[2]! + y * 0.02)), 24) * 0.12;
+      // Seams of the cartons beneath press through.
+      const seam = y % 64 < 2 ? -0.15 : 0;
+      return 0.5 + fold + band + crease + seam;
+    },
+    2.0,
+  );
+}
+
+/** Saw-cut joints of the concrete floor (matches the realistic floor tile: joints at 0 and the middle). */
+export function floorJointNormal(): THREE.CanvasTexture {
+  return normalFromHeight(
+    'floor-joint-n',
+    256,
+    256,
+    (x, y) => {
+      const dx = Math.min(x % 128, 128 - (x % 128));
+      const dy = Math.min(y % 128, 128 - (y % 128));
+      const d = Math.min(dx, dy);
+      return d < 1 ? 0 : d < 2 ? 0.6 : 1;
+    },
+    1.5,
+  );
+}
+
+/** Trapezoid ribs of the steel roof deck, one per tile (seen from below). */
+export function roofDeckNormal(): THREE.CanvasTexture {
+  return normalFromHeight(
+    'roof-deck-n',
+    64,
+    8,
+    (x) => {
+      const p = x / 64;
+      return p < 0.15 ? p / 0.15 : p < 0.4 ? 1 : p < 0.55 ? 1 - (p - 0.4) / 0.15 : 0;
+    },
+    5,
+  );
+}

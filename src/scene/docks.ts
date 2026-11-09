@@ -16,7 +16,7 @@ import { DOCK_CITY, NORTH_CITIES, rangeOf, rangeText, split } from '../sim/postc
 import { Labels } from './labels';
 import { buildHuman, type Human } from './people';
 import { crouch, gait, reach, relaxArms, settle } from './motion';
-import { checkerPlate, checkerPlateNormal, sectionalDoor, wireMesh } from './textures';
+import { checkerPlate, checkerPlateNormal, sectionalDoor, sectionalDoorNormal, wireMesh } from './textures';
 
 type V3 = THREE.Vector3;
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -1012,6 +1012,7 @@ function dockMats(k: FloorKit): Record<string, THREE.Material> {
     const door = k.std(0x2c3038, 0.6, 0.5, 0xd5dae0);
     const closedDoor = k.std(0x2c3038, 0.6, 0.4, 0xffffff);
     closedDoor.map = sectionalDoor();
+    k.realNormal(closedDoor, sectionalDoorNormal());
     const leveler = k.std(0x3a3d44, 0.6, 0.6, 0xb9c0c8);
     leveler.map = checkerPlate();
     k.realNormal(leveler, checkerPlateNormal());

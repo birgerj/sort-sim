@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { cardboardSide, palletWood } from './textures';
+import { cardboardNormal, cardboardSide, palletWood, palletWoodNormal } from './textures';
 
 import { Fleet, FLOOR, sorterFloor, type Bot, type FleetEvent } from '../sim/robotFleet';
 import { Rng } from '../sim/rng';
@@ -667,9 +667,11 @@ export class RobotFloor {
     const k = this.kit;
     const card = k.std(0x8a7050, 0.95, 0, 0xe0b882);
     card.map = cardboardSide();
+    k.realNormal(card, cardboardNormal(), 0.6);
     const inner = k.std(0x4c3e2c, 0.95, 0, 0xb8925f);
     const pallet = k.std(0x6a5038, 0.9, 0, 0xd8b080);
     pallet.map = palletWood();
+    k.realNormal(pallet, palletWoodNormal());
     const fillMat = k.std(0x5b4a35, 0.95, 0, 0xc9a06c);
     const post = k.std(0x50545b, 0.6, 0.3, 0xdfe3e8);
     const boardGeo = new THREE.PlaneGeometry(0.45, 0.3);
@@ -753,6 +755,8 @@ export class RobotFloor {
     const padGeo = mergeGeometries([-0.47, 0.47].flatMap((sx) => [-0.52, 0.52].map((sz) => box(0.1, 0.1, 0.06, sx * 0.9, 0.08, sz))))!;
     const lightGeo = mergeGeometries([box(0.5, 0.05, 0.01, 0, 0.27, 0.485), box(0.5, 0.05, 0.01, 0, 0.27, -0.485)])!;
     const yellow = k.std(0x8a6e00, 0.5, 0.2, 0xf2c200);
+    // (World-space paint wear would slide over a moving robot.)
+    yellow.userData.noWear = true;
     const wheelMat = k.std(0x111111, 0.8, 0.1, 0x2a2c31);
     const lightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.6, 1.8) });
     const ledGeo = new THREE.SphereGeometry(0.04, 10, 8);

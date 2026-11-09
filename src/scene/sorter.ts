@@ -19,6 +19,7 @@ import { pcDigits } from '../sim/countries';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
@@ -32,7 +33,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
-import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, grime, lightShafts, realFloorMaps, ROBOT_TRACKS, wheelTracks } from './realDay';
+import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, wear, wheelTracks } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -53,7 +54,7 @@ import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIE
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
-import { brushed, cardboardSide, checkerPlate, claddingNormal, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
+import { brushed, cardboardNormal, cardboardSide, checkerPlate, claddingNormal, dayFloor, dayWall, floorJointNormal, roofDeckNormal, sectionalDoor, stretchFilm, stretchFilmNormal, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { FLOOR, type FleetEvent } from '../sim/robotFleet';
 
@@ -903,6 +904,8 @@ export class Sorter implements Scene3D {
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  /** Vignette and warm/cool finish of the realistic day. */
+  private grade: ShaderPass;
   /** Day outlines as a screen effect. */
   private ink: InkPass;
   private gtao: GTAOPass;
@@ -1049,6 +1052,8 @@ export class Sorter implements Scene3D {
   private realOnly: THREE.Object3D[] = [];
   /** Materials with relief for the realistic day only: their normal scale at full day. */
   private realNormals: { m: THREE.MeshStandardMaterial; s: number }[] = [];
+  /** Materials that wear another picture in the realistic day (their own map otherwise). */
+  private realMaps: { m: THREE.MeshStandardMaterial; own: THREE.Texture | null; real: THREE.Texture; col: THREE.Color; realCol: THREE.Color; rough: number; realRough: number }[] = [];
   private hull!: THREE.InstancedMesh;
   private cageLine!: THREE.LineBasicMaterial;
 
@@ -1106,6 +1111,8 @@ export class Sorter implements Scene3D {
     this.bokeh = new BokehPass(this.scene, this.camera, { focus: 10, aperture: 0.0025, maxblur: 0.006 });
     this.bokeh.enabled = false;
     this.composer.addPass(this.bokeh);
+    this.grade = gradePass();
+    this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());
     try {
       const saved = localStorage.getItem(CAM_KEY);
@@ -3097,6 +3104,8 @@ export class Sorter implements Scene3D {
   private theme<M extends THREE.MeshStandardMaterial>(m: M, day: number, rough = 0.85, metal = 0.05): M {
     this.themed.push({ m, n: m.color.clone(), d: new THREE.Color(day), nr: m.roughness, dr: rough, nm: m.metalness, dm: metal });
     toonify(m);
+    // Safety yellow is the paint that takes the knocks (realistic day only).
+    if (day === 0xf2c200) wear(m);
     return m;
   }
 
@@ -3175,6 +3184,11 @@ export class Sorter implements Scene3D {
     this.realNormals.push({ m, s: scale });
   }
 
+  /** In the realistic day, show `map` (with colour and roughness) on `m` instead of its own look. */
+  realMap(m: THREE.MeshStandardMaterial, map: THREE.Texture, color = 0xffffff, roughness = m.roughness): void {
+    this.realMaps.push({ m, own: m.map, real: map, col: m.color.clone(), realCol: new THREE.Color(color), rough: m.roughness, realRough: roughness });
+  }
+
   isRealistic(): boolean {
     return this.real;
   }
@@ -3220,6 +3234,9 @@ export class Sorter implements Scene3D {
     }
     this.cageLine.color.setHex(0x8a8f96).lerp(this.c.setHex(DAY.tealD), day);
     for (const n of this.realNormals) n.m.normalScale.setScalar(this.real ? n.s * day : 0);
+    REAL.value = this.real ? day : 0;
+    this.grade.enabled = this.real && day > 0.02;
+    (this.grade.uniforms.uAmount as THREE.IUniform<number>).value = day;
     const show = day > 0.5;
     if (show === this.dayShown) return;
     this.dayShown = show;
@@ -3228,6 +3245,17 @@ export class Sorter implements Scene3D {
     for (const o of this.flatOnly) o.visible = show && !this.real;
     for (const o of this.realOnly) o.visible = show && this.real;
     this.applyNightFx();
+    for (const r of this.realMaps) {
+      const on = show && this.real;
+      const map = on ? r.real : r.own;
+      if (r.m.map !== map) {
+        // (Going from no map to a map changes the shader: compile again.)
+        if (!r.m.map !== !map) r.m.needsUpdate = true;
+        r.m.map = map;
+      }
+      r.m.color.copy(on ? r.realCol : r.col);
+      r.m.roughness = on ? r.realRough : r.rough;
+    }
     this.scene.environment = show ? (this.real ? this.dayEnv : null) : this.nightEnv;
     // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
     const hq = this.quality === 'high' || this.quality === 'ultra';
@@ -3313,6 +3341,7 @@ export class Sorter implements Scene3D {
     // Columns: red at the foot, as in the photos.
     const col = this.std(0x3a3d45, 0.6, 0.6, 0xf3f4f6);
     const colRed = this.std(0x7a1a20, 0.6, 0.3, 0xe2231a);
+    wear(colRed, 0.7);
     // (In the walls, between the dock doors.)
     for (const x of COLUMNS) {
       // North: halfway between truck docks (x −13.6 + 6k); south: between the box doors (x −16 + 6k).
@@ -3388,6 +3417,9 @@ export class Sorter implements Scene3D {
     // Pallets with wrapped goods along the walls.
     const pal = this.std(0x8a6a44, 0.9, 0);
     const wrap = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.35, metalness: 0 });
+    // Realistic day: cartons showing through glossy stretch film, with its folds.
+    this.realMap(wrap, stretchFilm(), 0xffffff, 0.22);
+    this.realNormal(wrap, stretchFilmNormal(), 0.7);
     const stack = (x: number, z: number) => {
       const h = rnd(0.8, 2);
       this.box('pal', pal, x, 0.07, z, 1.2, 0.14, 1);
@@ -3912,6 +3944,7 @@ export class Sorter implements Scene3D {
     }
     const carton = this.std(0xffffff, 0.88, 0);
     carton.map = cardboardSide();
+    this.realNormal(carton, cardboardNormal(), 0.6);
     // Diagonal bracing between the upright pairs, base plates and yellow end guards.
     const braces: THREE.BufferGeometry[] = [];
     const brace = (x: number, z: number, y0: number, y1: number, dir: 1 | -1) => {
@@ -4211,6 +4244,7 @@ export class Sorter implements Scene3D {
     }
     const floorMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d4, map: fm, roughnessMap: fr, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
     grime(floorMat, 0.22, 9, 'xz');
+    this.realNormal(floorMat, floorJointNormal(), 0.6);
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(HCX, 0, HZC);
@@ -4239,10 +4273,14 @@ export class Sorter implements Scene3D {
       w.rotation.y = Math.PI / 2;
       add(w);
     }
-    const ceil = new THREE.Mesh(
-      ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS),
-      new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.8, metalness: 0.3, side: THREE.DoubleSide }),
-    );
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.8, metalness: 0.3, side: THREE.DoubleSide });
+    // The steel roof deck: a trapezoid rib every 3 m, across the hall (shape UVs are metres).
+    const deck = roofDeckNormal().clone();
+    deck.repeat.set(1 / 3, 1 / 3);
+    deck.rotation = Math.PI / 2;
+    deck.needsUpdate = true;
+    this.realNormal(ceilMat, deck);
+    const ceil = new THREE.Mesh(ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS), ceilMat);
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
@@ -4455,6 +4493,7 @@ export class Sorter implements Scene3D {
     const white = this.std(0xffffff, 0.8, 0.05);
     const card = this.std(0xffffff, 0.9, 0);
     card.map = cardboardSide();
+    this.realNormal(card, cardboardNormal(), 0.6);
     const black = this.std(0x1d1d1f, 0.6, 0.2);
     this.box('trolley', white, x, 0.32, z, 2.2, 0.08, 1.4);
     this.blob(x, z, 2.8, 2.0);

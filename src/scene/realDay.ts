@@ -9,6 +9,7 @@
 // files to ship, and nothing that costs CPU per frame.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { canvasTexture } from './textures';
 import { RL_D, RL_W, type RoofLight } from './roof';
 
@@ -403,4 +404,95 @@ export function wheelTracks(paths: TrackPath[], style: TrackStyle, seed = 11): T
   m.userData.noInk = true;
   m.renderOrder = -1;
   return m;
+}
+
+/** How much of the realistic day is on screen (0 in the drawn day and at night); set by the scene. */
+export const REAL = { value: 0 };
+
+/**
+ * Knocks and scuffs on painted safety steel (yellow guards, bollards, rails, red column
+ * feet), only in the realistic day: chipped paint showing dark steel, mostly in the
+ * bump zone near the floor, horizontal scrapes where pallets and cages rub along, and
+ * dirt at the foot. Noise in world space, so it only suits things that stand still;
+ * a material can opt out with `userData.noWear` (set before it first draws).
+ */
+export function wear(m: THREE.MeshStandardMaterial, amount = 1): void {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
+    if (m.userData.noWear) return;
+    sh.uniforms.uReal = REAL;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWr;')
+      .replace(
+        '#include <worldpos_vertex>',
+        `#include <worldpos_vertex>
+        {
+          vec4 wp = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            wp = instanceMatrix * wp;
+          #endif
+          vWr = (modelMatrix * wp).xyz;
+        }`,
+      );
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uReal;\nvarying vec3 vWr;\n${NOISE}`)
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        if (uReal > 0.001) {
+          float k = uReal * ${amount.toFixed(2)};
+          // Most knocks low down, where forks, cages and pallet corners hit.
+          float low = 1.0 - smoothstep(0.15, 1.1, vWr.y);
+          float n = rdFbm(vec2(vWr.x + vWr.z, vWr.y) * 16.0 + vec2(vWr.z * 5.3, 0.0));
+          // Small flakes; more of them low down.
+          float chip = smoothstep(0.7 - 0.1 * low, 0.74 - 0.1 * low, n);
+          // Long horizontal scrapes.
+          float s = rdNoise(vec2(vWr.y * 38.0, (vWr.x + vWr.z) * 0.6));
+          float scrape = smoothstep(0.86, 0.93, s) * (0.4 + 0.6 * low);
+          float bare = clamp(max(chip, scrape), 0.0, 1.0) * k;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.31, 0.3), bare);
+          roughnessFactor = mix(roughnessFactor, 0.45, bare);
+          metalnessFactor = mix(metalnessFactor, 0.7, bare);
+          // Dirt and tyre rubber at the foot.
+          float foot = 1.0 - smoothstep(0.0, 0.25, vWr.y);
+          diffuseColor.rgb *= 1.0 - 0.35 * foot * k;
+        }`,
+      );
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  // (The opt-out is part of the key: otherwise a vehicle could share a worn program.)
+  m.customProgramCacheKey = () => `${key()}-wear-${amount}-${m.userData.noWear ? 0 : 1}`;
+}
+
+/**
+ * A light finish for the realistic day, as a camera would give it: the corners fall off
+ * a little (vignette) and shadows lean cool while the light leans warm. One full-screen
+ * pass, before tone mapping; off in the other looks.
+ */
+export function gradePass(): ShaderPass {
+  const p = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, uAmount: { value: 1 } },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D tDiffuse;
+      uniform float uAmount;
+      varying vec2 vUv;
+      void main() {
+        vec4 c = texture2D(tDiffuse, vUv);
+        vec2 d = vUv - 0.5;
+        float vig = 1.0 - 0.32 * smoothstep(0.2, 0.75, dot(d, d) * 2.0);
+        float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+        vec3 split = mix(vec3(0.97, 0.99, 1.04), vec3(1.03, 1.0, 0.96), smoothstep(0.05, 0.6, l));
+        c.rgb = mix(c.rgb, c.rgb * split * vig, uAmount);
+        gl_FragColor = c;
+      }`,
+  });
+  p.enabled = false;
+  return p;
 }
