@@ -122,13 +122,13 @@ function shapes(): Record<string, THREE.BufferGeometry> {
   const ridge = new THREE.TorusGeometry(1, 0.11, 6, 20, Math.PI).rotateY(Math.PI / 2).scale(1, 0.84, 1.08).scale(0.128, 0.128, 0.128).translate(0, 0.79, 0);
   geo = {
     // Safety boot (ankle joint at the top): rounded upper, toe cap, and a thick dark sole (the sole is its own part).
-    boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)).translate(0, ANKLE, 0),
-    sole: box(0.12, 0.03, 0.27, 0, -0.905, 0.04).translate(0, ANKLE, 0),
+    boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)).translate(0, KNEE + ANKLE, 0),
+    sole: box(0.12, 0.03, 0.27, 0, -0.905, 0.04).translate(0, KNEE + ANKLE, 0),
     collar: new THREE.TorusGeometry(0.058, 0.014, 6, 16).rotateX(Math.PI / 2).scale(1, 1, 0.9).translate(0, 0.555, 0.008),
     belt: lathe([[0.152, -0.03], [0.152, 0.03]], 0.66, 0.06),
     buckle: box(0.05, 0.035, 0.015, 0, 0.06, 0.1),
     vest: lathe([[0.158, 0.08], [0.152, 0.14], [0.16, 0.25], [0.155, 0.3]], 0.68),
-    vestU: lathe([[0.157, 0.2], [0.16, 0.25], [0.178, 0.38], [0.182, 0.45], [0.168, 0.51], [0.13, 0.545]], 0.68),
+    vestU: lathe([[0.157, 0.2], [0.158, 0.25], [0.174, 0.36], [0.18, 0.43], [0.17, 0.49], [0.13, 0.535]], 0.68),
     // Two reflective bands round the vest (one on the belly, one on the chest).
     bands: new THREE.CylinderGeometry(0.168, 0.164, 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, 0.22, 0),
     bandsU: new THREE.CylinderGeometry(0.168, 0.176, 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, 0.36, 0),
@@ -217,6 +217,8 @@ export const WRIST = 0.265;
 /** Shoulder to elbow, and elbow to the middle of the palm (for reaching). */
 export const UPPER_ARM = 0.29;
 export const FOREARM = 0.3;
+/** How far the hanging arms stand out from the body (radians): just clear of the vest. */
+export const REST_SPREAD = 0.1;
 /** Hip height (the pelvis above the root). */
 export const HIP_Y = 0.92;
 /**
@@ -807,8 +809,8 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   body.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.3);
 
   // The resting pose: arms a little away from the body, elbows a little bent.
-  armL.rotation.z = -0.07;
-  armR.rotation.z = 0.07;
+  armL.rotation.z = -REST_SPREAD;
+  armR.rotation.z = REST_SPREAD;
   foreL.rotation.x = foreR.rotation.x = -0.12;
   root.scale.setScalar(height);
 
