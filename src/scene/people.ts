@@ -172,15 +172,13 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     pupils: merge(ell(0.0065, 0.0075, 0.004, -0.034, 0.76, 0.0965, 8), ell(0.0065, 0.0075, 0.004, 0.034, 0.76, 0.0965, 8)),
     // The mouth (on its own joint, to talk): a slim pair of lips.
     lips: ell(0.017, 0.0042, 0.005, 0, 0.7, 0.096, 12),
-    // Hair: the back of the head and the crown, down to the ears (the face stays clear).
-    hair: new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.098, 0.118, 0.108).translate(0, 0.756, -0.004),
-    // Longer hair: down over the neck at the back, with a side fringe.
-    hairLong: merge(
-      new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.85, Math.PI * 1.3, 0, Math.PI * 0.75).scale(0.104, 0.13, 0.112).translate(0, 0.745, -0.006),
-      ell(0.07, 0.022, 0.03, 0.02, 0.83, 0.07, 8),
-    ),
-    // A ponytail at the back.
-    hairTail: new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.1, 0.12, 0.11).translate(0, 0.756, -0.004),
+    // Hair (see hairShell): short, long, combed back for a ponytail; and thin versions to wear under a cap.
+    hair: hairShell(0, false),
+    hairLong: hairShell(1, false),
+    hairTail: hairShell(2, false),
+    hairT: hairShell(0, true),
+    hairLongT: hairShell(1, true),
+    hairTailT: hairShell(2, true),
     // The tail itself hangs from its own joint (TAIL), so it can swing.
     tail: new THREE.CapsuleGeometry(0.026, 0.12, 3, 8).rotateX(0.35).translate(0, -0.08, -0.03),
     // Helmet: a dome that reaches a little below its widest point (no gap above the brim), sitting above the brows.
@@ -199,7 +197,7 @@ function shapes(): Record<string, THREE.BufferGeometry> {
 
   };
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
-  for (const key of ['head', 'ears', 'eyes', 'pupils', 'lips', 'hair', 'hairLong', 'hairTail', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
+  for (const key of ['head', 'ears', 'eyes', 'pupils', 'lips', 'hair', 'hairLong', 'hairTail', 'hairT', 'hairLongT', 'hairTailT', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
   // Eyes and mouth hang from their own joints on the head.
   for (const key of ['eyes', 'pupils']) geo[key]!.translate(-EYES.x, -EYES.y, -EYES.z);
   for (const key of ['lips']) geo[key]!.translate(-MOUTH.x, -MOUTH.y, -MOUTH.z);
@@ -229,11 +227,24 @@ export const HIP_Y = 0.92;
 function sculptHead(): THREE.BufferGeometry {
   const g = new THREE.SphereGeometry(1, 72, 56);
   const pos = g.attributes.position as THREE.BufferAttribute;
-  const bump = (x: number, y: number, cx: number, cy: number, sx: number, sy: number) => Math.exp(-(((x - cx) / sx) ** 2 + ((y - cy) / sy) ** 2));
+  const q = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
-    const dx = pos.getX(i);
-    const dy = pos.getY(i);
-    const dz = pos.getZ(i);
+    skull(pos.getX(i), pos.getY(i), pos.getZ(i), q);
+    pos.setXYZ(i, q.x, q.y, q.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+const bump = (x: number, y: number, cx: number, cy: number, sx: number, sy: number) => Math.exp(-(((x - cx) / sx) ** 2 + ((y - cy) / sy) ** 2));
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/** A point of the sculpted head (torso frame) in the direction (dx, dy, dz) from its centre. */
+function skull(dx: number, dy: number, dz: number, out: THREE.Vector3): THREE.Vector3 {
+  {
     let x = dx * 0.092;
     const y = 0.75 + dy * 0.112;
     let z = dz * 0.102;
@@ -251,8 +262,82 @@ function sculptHead(): THREE.BufferGeometry {
       0.009 * bump(x, y, 0, 0.664, 0.02, 0.014) - // chin
       0.006 * bump(ax, y, 0.034, 0.762, 0.015, 0.009) // eye sockets
     );
-    pos.setXYZ(i, x, y, z);
+    return out.set(x, y, z);
   }
+}
+
+/**
+ * Hair as a shell over the skull, bounded by a hairline: a grid whose rows run
+ * from the crown (top) to the hairline, so the edge follows the hairline
+ * smoothly (forehead, temples, sideburns, round the ears, the nape). Thicker on
+ * top, thin at the edge (a small step there gives the ink a hairline), with
+ * shallow grooves from the crown that the ink picks up as strands.
+ * Styles: 0 short, 1 long (down to the shoulders, a side fringe, over the
+ * ears), 2 combed back for a ponytail. `thin`: flat on top, to fit under a cap.
+ */
+function hairShell(style: 0 | 1 | 2, thin: boolean): THREE.BufferGeometry {
+  // The hairline: degrees from the crown, by degrees round from the front (0) to the back (180).
+  const LINE: Record<0 | 1 | 2, [number, number][]> = {
+    0: [[0, 50], [30, 54], [55, 64], [70, 76], [76, 97], [84, 97], [90, 76], [101, 76], [110, 104], [140, 113], [180, 116]],
+    1: [[0, 60], [30, 64], [50, 76], [70, 104], [90, 128], [130, 150], [180, 156]],
+    2: [[0, 48], [30, 52], [55, 62], [70, 74], [76, 94], [84, 94], [90, 75], [101, 75], [110, 102], [140, 110], [180, 112]],
+  };
+  const line = (a: number) => {
+    const t = LINE[style];
+    for (let i = 1; i < t.length; i++) {
+      const [a0, h0] = t[i - 1]!;
+      const [a1, h1] = t[i]!;
+      if (a <= a1) {
+        const f = smoothstep(0, 1, (a - a0) / (a1 - a0));
+        return h0 + (h1 - h0) * f;
+      }
+    }
+    return t[t.length - 1]![1];
+  };
+  const U = 112;
+  const V = 30;
+  const top = thin ? 0.006 : style === 1 ? 0.016 : style === 2 ? 0.009 : 0.013;
+  const pts: number[] = [];
+  const idx: number[] = [];
+  const p = new THREE.Vector3();
+  const c = new THREE.Vector3(0, 0.75, 0);
+  const deg = Math.PI / 180;
+  for (let j = 0; j <= U; j++) {
+    const phi = (j / U) * Math.PI * 2;
+    let a = (phi / deg) % 360;
+    if (a > 180) a = 360 - a;
+    // A side fringe on long hair: lower over one eye.
+    const fringe = style === 1 ? 9 * Math.max(0, Math.sin(phi)) * Math.exp(-(((a - 25) / 25) ** 2)) : 0;
+    const h = (line(a) + fringe) * deg;
+    for (let i = 0; i <= V; i++) {
+      const v = i / V;
+      // Long hair hangs straight down below the widest part of the head.
+      const hang = style === 1 ? 102 * deg : Math.PI;
+      const theta = Math.min(v * h, hang);
+      skull(Math.sin(theta) * Math.sin(phi), Math.cos(theta), Math.sin(theta) * Math.cos(phi), p);
+      const strands = (thin ? 0.0015 : 0.003) * smoothstep(0.15, 0.45, v) * Math.sin(phi * 18 + v * 2 + style);
+      const t = top * (0.35 + 0.65 * (1 - smoothstep(0.7, 1, v))) + strands;
+      const n = p.clone().sub(c).normalize();
+      p.addScaledVector(n, t);
+      if (v * h > hang) {
+        // Below that: straight down, flaring out a little at the ends.
+        const k = (v * h - hang) / (h - hang);
+        const drop = (v * h - hang) * 0.12;
+        p.y -= drop;
+        p.x *= 1 + 0.12 * k;
+        p.z = p.z * (1 + 0.12 * k) - 0.01 * k;
+      }
+      pts.push(p.x, p.y, p.z);
+      if (j < U && i < V) {
+        const a0 = j * (V + 1) + i;
+        const b0 = (j + 1) * (V + 1) + i;
+        idx.push(a0, a0 + 1, b0, b0, a0 + 1, b0 + 1);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  g.setIndex(idx);
   g.computeVertexNormals();
   return g;
 }
@@ -543,6 +628,8 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     w?: (p: THREE.Vector3) => Weights;
     /** Face shell: UVs into this person's atlas cell. */
     face?: boolean;
+    /** Hair: strands painted into the colour. */
+    hair?: boolean;
   }
   const parts: Part[] = [];
   const add = (j: THREE.Object3D, geo: THREE.BufferGeometry, c: Part['c'], w?: Part['w']) => parts.push({ geo, j, c, w });
@@ -594,7 +681,9 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   add(eyes, g.eyes!, 0xf6f6f2);
   add(eyes, g.pupils!, 0x1d1d1f);
   add(mouth, g.lips!, lip);
-  add(head, [g.hair!, g.hairLong!, g.hairTail!][style]!, hair);
+  // Under a cap or a Christmas hat the hair lies flat on top.
+  const flat = look.helmet === undefined && (XMAS || !look.suit);
+  parts.push({ geo: (flat ? [g.hairT!, g.hairLongT!, g.hairTailT!] : [g.hair!, g.hairLong!, g.hairTail!])[style]!, j: head, c: hair, hair: true });
   if (tail) add(tail, g.tail!, hair);
   if (look.santa) {
     add(head, g.beard!, 0xffffff);
@@ -631,7 +720,12 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const shade = (part: Part, q: THREE.Vector3, n: THREE.Vector3): number => {
     const y = q.y - HIP_Y;
     let f = 1 - 0.16 * Math.max(0, -n.y);
-    if (part.face) {
+    if (part.hair) {
+      // Strands from the crown: lighter and darker bands round the head, and darker at the roots near the hairline.
+      const phi = Math.atan2(q.x, q.z);
+      f *= 0.86 + 0.14 * (0.5 + 0.5 * Math.sin(phi * 18 + (y - 0.75) * 40)) ** 2;
+      f *= 1 - 0.12 * smooth(0.79, 0.72, y);
+    } else if (part.face) {
       const ax = Math.abs(q.x);
       const front = Math.max(0, n.z);
       f *= 1 - front * (0.2 * bump(ax, y, 0.034, 0.765, 0.018, 0.012) + 0.18 * bump(q.x, y, 0, 0.713, 0.014, 0.006) + 0.1 * bump(ax, y, 0.017, 0.738, 0.006, 0.018));
