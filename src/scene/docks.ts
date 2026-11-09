@@ -16,7 +16,7 @@ import { DOCK_CITY, NORTH_CITIES, rangeOf, rangeText, split } from '../sim/postc
 import { Labels } from './labels';
 import { buildHuman, type Human } from './people';
 import { crouch, gait, reach, relaxArms, settle } from './motion';
-import { checkerPlate, sectionalDoor, wireMesh } from './textures';
+import { checkerPlate, checkerPlateNormal, sectionalDoor, sectionalDoorNormal, wireMesh } from './textures';
 
 type V3 = THREE.Vector3;
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -822,6 +822,34 @@ export class Docks {
     settle(w, dt, { idle: dance ? 0 : 1 });
   }
 
+  /**
+   * The ways the roll cages are pushed, as floor paths (x, z), following the loader's jobs:
+   * each full cage pulled out of its place into the aisle and pushed through the door (or to a
+   * waiting place by the door and later on), and each empty one pulled off the stack by the
+   * door and pushed back into the place. Corners are rounded, as a cage swings round on its
+   * castors. Used for the wheel marks of the realistic day.
+   */
+  cagePaths(): [number, number][][] {
+    const out: [number, number][][] = [];
+    const door = WALL_Z - 0.6;
+    for (const d of this.docks) {
+      for (const c of d.cages) {
+        const home: [number, number] = [c.at.x, c.at.z];
+        const aisle: [number, number] = [d.x, c.at.z];
+        // Out of its place and through the door.
+        out.push(rounded([home, aisle, [d.x, door]]));
+        // An empty one from the stack, back into the place.
+        out.push(rounded([[d.x + STOCK_DX, STOCK_Z], [d.x, STOCK_Z + 0.2], aisle, home]));
+        // Out of its place to a waiting place by the door (one of them, in turn).
+        const [sx, sz] = STAGE_AT[d.cages.indexOf(c) % STAGE_AT.length]!;
+        out.push(rounded([home, aisle, [d.x, sz + 1.0], [d.x + sx, sz]]));
+      }
+      // Waiting cages go on into the truck.
+      for (const [sx, sz] of STAGE_AT) out.push(rounded([[d.x + sx, sz], [d.x, sz], [d.x, door]]));
+    }
+    return out;
+  }
+
   // ---------- building ----------
 
   private buildDock(x: number, chute: number, number: number, city: number): void {
@@ -984,8 +1012,10 @@ function dockMats(k: FloorKit): Record<string, THREE.Material> {
     const door = k.std(0x2c3038, 0.6, 0.5, 0xd5dae0);
     const closedDoor = k.std(0x2c3038, 0.6, 0.4, 0xffffff);
     closedDoor.map = sectionalDoor();
+    k.realNormal(closedDoor, sectionalDoorNormal());
     const leveler = k.std(0x3a3d44, 0.6, 0.6, 0xb9c0c8);
     leveler.map = checkerPlate();
+    k.realNormal(leveler, checkerPlateNormal());
     m = {
       dark: k.std(0x0d0e10, 0.9, 0, 0x2a2c31),
       rubber: k.std(0x15161a, 0.9, 0, 0x26282e),
@@ -1051,4 +1081,29 @@ function numberTex(text: string): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/** A floor path with its corners swung round (radius up to `r` m), sampled as short straight pieces. */
+function rounded(pts: [number, number][], r = 0.9): [number, number][] {
+  const out: [number, number][] = [pts[0]!];
+  for (let i = 1; i + 1 < pts.length; i++) {
+    const [ax, az] = pts[i - 1]!;
+    const [bx, bz] = pts[i]!;
+    const [cx, cz] = pts[i + 1]!;
+    const la = Math.hypot(bx - ax, bz - az);
+    const lc = Math.hypot(cx - bx, cz - bz);
+    const k = Math.min(r, la / 2, lc / 2);
+    if (k < 0.05) {
+      out.push([bx, bz]);
+      continue;
+    }
+    const p0: [number, number] = [bx + ((ax - bx) / la) * k, bz + ((az - bz) / la) * k];
+    const p2: [number, number] = [bx + ((cx - bx) / lc) * k, bz + ((cz - bz) / lc) * k];
+    for (let t = 0; t <= 1.0001; t += 0.2) {
+      const u = 1 - t;
+      out.push([u * u * p0[0] + 2 * u * t * bx + t * t * p2[0], u * u * p0[1] + 2 * u * t * bz + t * t * p2[1]]);
+    }
+  }
+  out.push(pts[pts.length - 1]!);
+  return out;
 }

@@ -19,6 +19,7 @@ import { pcDigits } from '../sim/countries';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
@@ -32,6 +33,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
+import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -52,7 +54,7 @@ import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIE
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
-import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
+import { brushed, cardboardNormal, cardboardSide, checkerPlate, claddingNormal, dayFloor, dayWall, floorJointNormal, roofDeckNormal, sectionalDoor, stretchFilm, stretchFilmNormal, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { FLOOR, type FleetEvent } from '../sim/robotFleet';
 
@@ -122,6 +124,10 @@ const INDUCT = [10, 14, 18, 22];
 /** Half-beat offset of each lane's landing (see above). */
 const LANE_PHASE = [0, 0.5, 0, 0.5];
 const LANE_Y = 0.9;
+/** Belt height where an infeed joins the loop: just above the lips of the trays. */
+const LANE_TOP = LOOP_Y + 0.05;
+/** Half the width of a tray (its lips), seen from the loop's centre line. */
+const TRAY_HALF = 0.62;
 /** How far out from the loop's centre line each lane turns onto it (sets the lane's x). */
 const LANE_OUT = 3.6;
 /** z of the scan tunnels (just inside the north wall). */
@@ -388,7 +394,16 @@ export class Path {
 }
 
 /** Sweeps a 2D profile (across, up) along a path. uv.y is the distance in metres. */
-function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, step = 0.35): THREE.BufferGeometry {
+/**
+ * A plane that ends an extrusion at an angle (a mitred end): whatever lies past it (on the side
+ * `n` points to) is slid back along the path onto it. Only for an end on a straight stretch.
+ */
+interface Cut {
+  c: V3;
+  n: V3;
+}
+
+function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, step = 0.35, cut?: Cut): THREE.BufferGeometry {
   const n = Math.max(2, Math.ceil((s1 - s0) / step) + 1);
   const segs = prof.length - 1;
   const pos = new Float32Array(n * segs * 2 * 3);
@@ -407,11 +422,26 @@ function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, st
       for (let k = 0; k < 2; k++) {
         const [px, py] = prof[j + k]!;
         const o = (j * n + i) * 2 + k;
-        pos[o * 3] = P.x + Sd.x * px + N.x * py;
-        pos[o * 3 + 1] = P.y + Sd.y * px + N.y * py;
-        pos[o * 3 + 2] = P.z + Sd.z * px + N.z * py;
+        let x = P.x + Sd.x * px + N.x * py;
+        let y = P.y + Sd.y * px + N.y * py;
+        let z = P.z + Sd.z * px + N.z * py;
+        let ss = s;
+        if (cut) {
+          const over = (x - cut.c.x) * cut.n.x + (z - cut.c.z) * cut.n.z;
+          const along = T.x * cut.n.x + T.z * cut.n.z;
+          if (over > 0 && along > 1e-3) {
+            const back = over / along;
+            x -= T.x * back;
+            y -= T.y * back;
+            z -= T.z * back;
+            ss -= back;
+          }
+        }
+        pos[o * 3] = x;
+        pos[o * 3 + 1] = y;
+        pos[o * 3 + 2] = z;
         uv[o * 2] = k;
-        uv[o * 2 + 1] = s;
+        uv[o * 2 + 1] = ss;
       }
     }
   }
@@ -514,13 +544,14 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   return t;
 }
 /** Belt surface: dark rubber by night, light rollers by day. */
-function drawBelt(t: THREE.CanvasTexture, day: boolean): void {
+/** The belt surface: white slats in the drawn day, mid-grey rubber in the realistic day, dark at night. */
+function drawBelt(t: THREE.CanvasTexture, day: boolean, real = false): void {
   const c = t.image as HTMLCanvasElement;
   const g = c.getContext('2d');
   if (!g) return;
-  g.fillStyle = day ? '#eef0f3' : '#1f2125';
+  g.fillStyle = real && day ? '#7b8087' : day ? '#eef0f3' : '#1f2125';
   g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = day ? '#c4cad1' : '#34373d';
+  g.fillStyle = real && day ? '#62666c' : day ? '#c4cad1' : '#34373d';
   for (let y = 0; y < c.height; y += 8) g.fillRect(0, y, c.width, day ? 2 : 3);
   t.needsUpdate = true;
 }
@@ -902,6 +933,8 @@ export class Sorter implements Scene3D {
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  /** Vignette and warm/cool finish of the realistic day. */
+  private grade: ShaderPass;
   /** Day outlines as a screen effect. */
   private ink: InkPass;
   private gtao: GTAOPass;
@@ -1030,7 +1063,7 @@ export class Sorter implements Scene3D {
   /** Christmas decorations (Settings → Christmas). */
   private xmas: Xmas | null = null;
   private dayShown: boolean | null = null;
-  private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number }[] = [];
+  private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number; rc?: THREE.Color }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
   readonly nightOnly: THREE.Object3D[] = [];
   /** What the night party shows (see NightFx); night-only objects that one switch hides. */
@@ -1040,6 +1073,16 @@ export class Sorter implements Scene3D {
   only: 'day' | 'night' | undefined;
   private nightEnv: THREE.Texture | null = null;
   private keyLight!: THREE.DirectionalLight;
+  /** The realistic day look ("Day") instead of the flat one ("Minimal"); nights are the same. */
+  private real = false;
+  private dayEnv: THREE.Texture | null = null;
+  /** Hall surfaces of the flat day look, and their lit counterparts in the realistic one. */
+  private flatOnly: THREE.Object3D[] = [];
+  private realOnly: THREE.Object3D[] = [];
+  /** Materials with relief for the realistic day only: their normal scale at full day. */
+  private realNormals: { m: THREE.MeshStandardMaterial; s: number }[] = [];
+  /** Materials that wear another picture in the realistic day (their own map otherwise). */
+  private realMaps: { m: THREE.MeshStandardMaterial; own: THREE.Texture | null; real: THREE.Texture; col: THREE.Color; realCol: THREE.Color; rough: number; realRough: number }[] = [];
   private hull!: THREE.InstancedMesh;
   private cageLine!: THREE.LineBasicMaterial;
 
@@ -1080,6 +1123,10 @@ export class Sorter implements Scene3D {
     this.renderer.toneMappingExposure = 1.15;
     this.scene.background = new THREE.Color(0x0b0910);
     this.scene.fog = new THREE.FogExp2(0x0b0910, 0.017);
+    // The scene graph (about 7,000 objects) is brought up to date once per frame, in
+    // Batcher.update() just before drawing; every render pass (scene, ink normals, AO,
+    // shadows, mirror) would otherwise walk the whole graph again.
+    this.scene.matrixWorldAutoUpdate = false;
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.gtao = new GTAOPass(this.scene, this.camera, 512, 512);
@@ -1093,6 +1140,8 @@ export class Sorter implements Scene3D {
     this.bokeh = new BokehPass(this.scene, this.camera, { focus: 10, aperture: 0.0025, maxblur: 0.006 });
     this.bokeh.enabled = false;
     this.composer.addPass(this.bokeh);
+    this.grade = gradePass();
+    this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());
     try {
       const saved = localStorage.getItem(CAM_KEY);
@@ -3084,6 +3133,8 @@ export class Sorter implements Scene3D {
   private theme<M extends THREE.MeshStandardMaterial>(m: M, day: number, rough = 0.85, metal = 0.05): M {
     this.themed.push({ m, n: m.color.clone(), d: new THREE.Color(day), nr: m.roughness, dr: rough, nm: m.metalness, dm: metal });
     toonify(m);
+    // Safety yellow is the paint that takes the knocks (realistic day only).
+    if (day === 0xf2c200) wear(m);
     return m;
   }
 
@@ -3129,44 +3180,119 @@ export class Sorter implements Scene3D {
     fog.density = this.nightFog() + (0.009 - this.nightFog()) * this.day;
   }
 
+  /** Minimal (flat, drawn) or realistic day; the night is the same for both. */
+  setRealistic(real: boolean): void {
+    if (real === this.real) return;
+    this.real = real;
+    if (real && !this.dayEnv) {
+      this.dayEnv = dayEnvironment(this.renderer);
+      this.buildRealHall();
+    }
+    this.dayShown = null; // re-apply the look
+    this.applyTheme(this.day);
+  }
+
+  private realC = new THREE.Color();
+  /** A day colour toned down for the lit look: light colours are capped at a light grey. */
+  private realCol(c: THREE.Color): THREE.Color {
+    const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    return this.realC.copy(c).multiplyScalar(l > 0.55 ? 0.55 / l : 1);
+  }
+
+  realNormal(m: THREE.MeshStandardMaterial, map: THREE.Texture, scale = 1): void {
+    if (m.map) {
+      // Same tiling as the colour map, so the relief lines up with the print.
+      map = map.clone();
+      map.repeat.copy(m.map.repeat);
+      map.offset.copy(m.map.offset);
+      map.rotation = m.map.rotation;
+      map.needsUpdate = true;
+    }
+    m.normalMap = map;
+    m.normalScale.setScalar(0);
+    this.realNormals.push({ m, s: scale });
+  }
+
+  /** In the realistic day, show `map` (with colour and roughness) on `m` instead of its own look. */
+  realMap(m: THREE.MeshStandardMaterial, map: THREE.Texture, color = 0xffffff, roughness = m.roughness): void {
+    this.realMaps.push({ m, own: m.map, real: map, col: m.color.clone(), realCol: new THREE.Color(color), rough: m.roughness, realRough: roughness });
+  }
+
+  isRealistic(): boolean {
+    return this.real;
+  }
+
   private applyTheme(day: number): void {
     if (Math.abs(day - this.day) < 0.002 && this.dayShown !== null) return;
     this.day = day;
-    TOON.value = day;
-    this.ink.enabled = day > 0.02;
-    this.ink.strength = smooth01(day * 1.2);
-    if (this.blobMat) this.blobMat.opacity = 0.45 - 0.17 * day;
+    // The drawn look (toon steps, ink, flat colours) fades in only for Minimal.
+    const flat = this.real ? 0 : day;
+    TOON.value = flat;
+    this.ink.enabled = flat > 0.02;
+    this.ink.strength = smooth01(flat * 1.2);
+    if (this.blobMat) this.blobMat.opacity = this.real ? 0.45 - 0.1 * day : 0.45 - 0.17 * day;
     for (const t of this.themed) {
-      t.m.color.lerpColors(t.n, t.d, day);
-      t.m.roughness = t.nr + (t.dr - t.nr) * day;
-      t.m.metalness = t.nm + (t.dm - t.nm) * day;
+      // Realistic day: the day colours, but no pure whites (a lit white reads as paper, not steel).
+      const d = this.real ? (t.rc ?? this.realCol(t.d)) : t.d;
+      t.m.color.lerpColors(t.n, d, day);
+      // Realistic day: the day colours, as paint on steel (between the matte drawing and the club's metal).
+      const dr = this.real ? Math.max(0.3, (t.nr + t.dr) / 2) : t.dr;
+      const dm = this.real ? t.nm * 0.5 : t.dm;
+      t.m.roughness = t.nr + (dr - t.nr) * day;
+      t.m.metalness = t.nm + (dm - t.nm) * day;
     }
     const bg = this.scene.background as THREE.Color;
-    bg.setHex(0x0b0910).lerp(this.c.setHex(DAY.bg), day);
+    bg.setHex(0x0b0910).lerp(this.c.setHex(this.real ? 0xc8ccd1 : DAY.bg), day);
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(bg);
     fog.density = this.nightFog() + (0.009 - this.nightFog()) * day;
-    this.renderer.toneMappingExposure = 1.15 - 0.2 * day;
-    this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xffffff), day);
-    this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0xc9cfd6), day);
-    this.hemi.intensity = 0.45 + 0.55 * day;
-    this.keyLight.color.setHex(0xb0b8ff).lerp(this.white, day);
-    this.keyLight.intensity = 0.3 + 0.7 * day;
+    this.renderer.toneMappingExposure = this.real ? 1.15 - 0.4 * day : 1.15 - 0.2 * day;
+    if (this.real) {
+      // Daylight from the roof: a warm sun through the roof lights, cool sky light from above.
+      this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xdfe8ff), day);
+      this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0x8a8580), day);
+      this.hemi.intensity = 0.45 + 0.05 * day;
+      this.keyLight.color.setHex(0xb0b8ff).lerp(this.c.setHex(0xfff1dc), day);
+      this.keyLight.intensity = 0.3 + 1.5 * day;
+    } else {
+      this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xffffff), day);
+      this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0xc9cfd6), day);
+      this.hemi.intensity = 0.45 + 0.55 * day;
+      this.keyLight.color.setHex(0xb0b8ff).lerp(this.white, day);
+      this.keyLight.intensity = 0.3 + 0.7 * day;
+    }
     this.cageLine.color.setHex(0x8a8f96).lerp(this.c.setHex(DAY.tealD), day);
+    for (const n of this.realNormals) n.m.normalScale.setScalar(this.real ? n.s * day : 0);
+    REAL.value = this.real ? day : 0;
+    this.grade.enabled = this.real && day > 0.02;
+    (this.grade.uniforms.uAmount as THREE.IUniform<number>).value = day;
     const show = day > 0.5;
     if (show === this.dayShown) return;
     this.dayShown = show;
     for (const o of this.dayOnly) o.visible = show;
     for (const o of this.nightOnly) o.visible = !show;
+    for (const o of this.flatOnly) o.visible = show && !this.real;
+    for (const o of this.realOnly) o.visible = show && this.real;
     this.applyNightFx();
-    this.scene.environment = show ? null : this.nightEnv;
+    for (const r of this.realMaps) {
+      const on = show && this.real;
+      const map = on ? r.real : r.own;
+      if (r.m.map !== map) {
+        // (Going from no map to a map changes the shader: compile again.)
+        if (!r.m.map !== !map) r.m.needsUpdate = true;
+        r.m.map = map;
+      }
+      r.m.color.copy(on ? r.realCol : r.col);
+      r.m.roughness = on ? r.realRough : r.rough;
+    }
+    this.scene.environment = show ? (this.real ? this.dayEnv : null) : this.nightEnv;
     // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
     const hq = this.quality === 'high' || this.quality === 'ultra';
     if (!show && hq && !this.mirror) this.mirror = this.buildMirror();
     if (this.mirror) this.mirror.visible = !show && hq;
-    // Flat, bright colours by day, like the illustration; filmic tone mapping for the club.
-    this.renderer.toneMapping = show ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
-    drawBelt(this.beltTex, show);
+    // Flat, bright colours for the drawn day; filmic tone mapping for the photo-like day and the club.
+    this.renderer.toneMapping = show && !this.real ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    drawBelt(this.beltTex, show, this.real);
   }
 
   private buildHall(): void {
@@ -3244,6 +3370,7 @@ export class Sorter implements Scene3D {
     // Columns: red at the foot, as in the photos.
     const col = this.std(0x3a3d45, 0.6, 0.6, 0xf3f4f6);
     const colRed = this.std(0x7a1a20, 0.6, 0.3, 0xe2231a);
+    wear(colRed, 0.7);
     // (In the walls, between the dock doors.)
     for (const x of COLUMNS) {
       // North: halfway between truck docks (x −13.6 + 6k); south: between the box doors (x −16 + 6k).
@@ -3319,6 +3446,9 @@ export class Sorter implements Scene3D {
     // Pallets with wrapped goods along the walls.
     const pal = this.std(0x8a6a44, 0.9, 0);
     const wrap = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.35, metalness: 0 });
+    // Realistic day: cartons showing through glossy stretch film, with its folds.
+    this.realMap(wrap, stretchFilm(), 0xffffff, 0.22);
+    this.realNormal(wrap, stretchFilmNormal(), 0.7);
     const stack = (x: number, z: number) => {
       const h = rnd(0.8, 2);
       this.box('pal', pal, x, 0.07, z, 1.2, 0.14, 1);
@@ -3443,6 +3573,9 @@ export class Sorter implements Scene3D {
     });
     this.beltTex.repeat.set(1, 1 / 1.2);
     const beltMat = this.theme(new THREE.MeshStandardMaterial({ map: this.beltTex, roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide }), 0xffffff);
+    // Realistic day: the grey rubber of the texture as it is, with specks and stains.
+    this.themed[this.themed.length - 1]!.rc = new THREE.Color(0xffffff);
+    beltWear(beltMat);
     const frameMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x2b5ea8, roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide }), DAY.teal);
     const chuteTex = brushed().clone();
     chuteTex.repeat.set(1, 1 / 3);
@@ -3492,13 +3625,14 @@ export class Sorter implements Scene3D {
       }
     };
     /** A belt from s0 to s1; `rails` can limit each side rail to some stretches (where belts merge). */
-    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }) => {
-      geo.belt!.push(extrude(path, BELT, s0, s1));
-      geo.frame!.push(extrude(path, FRAME, s0, s1));
+    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }, cut?: Cut) => {
+      const ex = (prof: [number, number][], a: number, b: number) => extrude(path, prof, a, b, 0.35, cut);
+      geo.belt!.push(ex(BELT, s0, s1));
+      geo.frame!.push(ex(FRAME, s0, s1));
       const k = led === stripIn ? 'sIn' : led === stripLoop ? 'sLoop' : 'sChute';
-      geo[k]!.push(extrude(path, LEDL, s0, s1), extrude(path, LEDR, s0, s1));
-      for (const [a, b] of rails?.L ?? [[s0, s1]]) if (b > a) geo.rail!.push(extrude(path, RAIL_L, a, b));
-      for (const [a, b] of rails?.R ?? [[s0, s1]]) if (b > a) geo.rail!.push(extrude(path, RAIL_R, a, b));
+      geo[k]!.push(ex(LEDL, s0, s1), ex(LEDR, s0, s1));
+      for (const [a, b] of rails?.L ?? [[s0, s1]]) if (b > a) geo.rail!.push(ex(RAIL_L, a, b));
+      for (const [a, b] of rails?.R ?? [[s0, s1]]) if (b > a) geo.rail!.push(ex(RAIL_R, a, b));
       legs(path, s0, s1, 0.6);
       // Drive motors under the frame, one per section.
       for (let s = s0 + 4; s < s1 - 2; s += 12) {
@@ -3511,6 +3645,7 @@ export class Sorter implements Scene3D {
       }
     };
 
+    const inductGap = new THREE.MeshBasicMaterial({ color: 0x0c0d0f });
     // Infeeds: four lanes side by side at floor level, in from the north wall, each through its own scan tunnel.
     for (let k = 0; k < 4; k++) {
       const y = LANE_Y;
@@ -3520,13 +3655,26 @@ export class Sorter implements Scene3D {
       const end = this.p.clone();
       const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
       const corner = end.clone().addScaledVector(into, -LANE_OUT / Math.abs(into.z));
-      corner.y = LOOP_Y - 0.5;
+      // The last stretch is level, its belt just above the trays' lips (as on a real induction).
+      corner.y = LANE_TOP;
+      end.y = LANE_TOP;
       const x = corner.x;
       const z0 = NZ - 1;
       const path = Path.fillet([v(x, y, z0), v(x, y, -23.5), v(x, corner.y, corner.z), end], 3);
-      // The belt runs right up to the loop: its end reaches over the edge of the trays
-      // (just above them), so parcels transfer straight onto their tray with no gap.
-      belt(path, 0.6, path.len - 1.75, stripIn);
+      // The belt ends at the loop's side, cut square to it (mitred at the 30° of the join),
+      // a hand's width from the trays, so parcels slide across onto their tray.
+      outward(this.t, this.n);
+      const cut: Cut = { c: this.p.clone().addScaledVector(this.n, TRAY_HALF + 0.06), n: this.n.clone().negate() };
+      belt(path, 0.6, path.len, stripIn, undefined, cut);
+      // The run-in is made of short induction belts that time each parcel to its tray:
+      // dark gaps across the belt between them, and a drive under each.
+      const edgeS = path.len - (TRAY_HALF + 0.06) / Math.sin(Math.PI / 6);
+      for (const back of [1.1, 2.5, 3.9]) {
+        path.at(edgeS - back, this.p, this.t);
+        const ry = Math.atan2(this.t.x, this.t.z);
+        this.box('indgap', inductGap, this.p.x, this.p.y + 0.004, this.p.z, 1.2, 0.01, 0.035, undefined, ry);
+        this.box('motor', motorMat, this.p.x, this.p.y - 0.4, this.p.z, 0.5, 0.2, 0.3, undefined, ry);
+      }
 
       const tunnelS = LANE_TUNNEL_Z - z0;
       const tunnel = this.tunnel(path, tunnelS, 1.2);
@@ -3546,7 +3694,7 @@ export class Sorter implements Scene3D {
       loopAt(INDUCT[3]!, this.p, this.t);
       const wx = this.p.x - LANE_OUT / Math.tan(Math.PI / 6) + 1.7;
       const wy = LOOP_Y - 1.0;
-      const z1 = -23.5 + ((wy - LANE_Y) / (LOOP_Y - 0.5 - LANE_Y)) * (-8.5 - LANE_OUT + 23.5);
+      const z1 = -23.5 + ((wy - LANE_Y) / (LANE_TOP - LANE_Y)) * (-8.5 - LANE_OUT + 23.5);
       const z0 = z1 - 6;
       this.box('grate', grate, wx, wy - 0.05, (z0 + z1) / 2, 1.1, 0.1, z1 - z0);
       for (const z of [z0, (z0 + z1) / 2, z1]) this.box('steel', steel, wx, (wy - 0.1) / 2, z, 0.12, wy - 0.1, 0.12);
@@ -3586,6 +3734,9 @@ export class Sorter implements Scene3D {
       geo.rail!.push(extrude(tp, [[-0.15, 0.08], [-0.15, 0], [0.15, 0], [0.15, 0.08]], 0, tp.len, 0.5));
     }
     const trayMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x8c96a4, roughness: 0.35, metalness: 0.85 }), 0xffffff, 0.7);
+    // Realistic day: dark grey plates, each worn its own way.
+    this.themed[this.themed.length - 1]!.rc = new THREE.Color(0x4d5258);
+    trayWear(trayMat);
     // Tilt trays: a plate with raised side lips and a pivot block underneath.
     const trayGeo = mergeGeometries([
       new THREE.BoxGeometry(1.2, 0.06, PITCH * 0.88).toNonIndexed(),
@@ -3843,6 +3994,7 @@ export class Sorter implements Scene3D {
     }
     const carton = this.std(0xffffff, 0.88, 0);
     carton.map = cardboardSide();
+    this.realNormal(carton, cardboardNormal(), 0.6);
     // Diagonal bracing between the upright pairs, base plates and yellow end guards.
     const braces: THREE.BufferGeometry[] = [];
     const brace = (x: number, z: number, y0: number, y1: number, dir: 1 | -1) => {
@@ -4117,6 +4269,78 @@ export class Sorter implements Scene3D {
   }
 
   /** The day look's own scenery: a light hall, the illustration's workstation, GPU racks, people and signs. */
+  /**
+   * The lit hall of the realistic day look: worn concrete, cladding and a ceiling that
+   * take light and shadow, and shafts of daylight under the roof lights.
+   */
+  private buildRealHall(): void {
+    // Built the first time the look is chosen (it simulates the robots' traffic and draws
+    // large canvases), after setupShadows: so it sets its own shadow flags.
+    const add = (o: THREE.Object3D) => {
+      this.put(o, 'day');
+      this.realOnly.push(o);
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.material instanceof THREE.MeshStandardMaterial) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    };
+    const { map, rough } = realFloorMaps();
+    const fm = map.clone();
+    const fr = rough.clone();
+    for (const t of [fm, fr]) {
+      t.repeat.set(HW / FLOOR_TILE_M, HD / FLOOR_TILE_M);
+      t.needsUpdate = true;
+    }
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d4, map: fm, roughnessMap: fr, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
+    grime(floorMat, 0.22, 9, 'xz');
+    this.realNormal(floorMat, floorJointNormal(), 0.6);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(HCX, 0, HZC);
+    add(floor);
+    const cl = dayWall().clone();
+    cl.repeat.set(1 / 8, 1 / HH);
+    cl.offset.set(0, 0.5);
+    cl.needsUpdate = true;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: cl, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+    grime(wallMat, 0.18, 6, 'xy', 1.2);
+    this.realNormal(wallMat, claddingNormal(), 0.8);
+    for (const z of [NZ, HZ]) {
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), wallMat);
+      w.position.set(HCX, HH / 2, z);
+      add(w);
+    }
+    const side = dayWall().clone();
+    side.repeat.set(HD / 8, 1);
+    side.needsUpdate = true;
+    const sideMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: side, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+    grime(sideMat, 0.18, 6, 'zy', 1.2);
+    this.realNormal(sideMat, claddingNormal(), 0.8);
+    for (const x of [WX, EX]) {
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), sideMat);
+      w.position.set(x, HH / 2, HZC);
+      w.rotation.y = Math.PI / 2;
+      add(w);
+    }
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.8, metalness: 0.3, side: THREE.DoubleSide });
+    // The steel roof deck: a trapezoid rib every 3 m, across the hall (shape UVs are metres).
+    const deck = roofDeckNormal().clone();
+    deck.repeat.set(1 / 3, 1 / 3);
+    deck.rotation = Math.PI / 2;
+    deck.needsUpdate = true;
+    this.realNormal(ceilMat, deck);
+    const ceil = new THREE.Mesh(ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS), ceilMat);
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.set(HCX, HH, HZC);
+    add(ceil);
+    add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
+    // Where the roll cages are pushed, the floor shows it.
+    add(wheelTracks(this.docks.cagePaths().map((pts) => ({ pts })), CAGE_TRACKS));
+    // The robots keep to one-way lanes on a grid: the busy lanes show as worn tracks.
+    add(wheelTracks(this.floor.trafficPaths(), ROBOT_TRACKS, 23));
+  }
+
   private buildDay(): void {
     this.only = 'day';
     const grid = canvasTex(64, 64, (g) => {
@@ -4134,6 +4358,7 @@ export class Sorter implements Scene3D {
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(HCX, 0, HZC);
     this.put(floor);
+    this.flatOnly.push(floor);
     // Flat walls and ceiling, as in a drawing.
     // Cladding with a band of high windows.
     const cladding = (len: number) => {
@@ -4155,17 +4380,20 @@ export class Sorter implements Scene3D {
       const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longDay);
       w.position.set(HCX, HH / 2, z);
       this.put(w);
+      this.flatOnly.push(w);
     }
     for (const x of [WX, EX]) {
       const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wall);
       w.position.set(x, HH / 2, HZC);
       w.rotation.y = Math.PI / 2;
       this.put(w);
+      this.flatOnly.push(w);
     }
     const ceil = new THREE.Mesh(ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS), new THREE.MeshBasicMaterial({ color: DAY.ceiling, side: THREE.DoubleSide }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil);
+    this.flatOnly.push(ceil);
     // Rows of linear LED fixtures between the roof lights, and cable trays along the hall.
     const led = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const housing = this.std(0xb9c0c8, 0.5, 0.6, 0xb9c0c8);
@@ -4315,6 +4543,7 @@ export class Sorter implements Scene3D {
     const white = this.std(0xffffff, 0.8, 0.05);
     const card = this.std(0xffffff, 0.9, 0);
     card.map = cardboardSide();
+    this.realNormal(card, cardboardNormal(), 0.6);
     const black = this.std(0x1d1d1f, 0.6, 0.2);
     this.box('trolley', white, x, 0.32, z, 2.2, 0.08, 1.4);
     this.blob(x, z, 2.8, 2.0);

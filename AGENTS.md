@@ -63,6 +63,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/nightFx.ts` | What the night shows (`NightFx`): parcel glow 0…1 and a switch per party effect, presets Party / Calm / Dark. `Sorter.setNightFx` applies it; the HUD's Night effects panel (only shown while the night look is on) edits and stores it. |
 | `src/scene/roof.ts` | `Roof`: 18 flat skylights (curb, level glass, glazing bars) in two rows at z ±20, one in every other bay between the roof beams; both ceilings have holes for them (`ceilingWithLights`). Above them a sky dome that follows the camera: light blue with drifting flat clouds by day, stars and grey clouds at night (`uDay`). |
 | `src/scene/party.ts` | Night party: DJ booth on the maintenance platform inside the loop's west end (`PLATFORM_X`), laser fans, mirror-ball floor spots, confetti on the drop. |
+| `src/scene/realDay.ts` | The realistic day look ("Day"): generated worn-concrete floor (`realFloorMaps`), world-space grime that never tiles (`grime`), a generated daylight environment (`dayEnvironment`), daylight shafts under the roof lights (`lightShafts`, one draw call), wheel marks (`wheelTracks`), paint wear (`wear`, `REAL`), colour finish (`gradePass`). Built in `Sorter.buildRealHall`. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
 | `src/sim/rng.ts` | Seeded random numbers. |
@@ -114,7 +115,9 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   the outside, s 10, 14, 18, 22; lanes come in through the north wall, x set by
   `LANE_OUT`; `LANE_PHASE` lands lanes 1 and 3 half a beat
   later so they fill the odd trays; one parcel per lane per beat; `LANE_Z`;
-  the belt reaches over the tray edge, so there is no gap), `HOLD_S` (queue point), `LANE_QUEUE`.
+  the last stretch is level at `LANE_TOP`, just above the trays' lips, made of short
+  induction belts (dark gaps), and ends mitred square to the loop a hand's width from
+  the trays: `extrude(..., cut)` slides whatever lies past a plane back onto it), `HOLD_S` (queue point), `LANE_QUEUE`.
   Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).
 - Hall: `WX`/`EX` west/east wall, `HZ` south wall, `NZ` north wall (further out: room at the docks; `HD` depth, `HZC` middle), `HH` height; `HCX`/`HW`
   centre and width.
@@ -170,6 +173,35 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   recompiles every material).
 - Night lights are `MeshBasicMaterial` with colours above 1 so bloom picks
   them up. By day, tone mapping is off and walls are flat basic materials.
+- **Three looks:** Minimal (the drawn day above), Day (realistic) and Night.
+  `setRealistic(true)` (HUD, `?look=real`, `settings.look`) keeps the day's
+  objects and colours but drops toon steps and ink, turns on filmic tone
+  mapping and a daylight environment, caps light day colours at a light grey
+  (`realCol`), and swaps the flat hall surfaces (`flatOnly`) for lit ones
+  (`realOnly`). Without the ink pass it draws about half the calls of
+  Minimal. Shadows and AO still come with quality high.
+- **Day details:** wheel marks where roll cages are pushed (`Docks.cagePaths`,
+  following the loader's jobs) and where robots drive (`RobotFloor.trafficPaths`:
+  a stand-in fleet runs 3,000 beats at load and counts every step; busier
+  steps get darker marks), both `wheelTracks` in `realDay.ts`. Relief
+  (normal maps generated from heights in `textures.ts`) is registered with
+  `kit.realNormal(material, map)` and shows only in Day: wall cladding,
+  roof deck, floor joints, checker plate, sectional doors, cartons, pallet
+  wood, stretch film. `realMap(material, map)` swaps a material's picture in
+  Day (the wrapped pallets show cartons through stretch film). Safety
+  yellow (any themed material with day colour `0xf2c200`) and the red column
+  feet get chipped paint and scrapes (`wear`, world space, gated by `REAL`);
+  anything that moves sets `material.userData.noWear = true` (forklifts,
+  robots). The sorter's trays are dark grey in Day, each worn its own way
+  (`trayWear`: shade, streaks, scratches, dirt, worn patch, from `gl_InstanceID`,
+  in tray space). Never name a GLSL variable `patch` (reserved).
+  Belts are grey rubber in Day (`drawBelt(..., real)`) with specks, smears and
+  dust (`beltWear`, in the belt texture's moving space).
+  A light vignette and warm/cool finish (`gradePass`) runs only in
+  Day. The Day hall is built the first time Day is chosen.
+- **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`
+  walks the scene graph once per frame, just before `composer.render`.
+  Anything posed later in a frame would be drawn a frame late.
 
 ## Next step: nicer, more detailed graphics
 
