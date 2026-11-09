@@ -18,6 +18,7 @@ import './ui/style.css';
 
 import { Music } from './audio/music';
 import { Sorter } from './scene/sorter';
+import { loadBakedBodies, startLaterWork } from './scene/people';
 import { NIGHT_PRESETS, normalizeNightFx } from './scene/nightFx';
 import { Hud, loadSettings, type TimeMode } from './ui/hud';
 import { Pwa } from './ui/pwa';
@@ -51,6 +52,8 @@ const loadingSay = (text: string) => {
 };
 const nextPaint = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 await nextPaint();
+// The people's bodies, made at build time (a few hundred kB), while the loading screen is up.
+await loadBakedBodies();
 const scene = new Sorter();
 app.append(scene.canvas);
 scene.canvas.addEventListener('webglcontextlost', (e) => {
@@ -184,6 +187,8 @@ requestAnimationFrame((t) => {
     loading.style.opacity = '0';
     setTimeout(() => loading.remove(), 700);
   }
+  // Now the fine detail of the people, in spare moments.
+  startLaterWork();
 });
 
 // For the console and the screenshot script.
