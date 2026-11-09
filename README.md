@@ -146,7 +146,8 @@ npm run shots      # screenshots of every department, day and night, into shots/
 playwright install chromium`); it runs `vite preview` on `dist/`, so build
 first. Pass department ids to limit it: `npm run shots -- docks boxes`.
 
-Every push builds a zip of the static site (`.github/workflows/build.yml`):
+While the repo is public, `main` also deploys to GitHub Pages
+(https://birgerj.github.io/sort-sim/). Every push builds a zip of the static site (`.github/workflows/build.yml`):
 open the run under Actions and download the `sort-sim-<commit>` artifact. Unzip
 it into any folder on any static web server; paths are relative, so a subfolder
 works too. Offline mode (service worker) needs HTTPS or localhost. Push a tag
