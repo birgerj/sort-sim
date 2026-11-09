@@ -117,7 +117,13 @@ export function setGameWeights(w: number[] | null): void {
  * rest to the north cities (roll cages). Cities get post in proportion to their inhabitants
  * (in a night-shift game: in proportion to tonight's volumes, whatever the plan).
  */
-export function randomPostcode(rnd: () => number = Math.random, south = 0.3): { pc: number; city: number; north: boolean } {
+export function randomPostcode(rnd: () => number = Math.random, south = 0.3, forced: City | null = null): { pc: number; city: number; north: boolean } {
+  if (forced) {
+    // Part of a batch for this city.
+    const n = NORTH_CITIES.indexOf(forced);
+    const all = areas(forced);
+    return { pc: all[Math.floor(rnd() * all.length)]!, city: n >= 0 ? n : SOUTH_CITIES.indexOf(forced), north: n >= 0 };
+  }
   if (gameWeights) {
     let x = rnd() * gameWeights.reduce((a, b) => a + b, 0);
     let i = 0;

@@ -35,6 +35,14 @@ export interface Sample {
   infeedQueue: number;
   onTimePct: number;
   loadFactorPct: number;
+  /** Buffer store: parcels in it (and on their way in) and places, at the sample. */
+  storeUsed: number;
+  storeSlots: number;
+  /** The destination with the most parcels inducted since the last sample, and its share. */
+  topCity: string;
+  topPct: number;
+  /** The batch running at the sample ('' when none). */
+  batch: string;
 }
 
 /** Counters since the last sample. */
@@ -46,9 +54,10 @@ interface Window {
   noread: number;
   manual: number;
   missorts: number;
+  byCity: Map<string, number>;
 }
 
-const empty = (): Window => ({ inducted: 0, out: 0, dwellSum: 0, recirc: 0, noread: 0, manual: 0, missorts: 0 });
+const empty = (): Window => ({ inducted: 0, out: 0, dwellSum: 0, recirc: 0, noread: 0, manual: 0, missorts: 0, byCity: new Map() });
 
 export class Kpi {
   readonly samples: Sample[] = [];
@@ -59,7 +68,8 @@ export class Kpi {
   /** Minutes of hub time per sample. */
   readonly every = 5;
 
-  inducted(): void {
+  inducted(city = ''): void {
+    if (city) this.w.byCity.set(city, (this.w.byCity.get(city) ?? 0) + 1);
     this.w.inducted++;
     this.total.inducted++;
   }
@@ -98,7 +108,7 @@ export class Kpi {
   }
 
   /** Call often; takes a sample every `every` minutes of hub time. */
-  tick(t: number, state: () => { chutesFull: number; robotsBusyPct: number; infeedQueue: number }): void {
+  tick(t: number, state: () => { chutesFull: number; robotsBusyPct: number; infeedQueue: number; storeUsed: number; storeSlots: number; batch: string }): void {
     if (this.lastT === null) this.lastT = t;
     if (t - this.lastT < this.every) return;
     const span = t - this.lastT;
@@ -106,6 +116,8 @@ export class Kpi {
     const w = this.w;
     const recent = this.departures.slice(-40);
     const st = state();
+    let top: [string, number] = ['', 0];
+    for (const e of w.byCity) if (e[1] > top[1]) top = e;
     this.samples.push({
       t,
       inPerHour: Math.round((w.inducted * 60) / span),
@@ -120,6 +132,11 @@ export class Kpi {
       infeedQueue: st.infeedQueue,
       onTimePct: recent.length ? pct(recent.filter((d) => d.onTime).length, recent.length) : 100,
       loadFactorPct: recent.length ? Math.round((100 * recent.reduce((a, d) => a + d.load / d.room, 0)) / recent.length) : 0,
+      storeUsed: st.storeUsed,
+      storeSlots: st.storeSlots,
+      topCity: top[0],
+      topPct: pct(top[1], w.inducted),
+      batch: st.batch,
     });
     if (this.samples.length > 600) this.samples.shift();
     this.w = empty();
@@ -146,7 +163,7 @@ export class Kpi {
   /** The timeline and the departures as CSV (two tables, one after the other). */
   csv(): string {
     const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
-    const cols: (keyof Sample)[] = ['t', 'inPerHour', 'outPerHour', 'dwell', 'recircPct', 'noreadPct', 'manualPct', 'missorts', 'chutesFull', 'robotsBusyPct', 'infeedQueue', 'onTimePct', 'loadFactorPct'];
+    const cols: (keyof Sample)[] = ['t', 'inPerHour', 'outPerHour', 'dwell', 'recircPct', 'noreadPct', 'manualPct', 'missorts', 'chutesFull', 'robotsBusyPct', 'infeedQueue', 'onTimePct', 'loadFactorPct', 'storeUsed', 'storeSlots', 'topCity', 'topPct', 'batch'];
     const lines = [cols.join(',')];
     for (const s of this.samples) lines.push(cols.map((c) => (c === 't' ? hhmm(s.t) : String(s[c]))).join(','));
     lines.push('', 'door,city,departed,cutoff,load,room,onTime,full');

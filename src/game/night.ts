@@ -30,12 +30,13 @@ export type NightEvent =
   | { kind: 'lateInbound'; hour: number; forecast: number; actual: number }
   | { kind: 'robotsDown'; hour: number; hours: number; share: number } // planned robot maintenance
   | { kind: 'earlyCutoff'; hour: number; city: number } // a carrier leaves at 05:30
+  | { kind: 'batch'; hour: number; city: number; minutes: number; share: number } // a sender's batch for one city
   // Only shown when they happen:
   | { kind: 'drift'; hour: number; city: number; delta: number }
   | { kind: 'lateTrailer'; hour: number; city: number };
 
 /** Events the planner sees in the briefing. */
-export const announced = (e: NightEvent) => e.kind === 'lateInbound' || e.kind === 'robotsDown' || e.kind === 'earlyCutoff';
+export const announced = (e: NightEvent) => e.kind === 'lateInbound' || e.kind === 'robotsDown' || e.kind === 'earlyCutoff' || e.kind === 'batch';
 
 export interface Night {
   seed: string;
@@ -103,6 +104,10 @@ export function makeNight(s: NightSeed): Night {
   }
   // …and one city that is flagged but holds to its forecast.
   cities[pickCity(0, cities.length - 1, drifted)]!.unsure = true;
+  // The cities with extra volume tonight get it largely as one batch (announced).
+  cities.forEach((c, i) => {
+    if (c.tag.startsWith('+')) events.push({ kind: 'batch', hour: ri(1, 5), city: i, minutes: 30, share: r(0.3, 0.45) });
+  });
   if (rng.chance(0.7)) events.push({ kind: 'robotsDown', hour: ri(3, 5), hours: 2, share: r(0.1, 0.2) });
   if (rng.chance(0.6)) events.push({ kind: 'lateTrailer', hour: ri(4, 6), city: ri(0, north.length - 1) });
   if (rng.chance(0.5)) events.push({ kind: 'earlyCutoff', hour: 6, city: ri(0, north.length - 1) });

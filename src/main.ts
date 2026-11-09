@@ -50,10 +50,10 @@ music.setVolume(settings.volume);
 music.setMuted(settings.muted);
 
 let hudQuality = () => {};
-const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi, onQuality: () => hudQuality() });
+const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi, onQuality: () => hudQuality(), onGame: () => game?.openBriefing() });
 document.body.append(hud.root);
 // The night-shift game: its own dock at the top of the screen (see ui/game.ts).
-const game = showUi ? new GameUi(music) : null;
+const game = showUi ? new GameUi(music, scene) : null;
 if (game) document.body.append(game.root);
 // Walk and fly controls sit under the menu (an open panel may cover them).
 hud.root.prepend(walk.root);

@@ -96,7 +96,7 @@ export class Hud {
     private scene: Sorter,
     private music: Music,
     readonly settings: Settings,
-    private opts: { showStart: boolean; showUi: boolean; onQuality: () => void },
+    private opts: { showStart: boolean; showUi: boolean; onQuality: () => void; onGame?: () => void },
   ) {
     this.root.append(this.caption, this.sheet, this.bar);
     if (!opts.showUi) this.root.classList.add('off');
@@ -145,7 +145,9 @@ export class Hud {
     for (const pn of [this.panel, this.stats?.el]) {
       if (!pn) continue;
       // Stay clear of the control bar below.
-      const h = `${Math.max(160, window.innerHeight - this.bar.offsetHeight - 48)}px`;
+      // (Under the night-shift dock at the top, when there is one.)
+      const top = document.body.classList.contains('gaming') ? 80 : 0;
+      const h = `${Math.max(160, window.innerHeight - this.bar.offsetHeight - 48 - top)}px`;
       if (pn.style.maxHeight !== h) pn.style.maxHeight = h;
     }
     if (this.panel) {
@@ -464,6 +466,14 @@ export class Hud {
       this.root.classList.add('off');
     };
     this.appGroup.append(hide);
+    // The night-shift minigame (its briefing opens at the top of the screen).
+    const game = el('button', '', 'Night shift');
+    game.title = 'Minigame: plan a night and fine-tune it for a score';
+    game.onclick = () => {
+      this.openTab(null);
+      this.opts.onGame?.();
+    };
+    this.appGroup.append(game);
   }
 
   /** The cleardown panel: doors 1–40 with their destinations; pick some and start. */
@@ -580,6 +590,9 @@ export class Hud {
       ['Infeed queue', s ? String(s.infeedQueue) : '–'],
       ['Trucks on time', `${t.onTimePct}%`, `${t.departures} left`],
       ['Load factor', `${t.loadFactorPct}%`, 'of trailer room'],
+      ['Buffer store', s ? `${Math.round((100 * s.storeUsed) / s.storeSlots)}%` : '–', s ? `${s.storeUsed} of ${s.storeSlots} places` : undefined],
+      ['Busiest destination', s?.topCity ? `${s.topCity}` : '–', s?.topCity ? `${s.topPct}% of the parcels in` : undefined],
+      ['Batch', this.scene.batches.active ? this.scene.batches.active.city.name : 'none', this.scene.batches.active ? `${Math.round(this.scene.batches.active.share * 100)}% of the parcels` : this.scene.batches.past.length ? `last: ${this.scene.batches.past[this.scene.batches.past.length - 1]!.city.name}` : undefined],
     ];
     const grid = el('div', 'tiles');
     for (const [label, value, sub] of tiles) {
@@ -599,6 +612,19 @@ export class Hud {
     chart.innerHTML = pts.length > 1
       ? `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Parcels per hour, in and out"><path d="${line((x) => x.inPerHour)}" fill="none" stroke="#a9adb5" stroke-width="2"/><path d="${line((x) => x.outPerHour)}" fill="none" stroke="#2fa58f" stroke-width="2.5"/></svg><div class="legend"><span class="in">in</span> <span class="out">out</span> per hour · max ${max} · every ${k.every} min of hub time</div>`
       : '<div class="legend">The chart fills in after a few minutes of hub time.</div>';
+    // The buffer store over the same hours (amber), with batches shaded and named.
+    const store = el('div', 'chart store');
+    if (pts.length > 1) {
+      const SH = 56;
+      const x = (i: number) => ((i / Math.max(1, pts.length - 1)) * W).toFixed(1);
+      const area = `M0,${SH} ${pts.map((p, i) => `L${x(i)},${(SH - (p.storeUsed / Math.max(1, p.storeSlots)) * (SH - 4)).toFixed(1)}`).join(' ')} L${W},${SH} Z`;
+      const bands = pts
+        .map((p, i) => (p.batch ? `<rect x="${x(i)}" y="0" width="${(W / Math.max(1, pts.length - 1)).toFixed(1)}" height="${SH}" fill="rgba(134,211,195,0.12)"/>` : ''))
+        .join('');
+      const names = [...new Set(pts.filter((p) => p.batch).map((p) => p.batch.replace(/ \d+%$/, '')))].slice(-4).join(', ');
+      // (Built from numbers and city names of this app's own list.)
+      store.innerHTML = `<svg viewBox="0 0 ${W} ${SH}" preserveAspectRatio="none" role="img" aria-label="Buffer store fill"><g>${bands}</g><path d="${area}" fill="rgba(242,194,0,0.35)" stroke="#f2c200" stroke-width="1.5"/></svg><div class="legend"><span class="store">buffer store</span> 0–100% · shaded: a batch${names ? ` (${names})` : ''}</div>`;
+    }
     const deps = el('div', 'deps');
     deps.append(el('div', 'tl', 'Last departures'));
     for (const d of k.departures.slice(-8).reverse()) {
@@ -606,7 +632,7 @@ export class Hud {
       r.append(el('span', '', hhmm(d.at)), el('span', '', `${d.door} ${d.city}`), el('span', '', `${d.load}/${d.room}`), el('span', d.onTime ? 'ok' : 'late', d.onTime ? (d.full ? 'full' : 'on time') : 'late'));
       deps.append(r);
     }
-    this.stats.body.replaceChildren(grid, chart, deps);
+    this.stats.body.replaceChildren(grid, chart, store, deps);
   }
 
   private panelCount(): void {

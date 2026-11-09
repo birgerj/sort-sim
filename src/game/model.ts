@@ -29,12 +29,19 @@ const FULL = 0.9;
 
 /** Tonight's real inbound per city in hour h (what the hall should see). */
 export function hourlyInbound(night: Night, h: number): number[] {
-  return night.cities.map((c) => {
+  const batchOf = new Map<number, number>();
+  for (const e of night.events) if (e.kind === 'batch') batchOf.set(e.city, e.hour);
+  return night.cities.map((c, i) => {
     let v = c.forecast * PROFILE[h]!;
+    const bt = batchOf.get(i);
+    if (bt !== undefined) v = h === bt ? c.forecast * BATCH_SHARE : v * (1 - BATCH_SHARE);
     if (c.drift && h >= c.driftFrom) v *= 1 + c.drift / PROFILE.slice(c.driftFrom).reduce((a, b) => a + b, 0);
     return v;
   });
 }
+
+/** Share of a batch city's night that comes in its batch hour. */
+const BATCH_SHARE = 0.3;
 
 export const POINTS = { onTime: 10, late: -30, fullTrailer: 150, hold: -100 };
 
@@ -92,10 +99,14 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
   const n = C.length;
   const doors = plan.doors.map((d) => Array<number>(HOURS).fill(d));
   // Inbound per city per hour.
-  const inb = C.map((c) =>
+  const batchOf = new Map<number, number>();
+  for (const e of night.events) if (e.kind === 'batch') batchOf.set(e.city, e.hour);
+  const inb = C.map((c, i) =>
     PROFILE.map((p, h) => {
       let v = c.forecast * p;
       if (!actual && what && c.unsure && h >= 2) v *= 1 + what.unsure; // a planner's what-if
+      const bt = batchOf.get(i);
+      if (bt !== undefined) v = h === bt ? c.forecast * BATCH_SHARE : v * (1 - BATCH_SHARE);
       if (sees(c.driftFrom) && c.drift && h >= c.driftFrom) {
         const rest = PROFILE.slice(c.driftFrom).reduce((a, b) => a + b, 0);
         v *= 1 + c.drift / rest; // the whole night's drift lands after it shows

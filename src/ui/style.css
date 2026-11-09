@@ -1135,7 +1135,7 @@ input[type='range'] {
   transform: translate(-50%, 0);
 }
 
-.has-game .hud .caption {
+.gaming .hud .caption {
   top: calc(96px + env(safe-area-inset-top));
 }
 
@@ -1411,4 +1411,27 @@ input[type='range'] {
   .sheet .g-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.stats .legend .store {
+  color: #f2c200;
+}
+
+.stats .chart.store svg {
+  height: 56px;
+}
+
+/* Cleardown and figures panels sit under the night-shift dock. */
+.gaming .hud .panel {
+  top: calc(96px + env(safe-area-inset-top));
+}
+
+/* Free run: no game dock, the briefing alone at the top. */
+.game:not(.on) .gdock {
+  display: none;
+}
+
+.game:not(.on) .sheet.gsheet {
+  top: calc(16px + env(safe-area-inset-top));
+  max-height: calc(100% - 64px - 64px - 16px);
 }

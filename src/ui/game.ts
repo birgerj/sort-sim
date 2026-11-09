@@ -10,6 +10,7 @@
  * - 06:00: the debrief.
  */
 import type { Music } from '../audio/music';
+import type { Sorter } from '../scene/sorter';
 import { COUNTRIES, COUNTRY } from '../sim/countries';
 import { announced, makeNight, type Night } from '../game/night';
 import { hourlyInbound, play, validPlan, MAX_DOORS, NORTH_DOORS, ROBOT_DOORS, SWAP_FROM, type Move, type Plan } from '../game/model';
@@ -28,7 +29,6 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en').replace(/,/g, ' ')
 const hhmm = (h: number) => `${String((22 + Math.floor(h)) % 24).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
 const grade = (s: number) => (s >= 950 ? 'S' : s >= 800 ? 'A' : s >= 600 ? 'B' : s >= 300 ? 'C' : 'D');
 const ICON = {
-  shift: '<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
   freeze: '<rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/>',
   moves: '<path d="M4 7h11M4 17h7"/><path d="M15 4l3 3-3 3M11 14l3 3-3 3"/>',
   status: '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>',
@@ -58,7 +58,10 @@ export class GameUi {
   private par: Par | null = null;
   private parTimer = 0;
 
-  constructor(private music: Music) {
+  constructor(
+    private music: Music,
+    private scene: Sorter,
+  ) {
     this.session = Session.fromUrl();
     // A shared link (?seed=NL-7KQ2M0) opens the briefing on that night.
     const shared = parseSeed(new URLSearchParams(location.search).get('seed') ?? '');
@@ -76,9 +79,11 @@ export class GameUi {
     this.sheet.setAttribute('aria-label', 'Night shift panel');
     this.root.append(this.sheet, this.dock);
     this.buildDock();
-    // The caption moves down, under this dock.
-    document.body.classList.add('has-game');
-    if (this.session) document.body.classList.add('gaming');
+    // During a night: the dock at the top, and the caption and panels move down under it.
+    if (this.session) {
+      document.body.classList.add('gaming');
+      this.root.classList.add('on');
+    }
     else if (shared) this.show('briefing');
   }
 
@@ -108,6 +113,9 @@ export class GameUi {
       this.lastPanel = now;
       this.draw();
     }
+    // Tonight's batches run in the hall too (they fill the buffer store).
+    const b = s.night.events.find((e) => e.kind === 'batch' && s.clock >= e.hour && s.clock < e.hour + e.minutes / 60);
+    this.scene.batches.set(b && b.kind === 'batch' ? { city: s.night.cities[b.city]!.name, share: b.share } : null, this.scene.hubTime());
     if (s.hour !== this.lastHour) {
       // The hall's parcels follow tonight's volumes, hour by hour.
       setGameWeights(hourlyInbound(s.night, s.hour));
@@ -136,12 +144,8 @@ export class GameUi {
     this.tabs.clear();
     this.clockTab = null;
     const s = this.session;
-    if (!s) {
-      this.dock.classList.add('solo');
-      this.tab('briefing', 'Night shift', ICON.shift, 'Play a night: plan the doors, then fine-tune the shift', () => this.toggle('briefing'));
-      return;
-    }
-    this.dock.classList.remove('solo');
+    // Free run: no dock (the game starts from More › App › Night shift).
+    if (!s) return;
     // Clock and score (opens the status panel).
     const c = el('button', 'tab clock');
     c.type = 'button';
@@ -163,6 +167,11 @@ export class GameUi {
     this.tab('end', 'End', ICON.end, 'Leave the night and go back to the free hall', () => {
       if (s.over || confirm('Leave this night? Your moves are not kept.')) location.href = Session.exitUrl();
     });
+  }
+
+  /** Open the briefing (from the menu: More › App › Night shift). */
+  openBriefing(): void {
+    this.show('briefing');
   }
 
   private setSpeed(v: Speed): void {
@@ -209,15 +218,23 @@ export class GameUi {
     this.night = makeNight(seed);
     this.plan = standingPlan(this.night);
     this.par = null;
-    // Par (the 1000 anchor) takes a moment: work it out after the panel is drawn.
     clearTimeout(this.parTimer);
+  }
+
+  /** Par (the 1000 anchor) takes a moment: worked out once the briefing is on screen. */
+  private needPar(): void {
+    if (this.par) return;
+    clearTimeout(this.parTimer);
+    const night = this.night;
     this.parTimer = window.setTimeout(() => {
-      this.par = par(this.night);
+      if (night !== this.night) return;
+      this.par = par(night);
       if (this.open === 'briefing') this.draw();
     }, 50);
   }
 
   private drawBriefing(): void {
+    this.needPar();
     const b = this.body;
     b.replaceChildren();
     const n = this.night;
@@ -279,6 +296,7 @@ export class GameUi {
       if (e.kind === 'lateInbound') return `${hhmm(e.hour)} late inbound ≈ ${fmt(e.forecast)}`;
       if (e.kind === 'robotsDown') return `${hhmm(e.hour)}–${hhmm(e.hour + e.hours)} robot maintenance (−${Math.round(e.share * 100)}%)`;
       if (e.kind === 'earlyCutoff') return `05:30 ${n.cities[e.city]!.name} carrier leaves early`;
+      if (e.kind === 'batch') return `${hhmm(e.hour)} ${n.cities[e.city]!.name} batch (${e.minutes} min)`;
       return '';
     });
     b.append(el('p', 'g-note', `Announced: ${ann.join(' · ')}. ± = uncertain tonight, either way.`));
@@ -391,7 +409,7 @@ export class GameUi {
     for (const e of s.night.events) {
       if (!announced(e) && e.hour > h) continue;
       const row = el('div', 'g-sig');
-      const t = el('time', '', hhmm(e.hour));
+      const t = el('time', '', e.kind === 'earlyCutoff' ? '05:30' : hhmm(e.hour));
       const c = (i: number) => s.night.cities[i]!.name;
       const txt =
         e.kind === 'lateInbound'
@@ -402,6 +420,8 @@ export class GameUi {
             ? `Robot maintenance for ${e.hours} h: fleet −${Math.round(e.share * 100)}%`
             : e.kind === 'earlyCutoff'
               ? `${c(e.city)}'s last trailer leaves at 05:30`
+              : e.kind === 'batch'
+                ? `${c(e.city)} batch: ${Math.round(e.share * 100)}% of the hall for ${e.minutes} min`
               : e.kind === 'drift'
                 ? `${c(e.city)} runs ${e.delta > 0 ? '+' : '−'}${Math.round(Math.abs(e.delta) * 100)}% against the forecast`
                 : `${c(e.city)}: trailer late, doors idle for an hour`;
@@ -563,6 +583,7 @@ export class GameUi {
     replan.onclick = () => {
       this.session = null;
       document.body.classList.remove('gaming');
+      this.root.classList.remove('on');
       this.loadSeed(s.seed);
       this.buildDock();
       this.show('briefing');

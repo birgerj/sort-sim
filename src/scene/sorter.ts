@@ -49,6 +49,7 @@ import { BPM } from '../audio/composer';
 import { addressFor, type Address } from '../sim/addresses';
 import { Kpi } from '../sim/kpi';
 import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
+import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
 import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
@@ -136,6 +137,8 @@ const LANE_QUEUE = 7;
 const ROBOT_SHARE = 0.12;
 /** Rounds on the sorter before a parcel whose chute stays full is put aside (overflow). */
 const MAX_LAPS = 3;
+/** A buffered parcel stays at least this long in the store (8 bars). */
+const MIN_STORE_BEATS = 32;
 /** Service marks on labels, and how often each comes up. */
 export type Tag = 'fragile' | 'cod' | 'express' | 'registered';
 const TAGS: Tag[] = ['fragile', 'cod', 'express', 'registered'];
@@ -969,6 +972,8 @@ export class Sorter implements Scene3D {
   private liftLamp!: THREE.MeshBasicMaterial;
   private shuttles: { runner: Runner; anim: Anim; mesh: THREE.Mesh }[] = [];
   private slots: Slot[] = [];
+  /** Batches: a big share of the post for one city for a while (fills the store). */
+  readonly batches = new Batches();
   private retrieving = 0;
   private lastRetrieve = 0;
   private retrieveShot = 0;
@@ -1462,10 +1467,13 @@ export class Sorter implements Scene3D {
     this.updateClub(dt, bar);
     this.updateForklifts(dt, prev);
     this.trucks.update(bt);
+    this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
       chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && this.room(k) <= 0 ? 1 : 0), 0),
       robotsBusyPct: (100 * this.floor.fleet.bots.filter((b) => b.state !== 'idle').length) / this.floor.fleet.bots.length,
       infeedQueue: this.backlog + this.waiting.reduce((a, b) => a + b, 0),
+      ...this.storeUse(),
+      batch: this.batches.active ? `${this.batches.active.city.name} ${Math.round(this.batches.active.share * 100)}%` : '',
     }));
     this.manual.update(bt, this.dayShown !== false);
     this.yard.update(bt);
@@ -1701,6 +1709,11 @@ export class Sorter implements Scene3D {
     }
   }
 
+  /** Buffer store: places taken (or reserved) and all places. */
+  storeUse(): { storeUsed: number; storeSlots: number } {
+    return { storeUsed: this.slots.filter((s) => s.parcel || s.reserved).length, storeSlots: this.slots.length };
+  }
+
   /** Calls a buffered parcel back out of the store once its chute has room again (oldest first). */
   private requestRetrieve(): void {
     if (this.retrieving >= 3 || this.lift.steps.length > 10) return;
@@ -1709,7 +1722,10 @@ export class Sorter implements Scene3D {
       const p = s.parcel;
       if (!p || s.reserved || p.mode !== 'fixed') continue;
       const d = p.buffered ?? -1;
-      if (d >= 0 && this.room(d) < 2) continue;
+      // Back out once its chute has some room again (not at the first free place), and
+      // not before it has stood a few bars: a store fills during a batch and empties after.
+      if (d >= 0 && this.room(d) < 4) continue;
+      if (this.bt - (p.bufferedAt ?? 0) < MIN_STORE_BEATS) continue;
       if (!best || (p.bufferedAt ?? 0) < (best.parcel!.bufferedAt ?? 0)) best = s;
     }
     if (best) this.retrieve(best);
@@ -1719,7 +1735,7 @@ export class Sorter implements Scene3D {
   private buffer(p: Parcel): boolean {
     if (p.d >= 1.1 || p.tray2 !== undefined) return false;
     const inFlight = this.parcels.reduce((n, x) => n + (x.slot && x.mode !== 'fixed' && x.pathKind !== 'back' ? 1 : 0), 0);
-    if (inFlight >= 6 || this.lift.steps.length > 10) return false;
+    if (inFlight >= 12 || this.lift.steps.length > 14) return false;
     const free = this.slots.filter((s) => !s.parcel && !s.reserved);
     if (!free.length) return false;
     // Nearest the lift first (short shuttle trips), low levels a little before high ones.
@@ -1746,7 +1762,7 @@ export class Sorter implements Scene3D {
     // and fewer still while their pickup tables are filling up.
     const queued = this.stationQueue.reduce((a, q) => a + q.length, 0);
     const load = Math.min(1, queued / Math.max(1, this.stationQueue.length * 3));
-    const r = randomPostcode(Math.random, ROBOT_SHARE * (1 - 0.8 * load));
+    const r = randomPostcode(Math.random, ROBOT_SHARE * (1 - 0.8 * load), this.batches.pick());
     p.pc = r.pc;
     p.manual = false;
     if (r.north) {
@@ -2161,7 +2177,7 @@ export class Sorter implements Scene3D {
     switch (p.pathKind) {
       case 'lane':
         this.stats.inducted++;
-        this.kpi.inducted();
+        this.kpi.inducted(CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '');
         this.induct(p, INDUCT[p.lane]!, p.t1);
         break;
       case 'back':
