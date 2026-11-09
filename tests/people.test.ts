@@ -85,4 +85,14 @@ describe('people', () => {
     };
     expect(depth(a)).toBeGreaterThan(depth(b));
   });
+
+  it('stands on its boots: the soles touch the floor', () => {
+    const h = buildHuman(kit, { shirt: 0x2f3b6b, trousers: 0x22283f, build: { height: 1, width: 1, belly: 0 } });
+    const body = h.root.children.find((o) => (o as THREE.SkinnedMesh).isSkinnedMesh) as THREE.SkinnedMesh;
+    body.geometry.computeBoundingBox();
+    expect(body.geometry.boundingBox!.min.y).toBeGreaterThan(-0.01);
+    expect(body.geometry.boundingBox!.min.y).toBeLessThan(0.01);
+    // The boots reach forward of the shins (toes).
+    expect(body.geometry.boundingBox!.max.z).toBeGreaterThan(0.17);
+  });
 });

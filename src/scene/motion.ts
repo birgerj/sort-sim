@@ -10,7 +10,7 @@
 //   4. `settle()` last: pelvis, breathing, weight shift, ponytail, feet flat.
 import * as THREE from 'three';
 
-import { ANKLE, FOREARM, HIP_Y, KNEE, UPPER_ARM, type Human } from './people';
+import { ANKLE, FOREARM, HIP_Y, KNEE, REST_SPREAD, UPPER_ARM, type Human } from './people';
 
 const L1 = KNEE;
 const L2 = ANKLE;
@@ -68,8 +68,8 @@ export function swingArms(h: Human, swing: number, k: number, base = 0.1): void 
 export function relaxArms(h: Human, k: number, spreadL = 0, spreadR = 0): void {
   h.armL.rotation.y += (0 - h.armL.rotation.y) * k;
   h.armR.rotation.y += (0 - h.armR.rotation.y) * k;
-  h.armL.rotation.z += (-0.07 - spreadL - h.armL.rotation.z) * k;
-  h.armR.rotation.z += (0.07 + spreadR - h.armR.rotation.z) * k;
+  h.armL.rotation.z += (-REST_SPREAD - spreadL - h.armL.rotation.z) * k;
+  h.armR.rotation.z += (REST_SPREAD + spreadR - h.armR.rotation.z) * k;
   h.handL.rotation.y += (0 - h.handL.rotation.y) * k;
   h.handR.rotation.y += (0 - h.handR.rotation.y) * k;
 }
