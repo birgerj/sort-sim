@@ -39,6 +39,7 @@ import { Xmas } from './xmas';
 import { XMAS } from '../sim/season';
 import { Party } from './party';
 import { Crowd } from './crowd';
+import { defaultNightFx, type NightFx } from './nightFx';
 import { Batcher } from './batch';
 import { Trucks } from './trucks';
 import { Labels } from './labels';
@@ -997,6 +998,9 @@ export class Sorter implements Scene3D {
   private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
   readonly nightOnly: THREE.Object3D[] = [];
+  /** What the night party shows (see NightFx); night-only objects that one switch hides. */
+  private fx: NightFx = defaultNightFx();
+  private fxObjs: [THREE.Object3D, Exclude<keyof NightFx, 'glow'>][] = [];
   /** Which look the objects being built belong to (undefined: both). */
   only: 'day' | 'night' | undefined;
   private nightEnv: THREE.Texture | null = null;
@@ -1417,6 +1421,9 @@ export class Sorter implements Scene3D {
       cols: this.cols,
       pad: this.time < this.padUntil ? this.padCol : null,
       bar,
+      show: this.fx.projectors,
+      robotGlow: this.fx.robotGlow,
+      dance: this.fx.dance,
     });
     this.updateParcels(dt);
     this.updateTrays(dt);
@@ -1445,7 +1452,7 @@ export class Sorter implements Scene3D {
       fullBoxes: this.floor.bins.filter((b) => !b.open).length,
       speed: this.speed,
     });
-    this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown });
+    this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown, dance: this.fx.dance });
     this.updateCamera(dt, bar, i.travelSpeed);
     if (this.quality === 'high' || this.quality === 'ultra') {
       // The sun stands high in the south-east; its shadow box is centred where the camera looks.
@@ -1455,7 +1462,7 @@ export class Sorter implements Scene3D {
     // (No depth of field when following a parcel: the blurred background did not look right.)
     this.bokeh.enabled = false;
     this.bloom.strength = (0.75 + this.kick * 0.35 + this.snare * 0.15) * (1 - this.day);
-    this.bloom.enabled = this.day < 0.98;
+    this.bloom.enabled = this.day < 0.98 && this.fx.bloom;
     this.batcher.update();
     this.composer.render(dt);
   }
@@ -2489,7 +2496,15 @@ export class Sorter implements Scene3D {
         this.hull.setColorAt(0, this.c.setHex(DAY.blue));
         hull = 1;
       }
-      const g = (p.scanned ? (p.lead ? 0.38 : 0.16) * kick + (p === this.follow ? 0.25 : 0) : p.lead ? 0.25 : 0) * (1 - this.day * 0.85);
+      // At night every parcel glows in its destination colour (white until it is scanned),
+      // pulsing on the kick; how brightly is the night setting. Lead parcels and the followed
+      // one shine a little more.
+      const night = 1 - this.day;
+      const base = this.fx.glow * (0.18 + 0.32 * this.kick);
+      const extra = (p.scanned ? (p.lead ? 0.38 : 0.16) * kick + (p === this.follow ? 0.25 : 0) : p.lead ? 0.25 : 0) * Math.min(1, this.fx.glow * 2);
+      // (By day only the old faint hint on lead and scanned parcels, as before.)
+      const dayHint = (p.scanned ? (p.lead ? 0.38 : 0.16) * kick + (p === this.follow ? 0.25 : 0) : p.lead ? 0.25 : 0) * 0.15;
+      const g = (base + extra) * night + dayHint * this.day;
       this.c.copy(p.glow).multiplyScalar(g).lerp(this.white, p.flash * 0.8);
       const glow = set.glow.array as Float32Array;
       glow[k * 3] = this.c.r + p.flash * 0.6;
@@ -2634,7 +2649,8 @@ export class Sorter implements Scene3D {
       h.u.uO.value = 0.16 + this.kick * 0.22 + pad * 0.06;
       if (h.light) {
         h.light.color.copy(this.c);
-        h.light.intensity = 260 * (0.6 + this.kick * 0.8);
+        // (Dimmed rather than hidden when off: fewer lights would recompile every material.)
+        h.light.intensity = this.fx.lasers && !this.dayShown ? 260 * (0.6 + this.kick * 0.8) : 0;
         h.piv.updateMatrixWorld();
         this.p.set(0, -16, 0).applyMatrix4(h.piv.matrixWorld);
         h.light.target.position.copy(this.p);
@@ -2679,7 +2695,7 @@ export class Sorter implements Scene3D {
     this.hazeMat.color.setRGB(0.16, 0.13, 0.26).lerp(this.c.copy(this.padCol).multiplyScalar(0.3), pad * 0.6);
 
 
-    this.strobe.color.setRGB(1, 1, 1).multiplyScalar(this.snare * this.snare * 4 + (1 - ph) ** 8 * 0.3);
+    this.strobe.color.setRGB(1, 1, 1).multiplyScalar(this.fx.strobe ? this.snare * this.snare * 4 + (1 - ph) ** 8 * 0.3 : 0);
     this.hemi.intensity = 0.45 + this.snare * 0.25;
   }
 
@@ -3004,6 +3020,38 @@ export class Sorter implements Scene3D {
   }
 
   /** Blends between the club (0) and the day look (1). */
+  /** Night fog: thinner without the haze. */
+  private nightFog(): number {
+    return this.fx.haze ? 0.017 : 0.008;
+  }
+
+  /** What the night shows now. */
+  nightFx(): NightFx {
+    return { ...this.fx };
+  }
+
+  /** True while the night look is on screen (the night controls only make sense then). */
+  isNight(): boolean {
+    return this.dayShown === false;
+  }
+
+  setNightFx(fx: NightFx): void {
+    this.fx = { ...fx };
+    this.applyNightFx();
+  }
+
+  /** Show or hide the night's switchable objects (by day they stay hidden anyway). */
+  private applyNightFx(): void {
+    const night = this.dayShown === false;
+    const fx = this.fx;
+    for (const [o, key] of this.fxObjs) o.visible = night && fx[key];
+    // (Called from applyTheme, which also runs before the party is built.)
+    if (this.crowd) this.crowd.group.visible = night && fx.crowd;
+    if (this.party) this.party.setShow({ dj: fx.dj, lasers: fx.lasers, ball: fx.ball, confetti: fx.confetti });
+    const fog = this.scene.fog as THREE.FogExp2;
+    fog.density = this.nightFog() + (0.009 - this.nightFog()) * this.day;
+  }
+
   private applyTheme(day: number): void {
     if (Math.abs(day - this.day) < 0.002 && this.dayShown !== null) return;
     this.day = day;
@@ -3020,7 +3068,7 @@ export class Sorter implements Scene3D {
     bg.setHex(0x0b0910).lerp(this.c.setHex(DAY.bg), day);
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(bg);
-    fog.density = 0.017 + (0.009 - 0.017) * day;
+    fog.density = this.nightFog() + (0.009 - this.nightFog()) * day;
     this.renderer.toneMappingExposure = 1.15 - 0.2 * day;
     this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xffffff), day);
     this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0xc9cfd6), day);
@@ -3033,6 +3081,7 @@ export class Sorter implements Scene3D {
     this.dayShown = show;
     for (const o of this.dayOnly) o.visible = show;
     for (const o of this.nightOnly) o.visible = !show;
+    this.applyNightFx();
     this.scene.environment = show ? null : this.nightEnv;
     // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
     const hq = this.quality === 'high' || this.quality === 'ultra';
@@ -3919,6 +3968,7 @@ export class Sorter implements Scene3D {
     );
     this.ball.position.set(LCX, 9.2, 0);
     this.put(this.ball);
+    this.fxObjs.push([this.ball, 'ball']);
     this.box('ballrod', this.std(0x6b7280, 0.5, 0.7), LCX, 10.2, 0, 0.04, 1.6, 0.04);
     const N = 480;
     this.sparkPos = new Float32Array(N * 3);
@@ -3929,6 +3979,7 @@ export class Sorter implements Scene3D {
     const sparks = new THREE.Points(this.sparkGeo, this.sparkMat);
     sparks.frustumCulled = false;
     this.put(sparks);
+    this.fxObjs.push([sparks, 'ball']);
     // Haze.
     const H = 80;
     this.hazePos = new Float32Array(H * 3);
@@ -3939,6 +3990,7 @@ export class Sorter implements Scene3D {
     const haze = new THREE.Points(this.hazeGeo, this.hazeMat);
     haze.frustumCulled = false;
     this.put(haze);
+    this.fxObjs.push([haze, 'haze']);
     // Moving heads on two trusses; every other one also casts real light.
     const truss = this.std(0x2a2c31, 0.5, 0.7);
     for (const z of [-14, 14]) this.box('truss', truss, LCX, HH - 0.55, z, STRAIGHT + 20, 0.4, 0.4);
@@ -3951,6 +4003,7 @@ export class Sorter implements Scene3D {
         const piv = new THREE.Group();
         piv.position.copy(pos);
         this.put(piv);
+        this.fxObjs.push([piv, 'lasers']);
         const u = { uCol: { value: new THREE.Color(1, 1, 1) }, uO: { value: 0.2 } };
         const m = new THREE.Mesh(
           cone,

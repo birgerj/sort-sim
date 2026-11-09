@@ -8,6 +8,7 @@ import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
 import { COUNTRIES, COUNTRY, type CountryId } from '../sim/countries';
 import { XMAS } from '../sim/season';
+import { NIGHT_PRESETS, NIGHT_SWITCHES, presetOf, type NightFx, type NightPreset } from '../scene/nightFx';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
 
@@ -24,6 +25,8 @@ export interface Settings {
   country?: CountryId;
   muted: boolean;
   volume: number;
+  /** What the night party shows (see NightFx). */
+  night?: NightFx;
 }
 
 const KEY = 'sortsim.settings';
@@ -74,6 +77,9 @@ export class Hud {
   /** Group for the app buttons (install, full screen). */
   appGroup!: HTMLElement;
   private hidden = false;
+  /** The night controls: only in the bar while the night look is on screen. */
+  private nightGroup!: HTMLElement;
+  private nightPanel: { el: HTMLElement; presets: Map<NightPreset, HTMLButtonElement>; switches: Map<string, HTMLButtonElement>; glow: HTMLInputElement } | null = null;
 
   constructor(
     private scene: Sorter,
@@ -121,6 +127,9 @@ export class Hud {
       if (b.textContent !== ms) b.textContent = ms;
     }
     for (const [v, b] of this.qualityBtns) b.classList.toggle('on', v === this.settings.quality);
+    const night = this.scene.isNight();
+    if (this.nightGroup.hidden === night) this.nightGroup.hidden = !night;
+    if (!night && this.nightPanel) this.toggleNight();
     const most = this.scene.infeedCapacity();
     const q = this.scene.backlog;
     const txt = `${this.settings.rate}/min · ${Math.round(this.music.bpm)} BPM ${MOODS[this.music.mood]}${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
@@ -231,6 +240,13 @@ export class Hud {
     // keys (M) and the start screen can update it.
     this.soundBtn = el('button', '', 'Sound');
     this.soundBtn.onclick = () => this.toggleSound();
+    // Night: what the party shows. Only there at night (by day none of it is on screen).
+    this.nightGroup = this.group('Night');
+    const nb = el('button', '', 'Night effects…');
+    nb.title = 'Glowing parcels, and switch the party effects on or off';
+    nb.onclick = () => this.toggleNight();
+    this.nightGroup.append(nb);
+    this.nightGroup.hidden = true;
     // The app: settings, install, full screen (from the PWA helper).
     this.appGroup = this.group('App');
     const set = el('button', '', 'Settings…');
@@ -248,6 +264,7 @@ export class Hud {
     }
     if (this.stats) this.toggleStats();
     if (this.settingsPanel) this.toggleSettings();
+    if (this.nightPanel) this.toggleNight();
     const p = el('div', 'panel');
     const head = el('div', 'head');
     head.append(el('h2', '', 'Cleardown'), el('p', '', 'Pick dock doors: their trucks leave with what they have, and new empty ones come. 1–20 roll cages, 21–40 robot boxes.'));
@@ -302,6 +319,7 @@ export class Hud {
     }
     if (this.panel) this.togglePanel();
     if (this.stats) this.toggleStats();
+    if (this.nightPanel) this.toggleNight();
     const p = el('div', 'panel settings');
     const head = el('div', 'head');
     head.append(el('h2', '', 'Settings'));
@@ -392,6 +410,81 @@ export class Hud {
 
   private settingsPanel: HTMLElement | null = null;
 
+  /** The night panel: presets, how brightly parcels glow, and a switch per party effect. */
+  private toggleNight(): void {
+    if (this.nightPanel) {
+      this.nightPanel.el.remove();
+      this.nightPanel = null;
+      return;
+    }
+    if (this.panel) this.togglePanel();
+    if (this.stats) this.toggleStats();
+    if (this.settingsPanel) this.toggleSettings();
+    const p = el('div', 'panel settings night');
+    const head = el('div', 'head');
+    head.append(el('h2', '', 'Night effects'));
+    const set = (fx: NightFx) => {
+      this.settings.night = { ...fx };
+      this.scene.setNightFx(fx);
+      saveSettings(this.settings);
+      this.refreshNight();
+    };
+    const pr = el('div', 'set-row');
+    pr.append(el('span', 'set-label', 'Preset'));
+    const pb = el('div', 'set-opts');
+    const presets = new Map<NightPreset, HTMLButtonElement>();
+    for (const [id, label] of [['party', 'Party'], ['calm', 'Calm'], ['dark', 'Dark']] as const) {
+      const b = el('button', '', label);
+      b.onclick = () => set({ ...NIGHT_PRESETS[id] });
+      pb.append(b);
+      presets.set(id, b);
+    }
+    pr.append(pb, el('span', 'set-help', 'Party: everything. Calm: glowing parcels and machines, no party. Dark: only the working light.'));
+    const gr = el('div', 'set-row');
+    gr.append(el('span', 'set-label', 'Parcels glow'));
+    const glow = el('input');
+    glow.type = 'range';
+    glow.min = '0';
+    glow.max = '1';
+    glow.step = '0.05';
+    glow.setAttribute('aria-label', 'How brightly the parcels glow');
+    glow.oninput = () => set({ ...this.scene.nightFx(), glow: Number(glow.value) });
+    gr.append(glow, el('span', 'set-help', 'Every parcel glows in the colour of its destination (white until scanned), pulsing on the beat.'));
+    const sr = el('div', 'set-row');
+    sr.append(el('span', 'set-label', 'Show'));
+    const sb = el('div', 'set-opts');
+    const switches = new Map<string, HTMLButtonElement>();
+    for (const sw of NIGHT_SWITCHES) {
+      const b = el('button', '', sw.label);
+      b.onclick = () => {
+        const fx = this.scene.nightFx();
+        fx[sw.id] = !fx[sw.id];
+        set(fx);
+      };
+      sb.append(b);
+      switches.set(sw.id, b);
+    }
+    sr.append(sb);
+    const row = el('div', 'row');
+    const close = el('button', '', 'Close');
+    close.onclick = () => this.toggleNight();
+    row.append(close);
+    p.append(head, pr, gr, sr, row);
+    this.root.append(p);
+    this.nightPanel = { el: p, presets, switches, glow };
+    this.refreshNight();
+  }
+
+  private refreshNight(): void {
+    const n = this.nightPanel;
+    if (!n) return;
+    const fx = this.scene.nightFx();
+    const pre = presetOf(fx);
+    for (const [id, b] of n.presets) b.classList.toggle('on', id === pre);
+    for (const [id, b] of n.switches) b.classList.toggle('on', fx[id as keyof NightFx] === true);
+    if (document.activeElement !== n.glow) n.glow.value = String(fx.glow);
+  }
+
   /** The figures panel: KPI tiles, a throughput chart, recent departures, CSV download. */
   private toggleStats(): void {
     if (this.stats) {
@@ -401,6 +494,7 @@ export class Hud {
     }
     if (this.panel) this.togglePanel();
     if (this.settingsPanel) this.toggleSettings();
+    if (this.nightPanel) this.toggleNight();
     const p = el('div', 'panel stats');
     const head = el('div', 'head');
     head.append(el('h2', '', 'Hub figures'));
