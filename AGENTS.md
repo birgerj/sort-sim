@@ -178,6 +178,16 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   (`realCol`), and swaps the flat hall surfaces (`flatOnly`) for lit ones
   (`realOnly`). Without the ink pass it draws about half the calls of
   Minimal. Shadows and AO still come with quality high.
+- **Day details:** wheel marks where roll cages are pushed (`Docks.cagePaths`,
+  following the loader's jobs) and where robots drive (`RobotFloor.trafficPaths`:
+  a stand-in fleet runs 3,000 beats at load and counts every step; busier
+  steps get darker marks), both `wheelTracks` in `realDay.ts`. Relief
+  (normal maps generated from heights in `textures.ts`) is registered with
+  `kit.realNormal(material, map)` and shows only in Day. The Day hall is
+  built the first time Day is chosen.
+- **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`
+  walks the scene graph once per frame, just before `composer.render`.
+  Anything posed later in a frame would be drawn a frame late.
 
 ## Next step: nicer, more detailed graphics
 

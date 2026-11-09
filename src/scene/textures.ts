@@ -237,3 +237,76 @@ export function robotSide(n: number): THREE.CanvasTexture {
     g.fill();
   });
 }
+
+/**
+ * A tangent-space normal map from a height function h(x, y) (0…1, in pixels of a w × h
+ * tile that repeats). Only the realistic day turns these on (normalScale), so the drawn
+ * look stays flat.
+ */
+export function normalFromHeight(key: string, w: number, h: number, height: (x: number, y: number) => number, strength: number): THREE.CanvasTexture {
+  return canvasTexture(
+    key,
+    w,
+    h,
+    (g) => {
+      const hs = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) hs[y * w + x] = height(x, y);
+      const at = (x: number, y: number) => hs[((y + h) % h) * w + ((x + w) % w)]!;
+      const id = g.createImageData(w, h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+          // Canvas y runs down, texture v runs up.
+          const dy = (at(x, y - 1) - at(x, y + 1)) * strength;
+          const l = Math.hypot(dx, dy, 1);
+          const i = (y * w + x) * 4;
+          id.data[i] = ((-dx / l) * 0.5 + 0.5) * 255;
+          id.data[i + 1] = ((-dy / l) * 0.5 + 0.5) * 255;
+          id.data[i + 2] = ((1 / l) * 0.5 + 0.5) * 255;
+          id.data[i + 3] = 255;
+        }
+      }
+      g.putImageData(id, 0, 0);
+    },
+    false,
+  );
+}
+
+/** Raised lozenges of the checker plate (matches `checkerPlate`). */
+export function checkerPlateNormal(): THREE.CanvasTexture {
+  return normalFromHeight(
+    'checker-plate-n',
+    128,
+    128,
+    (x, y) => {
+      const row = Math.floor(y / 16);
+      const cx = Math.floor((x - ((row % 2) * 8)) / 16) * 16 + 8 + (row % 2) * 8;
+      const cy = row * 16 + 8;
+      const a = (row % 2 ? 1 : -1) * 0.7;
+      const px = x - cx;
+      const py = y - cy;
+      const u = px * Math.cos(a) + py * Math.sin(a);
+      const v = -px * Math.sin(a) + py * Math.cos(a);
+      // A rounded bar 10 × 3 px.
+      const d = Math.max(Math.abs(u) / 5, Math.abs(v) / 1.5);
+      return d < 1 ? 1 - d * d * d : 0;
+    },
+    2.2,
+  );
+}
+
+/** Ribs of the wall cladding (matches `dayWall`: a rib every 16 px, flat at the window band). */
+export function claddingNormal(): THREE.CanvasTexture {
+  return normalFromHeight(
+    'day-wall-n',
+    256,
+    256,
+    (x, y) => {
+      if (y >= 10 && y <= 48) return 0.5;
+      const p = (x % 16) / 16;
+      // Trapezoid rib: up, flat top, down, flat pan.
+      return p < 0.15 ? p / 0.15 : p < 0.45 ? 1 : p < 0.6 ? 1 - (p - 0.45) / 0.15 : 0;
+    },
+    1.6,
+  );
+}

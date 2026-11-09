@@ -14,6 +14,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { cardboardSide, palletWood } from './textures';
 
 import { Fleet, FLOOR, sorterFloor, type Bot, type FleetEvent } from '../sim/robotFleet';
+import { Rng } from '../sim/rng';
 import { rangeOf, rangeText, SOUTH_CITIES, split } from '../sim/postcodes';
 import { Labels } from './labels';
 
@@ -22,6 +23,8 @@ export interface FloorKit {
   put(obj: THREE.Object3D, only?: 'day' | 'night'): void;
   box(key: string, mat: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number, col?: number, ry?: number): void;
   std(color: number, rough?: number, metal?: number, day?: number): THREE.MeshStandardMaterial;
+  /** Relief that shows only in the realistic day look (a normal map, off in the drawn one). */
+  realNormal(m: THREE.MeshStandardMaterial, map: THREE.Texture, scale?: number): void;
   inkify(m: THREE.Mesh, angle?: number): void;
   /** Day outline for rounded shapes. */
   outline(m: THREE.Mesh, width?: number): void;
@@ -189,6 +192,8 @@ export interface BinView {
 
 export class RobotFloor {
   readonly fleet: Fleet;
+  /** Grid columns of the pickup stations. */
+  private cols: number[] = [];
   readonly bins: BinView[] = [];
   /** Boxes taken to a truck so far. */
   shippedBoxes = 0;
@@ -226,6 +231,7 @@ export class RobotFloor {
     private handlers: FloorHandlers,
   ) {
     const cols = stationXs.map((x) => Math.round((x - FLOOR.x0) / FLOOR.cs));
+    this.cols = cols;
     const layout = sorterFloor(cols);
     this.fleet = new Fleet(layout.grid, layout.parks, layout.stations, layout.bins, 40);
     this.fleet.isOpen = (b) => this.bins[b]?.open ?? true;
@@ -248,6 +254,40 @@ export class RobotFloor {
     this.buildProjectors(cages);
     this.buildTable();
     this.buildDetails();
+  }
+
+  /**
+   * Where the robots wear the floor: a stand-in fleet on the same grid runs a few
+   * thousand beats of jobs (no drawing), and every cell-to-cell move is counted.
+   * Returns each driven step with its wear (0…1, the busiest step 1), for the
+   * wheel marks of the realistic day. Seeded, so the floor is the same every load.
+   */
+  trafficPaths(beats = 3000): { pts: [number, number][]; wear: number }[] {
+    const layout = sorterFloor(this.cols);
+    const rng = new Rng(97);
+    const fleet = new Fleet(layout.grid, layout.parks, layout.stations, layout.bins, this.fleet.bots.length, () => rng.next());
+    const count = new Map<string, number>();
+    for (let b = 0; b < beats; b++) {
+      fleet.step(b, () => rng.chance(0.55), b % 4 === 1 || b % 4 === 3);
+      for (const bot of fleet.bots) {
+        if (bot.fi === bot.i && bot.fj === bot.j) continue;
+        // Count both directions of a step as one way (the marks don't show direction).
+        const a = bot.fi * 1000 + bot.fj;
+        const c = bot.i * 1000 + bot.j;
+        const key = a < c ? `${bot.fi},${bot.fj},${bot.i},${bot.j}` : `${bot.i},${bot.j},${bot.fi},${bot.fj}`;
+        count.set(key, (count.get(key) ?? 0) + 1);
+      }
+    }
+    let max = 1;
+    for (const n of count.values()) max = Math.max(max, n);
+    const out: { pts: [number, number][]; wear: number }[] = [];
+    for (const [key, n] of count) {
+      const [i0, j0, i1, j1] = key.split(',').map(Number) as [number, number, number, number];
+      // Robots off the grid's edge (the manual drop) have no floor cell to mark.
+      if (!layout.grid.inside(i0, j0) || !layout.grid.inside(i1, j1)) continue;
+      out.push({ pts: [[cellX(i0), cellZ(j0)], [cellX(i1), cellZ(j1)]], wear: Math.log1p(n) / Math.log1p(max) });
+    }
+    return out;
   }
 
   /** x of the pickup cell of each station, for the chutes to end at. */

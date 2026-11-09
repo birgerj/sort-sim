@@ -284,3 +284,123 @@ function mergeSimple(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   out.computeBoundingSphere();
   return out;
 }
+
+/** A way that wheels take often: floor points (x, z) and how worn it is (0…1). */
+export interface TrackPath {
+  pts: [number, number][];
+  wear?: number;
+}
+
+/** How a kind of vehicle marks the floor. */
+export interface TrackStyle {
+  /** Distance between the wheel lines (m). */
+  gauge: number;
+  /** Width of one wheel line (m). */
+  line: number;
+  /** Darkness of a wheel line and of the scuffed band between them, at full wear. */
+  lineA: number;
+  bandA: number;
+  /** Times each path is laid, and how far each pass strays sideways (m). */
+  passes: number;
+  scatter: number;
+}
+
+/** Roll cages: castors 0.9 m apart, pushed by hand, so the passes wander. */
+export const CAGE_TRACKS: TrackStyle = { gauge: 0.9, line: 0.08, lineA: 0.16, bandA: 0.035, passes: 3, scatter: 0.16 };
+/** Floor robots: two drive wheels close together, driven on a grid, so the passes hardly wander. */
+export const ROBOT_TRACKS: TrackStyle = { gauge: 0.42, line: 0.07, lineA: 0.5, bandA: 0.09, passes: 2, scatter: 0.05 };
+
+/**
+ * Wheel marks: rubber and dirt left on the concrete where wheels run often, two
+ * lines per path and a faint scuffed band between them. Every path is laid a few
+ * times with a small sideways scatter, so ways that many share get the darkest.
+ * One mesh, one draw call; it lies just above the floor.
+ */
+export function wheelTracks(paths: TrackPath[], style: TrackStyle, seed = 11): THREE.Mesh {
+  const r = rnd(seed);
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const alpha: number[] = [];
+  const strip = (pts: [number, number][], off: number, w: number, a: number) => {
+    // Corners turn as a swept arc in real life; a short cut across the corner is close enough.
+    let along = 0;
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [x0, z0] = pts[i]!;
+      const [x1, z1] = pts[i + 1]!;
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      if (len < 0.01) continue;
+      const nx = -(z1 - z0) / len;
+      const nz = (x1 - x0) / len;
+      const ax = x0 + nx * off;
+      const az = z0 + nz * off;
+      const bx = x1 + nx * off;
+      const bz = z1 + nz * off;
+      const h = w / 2;
+      const quad = [
+        [ax - nx * h, az - nz * h, along, 0],
+        [ax + nx * h, az + nz * h, along, 1],
+        [bx + nx * h, bz + nz * h, along + len, 1],
+        [ax - nx * h, az - nz * h, along, 0],
+        [bx + nx * h, bz + nz * h, along + len, 1],
+        [bx - nx * h, bz - nz * h, along + len, 0],
+      ];
+      for (const [x, z, u, v] of quad) {
+        pos.push(x!, 0.004, z!);
+        uv.push(u!, v!);
+        alpha.push(a);
+      }
+      along += len;
+    }
+  };
+  for (const p of paths) {
+    const wear = p.wear ?? 1;
+    if (wear < 0.02) continue;
+    for (let pass = 0; pass < style.passes; pass++) {
+      const s = (r() - 0.5) * style.scatter;
+      const h = style.gauge / 2;
+      for (const side of [-h, h]) strip(p.pts, s + side, style.line * (0.85 + r() * 0.4), style.lineA * wear * (0.8 + r() * 0.35));
+      strip(p.pts, s, style.gauge * 0.9, style.bandA * wear);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('a', new THREE.Float32BufferAttribute(alpha, 1));
+  g.computeBoundingSphere();
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uCol: { value: new THREE.Color(0x2a2724) } },
+    vertexShader: /* glsl */ `
+      attribute float a;
+      varying vec2 vUv;
+      varying float vA;
+      varying vec2 vW;
+      void main() {
+        vUv = uv;
+        vA = a;
+        vW = position.xz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uCol;
+      varying vec2 vUv;
+      varying float vA;
+      varying vec2 vW;
+      ${NOISE}
+      void main() {
+        // Soft edges across, broken up along the length (rubber doesn't lay down evenly).
+        // The break-up runs in world space, so pieces of one way join without a seam.
+        float across = 1.0 - abs(vUv.y * 2.0 - 1.0);
+        float n = rdFbm(vec2((vW.x + vW.y) * 1.3, vUv.y * 3.0));
+        float a = vA * smoothstep(0.0, 0.6, across) * (0.35 + 0.65 * smoothstep(0.2, 0.7, n));
+        gl_FragColor = vec4(uCol, a);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+  });
+  const m = new THREE.Mesh(g, mat);
+  m.userData.noInk = true;
+  m.renderOrder = -1;
+  return m;
+}

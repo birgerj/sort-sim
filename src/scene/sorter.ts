@@ -32,7 +32,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
-import { dayEnvironment, FLOOR_TILE_M, grime, lightShafts, realFloorMaps } from './realDay';
+import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, grime, lightShafts, realFloorMaps, ROBOT_TRACKS, wheelTracks } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -53,7 +53,7 @@ import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIE
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
-import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
+import { brushed, cardboardSide, checkerPlate, claddingNormal, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { FLOOR, type FleetEvent } from '../sim/robotFleet';
 
@@ -1047,6 +1047,8 @@ export class Sorter implements Scene3D {
   /** Hall surfaces of the flat day look, and their lit counterparts in the realistic one. */
   private flatOnly: THREE.Object3D[] = [];
   private realOnly: THREE.Object3D[] = [];
+  /** Materials with relief for the realistic day only: their normal scale at full day. */
+  private realNormals: { m: THREE.MeshStandardMaterial; s: number }[] = [];
   private hull!: THREE.InstancedMesh;
   private cageLine!: THREE.LineBasicMaterial;
 
@@ -1087,6 +1089,10 @@ export class Sorter implements Scene3D {
     this.renderer.toneMappingExposure = 1.15;
     this.scene.background = new THREE.Color(0x0b0910);
     this.scene.fog = new THREE.FogExp2(0x0b0910, 0.017);
+    // The scene graph (about 7,000 objects) is brought up to date once per frame, in
+    // Batcher.update() just before drawing; every render pass (scene, ink normals, AO,
+    // shadows, mirror) would otherwise walk the whole graph again.
+    this.scene.matrixWorldAutoUpdate = false;
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.gtao = new GTAOPass(this.scene, this.camera, 512, 512);
@@ -3140,7 +3146,10 @@ export class Sorter implements Scene3D {
   setRealistic(real: boolean): void {
     if (real === this.real) return;
     this.real = real;
-    if (real && !this.dayEnv) this.dayEnv = dayEnvironment(this.renderer);
+    if (real && !this.dayEnv) {
+      this.dayEnv = dayEnvironment(this.renderer);
+      this.buildRealHall();
+    }
     this.dayShown = null; // re-apply the look
     this.applyTheme(this.day);
   }
@@ -3150,6 +3159,20 @@ export class Sorter implements Scene3D {
   private realCol(c: THREE.Color): THREE.Color {
     const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
     return this.realC.copy(c).multiplyScalar(l > 0.55 ? 0.55 / l : 1);
+  }
+
+  realNormal(m: THREE.MeshStandardMaterial, map: THREE.Texture, scale = 1): void {
+    if (m.map) {
+      // Same tiling as the colour map, so the relief lines up with the print.
+      map = map.clone();
+      map.repeat.copy(m.map.repeat);
+      map.offset.copy(m.map.offset);
+      map.rotation = m.map.rotation;
+      map.needsUpdate = true;
+    }
+    m.normalMap = map;
+    m.normalScale.setScalar(0);
+    this.realNormals.push({ m, s: scale });
   }
 
   isRealistic(): boolean {
@@ -3196,6 +3219,7 @@ export class Sorter implements Scene3D {
       this.keyLight.intensity = 0.3 + 0.7 * day;
     }
     this.cageLine.color.setHex(0x8a8f96).lerp(this.c.setHex(DAY.tealD), day);
+    for (const n of this.realNormals) n.m.normalScale.setScalar(this.real ? n.s * day : 0);
     const show = day > 0.5;
     if (show === this.dayShown) return;
     this.dayShown = show;
@@ -4167,9 +4191,16 @@ export class Sorter implements Scene3D {
    * take light and shadow, and shafts of daylight under the roof lights.
    */
   private buildRealHall(): void {
+    // Built the first time the look is chosen (it simulates the robots' traffic and draws
+    // large canvases), after setupShadows: so it sets its own shadow flags.
     const add = (o: THREE.Object3D) => {
       this.put(o, 'day');
       this.realOnly.push(o);
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.material instanceof THREE.MeshStandardMaterial) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
     };
     const { map, rough } = realFloorMaps();
     const fm = map.clone();
@@ -4190,6 +4221,7 @@ export class Sorter implements Scene3D {
     cl.needsUpdate = true;
     const wallMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: cl, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
     grime(wallMat, 0.18, 6, 'xy', 1.2);
+    this.realNormal(wallMat, claddingNormal(), 0.8);
     for (const z of [NZ, HZ]) {
       const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), wallMat);
       w.position.set(HCX, HH / 2, z);
@@ -4200,6 +4232,7 @@ export class Sorter implements Scene3D {
     side.needsUpdate = true;
     const sideMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: side, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
     grime(sideMat, 0.18, 6, 'zy', 1.2);
+    this.realNormal(sideMat, claddingNormal(), 0.8);
     for (const x of [WX, EX]) {
       const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), sideMat);
       w.position.set(x, HH / 2, HZC);
@@ -4214,6 +4247,10 @@ export class Sorter implements Scene3D {
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
     add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
+    // Where the roll cages are pushed, the floor shows it.
+    add(wheelTracks(this.docks.cagePaths().map((pts) => ({ pts })), CAGE_TRACKS));
+    // The robots keep to one-way lanes on a grid: the busy lanes show as worn tracks.
+    add(wheelTracks(this.floor.trafficPaths(), ROBOT_TRACKS, 23));
   }
 
   private buildDay(): void {
@@ -4269,7 +4306,6 @@ export class Sorter implements Scene3D {
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil);
     this.flatOnly.push(ceil);
-    this.buildRealHall();
     // Rows of linear LED fixtures between the roof lights, and cable trays along the hall.
     const led = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const housing = this.std(0xb9c0c8, 0.5, 0.6, 0xb9c0c8);

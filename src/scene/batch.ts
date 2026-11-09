@@ -65,7 +65,11 @@ export class Batcher {
     return { batches: this.list.length, parts: this.list.reduce((a, b) => a + b.proxies.length, 0) };
   }
 
-  /** Copy the proxies' world matrices (call after the models are posed). */
+  /**
+   * Bring the scene graph's world matrices up to date (the one walk per frame: the scene's
+   * own automatic update is off) and copy the proxies' world matrices. Call after the models
+   * are posed, just before drawing.
+   */
   update(): void {
     this.root.updateMatrixWorld();
     for (const b of this.list) {

@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
 import { Labels } from './labels';
-import { checkerPlate, sectionalDoor } from './textures';
+import { checkerPlate, checkerPlateNormal, sectionalDoor } from './textures';
 
 export type Cargo = 'cage' | 'box';
 
@@ -96,6 +96,7 @@ export class Trucks {
     inside.map = sectionalDoor();
     const floorM = k.std(0x2a2c31, 0.8, 0.2, 0xb9c0c8);
     floorM.map = checkerPlate();
+    k.realNormal(floorM, checkerPlateNormal());
     const lamp = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.3, 1.25, 1.1) });
     const doorM = k.std(0x2c3038, 0.6, 0.4, 0xffffff);
     doorM.map = sectionalDoor();
