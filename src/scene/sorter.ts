@@ -3370,7 +3370,12 @@ export class Sorter implements Scene3D {
       // are the ones the first frame needs, not compiled once more on it.
       this.applyTheme(1 - smooth01(tod * 1.6 - 0.3));
       this.batcher.update();
+      // Compile for where the scene is really drawn: the composer's buffer (linear colour, no
+      // tone mapping there), not the screen, or every shader is compiled a second time later.
+      const was = this.renderer.getRenderTarget();
+      this.renderer.setRenderTarget(this.composer.readBuffer);
       await this.renderer.compileAsync(this.scene, this.camera);
+      this.renderer.setRenderTarget(was);
     } catch {
       /* the first frame compiles them instead */
     }

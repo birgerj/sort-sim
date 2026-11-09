@@ -280,8 +280,7 @@ export const WRIST = 0.265;
 /** Shoulder to elbow, and elbow to the middle of the palm (for reaching). */
 export const UPPER_ARM = 0.29;
 export const FOREARM = 0.3;
-/** How far the hanging arms stand out from the body (radians): just clear of the vest. */
-export const REST_SPREAD = 0.1;
+export { REST_SPREAD } from './bakedBodies';
 /** Hip height (the pelvis above the root). */
 export const HIP_Y = 0.92;
 /**
@@ -564,13 +563,25 @@ const smooth = (a: number, b: number, x: number) => {
 // The body under the clothes is shared by everyone of a build (width and belly, rounded to a
 // few steps) and detail level; built once each. The fine level is built a little later, in
 // spare moments (it takes longest); until then the close level shows the coarse body.
-const WIDTHS = [0.93, 1.02, 1.11];
-const BELLIES = [0, 0.45, 0.9];
+import { BELLIES, BODIES_FILE, bodyKey, decodeBodies, REST_SPREAD, WIDTHS } from './bakedBodies';
+
+/**
+ * Load the bodies made at build time (call before people are built; see bakedBodies.ts).
+ * Without them, each body is made in the browser when first needed.
+ */
+export async function loadBakedBodies(): Promise<void> {
+  try {
+    const res = await fetch(new URL(BODIES_FILE, document.baseURI));
+    if (!res.ok) return;
+    for (const [k, g] of decodeBodies(await res.arrayBuffer())) bodies.set(k, g);
+  } catch {
+    /* made in the browser instead */
+  }
+}
 const nearest = (list: number[], v: number) => list.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
 const bodies = new Map<string, THREE.BufferGeometry>();
 /** People's body meshes waiting for their build's fine level. */
 const waiting = new Map<string, THREE.SkinnedMesh[]>();
-const bodyKey = (w: number, b: number, level: BodyLevel) => `${w}|${b}|${level}`;
 function bodyGeo(w: number, b: number, level: BodyLevel): THREE.BufferGeometry {
   const key = bodyKey(w, b, level);
   let g = bodies.get(key);
@@ -584,15 +595,15 @@ function bodyGeo(w: number, b: number, level: BodyLevel): THREE.BufferGeometry {
 /** Work for spare moments after load (fine detail only seen up close), one job at a time. */
 const jobs: (() => void)[] = [];
 let jobsRunning = false;
-function later(job: () => void): void {
-  if (typeof window === 'undefined') return job();
-  jobs.push(job);
-  if (jobsRunning) return;
+/** Spare-moment work waits until the hall is on screen (`startLaterWork`): not during load. */
+let laterOpen = false;
+function runJobs(): void {
+  if (jobsRunning || !laterOpen || !jobs.length) return;
   jobsRunning = true;
   const idle = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
   const next = () => {
     const t0 = performance.now();
-    // A few jobs per spare moment, up to about 8 ms.
+    // A few jobs per spare moment, up to about 8 ms (a fine body is one longer job).
     while (jobs.length && performance.now() - t0 < 8) jobs.shift()!();
     if (!jobs.length) {
       jobsRunning = false;
@@ -601,10 +612,19 @@ function later(job: () => void): void {
     if (idle) idle(next, { timeout: 500 });
     else setTimeout(next, 30);
   };
-  setTimeout(next, 1500);
+  setTimeout(next, 300);
+}
+function later(job: () => void): void {
+  if (typeof window === 'undefined') return job();
+  jobs.push(job);
+  runJobs();
+}
+/** The hall is on screen: start making the fine detail in spare moments. */
+export function startLaterWork(): void {
+  laterOpen = true;
+  runJobs();
 }
 
-let fineQueued = false;
 function queueFine(w: number, b: number, mesh: THREE.SkinnedMesh): void {
   const key = bodyKey(w, b, 'fine');
   const done = bodies.get(key);
@@ -613,26 +633,18 @@ function queueFine(w: number, b: number, mesh: THREE.SkinnedMesh): void {
     return;
   }
   if (typeof window === 'undefined') return; // (tests: no spare moments)
-  const list = waiting.get(key) ?? [];
-  list.push(mesh);
-  waiting.set(key, list);
-  if (fineQueued) return;
-  fineQueued = true;
-  const next = () => {
-    const [k] = waiting.keys();
-    if (k === undefined) {
-      fineQueued = false;
-      return;
-    }
-    const [ws, bs] = k.split('|').map(Number) as [number, number];
+  const list = waiting.get(key);
+  if (list) {
+    list.push(mesh);
+    return;
+  }
+  waiting.set(key, [mesh]);
+  later(() => {
+    const [ws, bs] = key.split('|').map(Number) as [number, number];
     const g = bodyGeo(ws, bs, 'fine');
-    for (const m of waiting.get(k)!) m.geometry = g;
-    waiting.delete(k);
-    const idle = (window as unknown as { requestIdleCallback?: (f: () => void) => void }).requestIdleCallback;
-    if (idle) idle(next);
-    else setTimeout(next, 50);
-  };
-  setTimeout(next, 500);
+    for (const m of waiting.get(key)!) m.geometry = g;
+    waiting.delete(key);
+  });
 }
 
 /**
