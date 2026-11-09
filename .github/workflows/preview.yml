@@ -2,6 +2,11 @@ name: Preview
 
 # Tests and builds the test branch. When it passes, the Pages workflow on main
 # (workflow_run) builds this branch into /next/ next to the live site.
+#
+# The build is also uploaded as the run's artifact (sort-sim-<branch>-<commit>):
+# open the run under Actions, download it and unzip it into any folder of any
+# static web server. Paths are relative (base './'), so a subfolder works too;
+# index.html sits at the root of the zip. Artifacts are kept for 90 days.
 on:
   push:
     branches: [night-shift-game]
@@ -22,3 +27,13 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Name the build
+        id: name
+        run: echo "name=sort-sim-${GITHUB_REF_NAME//\//-}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      # GitHub zips the artifact itself, so upload the folder (not a zip, or you get a zip in a zip).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
