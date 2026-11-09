@@ -51,7 +51,8 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/manualSort.ts` | `ManualSort`: robots tip envelopes into a hopper west of row 2; a roller belt takes them to the table; a worker puts them in pigeonholes and empties full ones into the crates. Day only, few parcels. |
 | `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
 | `src/scene/forklift.ts` | Forklift with driver (forks point to local +z); parts merged per material. |
-| `src/scene/people.ts` | `buildHuman`: jointed people (hips, waist, neck `head`, shoulders, elbows `foreL`/`foreR`): workers with hi-vis vest, helmet, gloves and radio; staff with cap, short sleeves and badge; three hair styles. |
+| `src/scene/people.ts` | `buildHuman`: jointed people (`pelvis`; hips `legL/R`, knees `kneeL/R`, ankles `footL/R`; waist `torso`, lower back `chest`, neck `head`; shoulders `armL/R`, elbows `foreL/R`, wrists `handL/R`; a ponytail `tail`): workers with hi-vis vest, helmet, gloves and radio; staff with cap, short sleeves and badge; three hair styles. All parts are instanced, so joints cost matrices, not draw calls. |
+| `src/scene/motion.ts` | How people move: `gait` (one step per beat, stride from the speed, knees, heel-to-toe, pelvis bob/sway/turn, chest turns against it), `crouch` and `reach` (two-bone IK for legs and arms), `sit`, and `settle` last each frame (pelvis, breathing, weight shift, ponytail spring, feet flat). Tested in `tests/motion.test.ts`. |
 | `src/scene/post.ts` | `InkPass` (screen-space outlines), `toonify`/`TOON` (flat day shading), blob texture. |
 | `src/scene/screens.ts` | Live canvases: dashboard, wall KPI boards, clocks (real time). Fed by `HubStats` from the scene. |
 | `src/scene/life.ts` | Walkers (day), ride-on scrubber, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |
@@ -197,7 +198,8 @@ the simulation:
   `buildProjectors`, dock doors `buildDockDoor`, cages `Docks.buildCage`,
   workers `Docks.buildWorker`, forklifts `buildForklift`.
 - **Animated models** keep their joints/groups (robot `top`, forklift
-  `forks`, worker `torso/armL/armR/legL/legR`, box `g` + `fill`). A
+  `forks`, people: see `Human` in `people.ts`, box `g` + `fill`); people are
+  posed with `motion.ts` (`gait` → `crouch`/`reach` → `settle`). A
   replacement model must expose the same handles.
 - **Textures:** all textures are generated on canvases (`canvasTex`, `tex`).
   To add image textures, put them in `public/` and load with

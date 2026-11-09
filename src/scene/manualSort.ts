@@ -10,6 +10,7 @@ import * as THREE from 'three';
 
 import { DECK_Y, DROP, TABLE, type FloorKit } from './floor';
 import { buildHuman, type Human } from './people';
+import { crouch, gait, settle } from './motion';
 
 /** What ManualSort moves: a parcel, by its base position. */
 export interface Item {
@@ -171,6 +172,8 @@ export class ManualSort {
   }
 
   /** Once a frame: the worker's next move, and the pose. */
+  private lastBt = 0;
+
   update(bt: number, day: boolean): void {
     if (!this.move && !this.moves.length && day) this.plan();
     if (!this.move && this.moves.length) {
@@ -196,7 +199,7 @@ export class ManualSort {
       while (d < -Math.PI) d += 2 * Math.PI;
       this.now.face = this.from.face + d * e;
       this.now.reach = this.from.reach + (m.reach - this.from.reach) * e;
-      walking = Math.abs(m.x - this.from.x) > 0.1 ? Math.sin(f * Math.PI * 2 * m.beats) : 0;
+      walking = Math.abs(m.x - this.from.x) > 0.1 && f < 1 ? Math.abs(m.x - this.from.x) / m.beats : 0;
       if (f >= 1) {
         this.move = null;
         this.mt0 += m.beats;
@@ -205,10 +208,15 @@ export class ManualSort {
     }
     w.root.position.set(this.now.x, 0, HOME.z);
     w.root.rotation.y = this.now.face;
-    w.legL.rotation.x = walking * 0.45;
-    w.legR.rotation.x = -walking * 0.45;
     w.armL.rotation.x = w.armR.rotation.x = -this.now.reach * 1.3;
+    w.foreL.rotation.x = w.foreR.rotation.x = -0.14 - this.now.reach * 0.5;
     w.torso.rotation.x = this.now.reach * 0.25;
+    // (No frame time here: about half a second per beat is close enough for easing.)
+    const dt = Math.min(0.1, Math.max(0, (bt - this.lastBt) * 0.5));
+    this.lastBt = bt;
+    gait(w, dt, Math.PI * bt, walking);
+    crouch(w, this.now.reach * 0.15);
+    settle(w, dt);
   }
 
   // ---------- planning ----------

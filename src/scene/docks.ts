@@ -14,7 +14,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { FloorKit } from './floor';
 import { DOCK_CITY, NORTH_CITIES, rangeOf, rangeText, split } from '../sim/postcodes';
 import { Labels } from './labels';
-import { buildHuman } from './people';
+import { buildHuman, type Human } from './people';
+import { crouch, gait, reach, relaxArms, settle } from './motion';
 import { checkerPlate, sectionalDoor, wireMesh } from './textures';
 
 type V3 = THREE.Vector3;
@@ -86,16 +87,7 @@ interface Step {
   done?: () => void;
 }
 
-interface Worker {
-  root: THREE.Group;
-  torso: THREE.Group;
-  armL: THREE.Group;
-  armR: THREE.Group;
-  foreL: THREE.Group;
-  foreR: THREE.Group;
-  head: THREE.Group;
-  legL: THREE.Group;
-  legR: THREE.Group;
+interface Worker extends Human {
   home: V3;
   steps: Step[];
   step: Step | null;
@@ -205,6 +197,9 @@ export class Docks {
   private readonly t = new THREE.Vector3();
   private readonly hands = new THREE.Vector3();
   private readonly t2 = new THREE.Vector3();
+  private readonly t3 = new THREE.Vector3();
+  private readonly t4 = new THREE.Vector3();
+  private readonly t5 = new THREE.Vector3();
   private readonly o = new THREE.Object3D();
   private readonly q = new THREE.Quaternion();
   /** Postcode boards on the cages (two per cage, back to back). */
@@ -668,12 +663,13 @@ export class Docks {
     let armUpL = 0;
     let armUpR = 0;
     let bounce = 0;
-    let step = 0;
+    /** Metres per step (one step per beat) while walking; and how deep to crouch. */
+    let speed = 0;
+    let squat = 0;
     let dance = false;
     let chat = false;
     let headTurn = 0;
     let nod = 0;
-    let sway = 0;
     let armR2: number | null = null;
     let foreL = -0.12;
     let foreR = -0.12;
@@ -684,28 +680,33 @@ export class Docks {
       pos = w.from.clone().lerp(st.to, e);
       if (st.face) face = Math.atan2(st.face.x - pos.x, st.face.z - pos.z);
       const moving = w.from.distanceTo(st.to) > 0.2;
-      if (moving) step = Math.sin(f * Math.PI * 2 * st.beats) * 0.5;
+      if (moving && f < 1) speed = w.from.distanceTo(st.to) / st.beats;
       if (st.cage) {
         st.cage.c.g.position.lerpVectors(w.cageFrom, st.cage.to, e);
         // Push from behind: face the way the cage goes.
         this.t.subVectors(st.cage.to, w.cageFrom);
         if (this.t.lengthSq() > 0.01) face = Math.atan2(this.t.x, this.t.z);
       }
+      // Picking up and putting down: bend the knees as well as the back.
       if (st.pose === 'pick') {
-        bend = 0.55 * Math.sin(f * Math.PI);
+        bend = 0.4 * Math.sin(f * Math.PI);
+        squat = 0.45 * Math.sin(f * Math.PI);
         armF = 0.1 + 1.3 * f;
       } else if (st.pose === 'carry') armF = 1.4;
       else if (st.pose === 'drop') {
-        bend = 0.5 * Math.sin(f * Math.PI);
+        bend = 0.35 * Math.sin(f * Math.PI);
+        squat = 0.35 * Math.sin(f * Math.PI);
         armF = 1.4 - 1.2 * f;
       } else if (st.pose === 'push') {
         armF = 1.5;
-        bend = 0.25;
+        bend = 0.3;
+        squat = 0.12;
       }
       // The parcel follows the hands.
       if (w.parcel && (st.pose === 'pick' || st.pose === 'carry' || st.pose === 'drop')) {
         // (Its own vector: cageTop below uses this.t.)
-        const hands = this.hands.set(Math.sin(w.yaw) * 0.55, 0.95, Math.cos(w.yaw) * 0.55).add(w.root.position).setY(0.95);
+        // Held in front at waist height, the hands on its sides (the parcel's base is lower by half its height).
+        const hands = this.hands.set(Math.sin(w.yaw) * 0.4, 0, Math.cos(w.yaw) * 0.4).add(w.root.position).setY(1.02 - w.parcel.h / 2);
         if (st.pose === 'pick') w.parcel.pos.lerpVectors(w.pickFrom, hands, ease(ph));
         else if (st.pose === 'drop') {
           if (w.cage < 0) w.parcel.pos.lerpVectors(hands, v(d.x + 0.9, 0.5, DOCK_BELT_END - 0.4), ease(ph));
@@ -727,11 +728,13 @@ export class Docks {
       dance = true;
       const beat = Math.floor(bt);
       face = w.yaw + Math.sin(bt * Math.PI * 0.5) * 0.04;
-      bounce = 0.12 * s.kick;
+      // Down in the knees on the kick, a step from side to side.
+      bounce = 0.04 * s.kick;
+      squat = 0.3 * s.kick;
       armUpL = beat % 2 ? 2.6 : 0.6 + s.snare;
       armUpR = beat % 2 ? 0.6 + s.snare : 2.6;
       bend = -0.15 * s.snare;
-      step = Math.sin(bt * Math.PI) * 0.4;
+      speed = 0.35;
     } else if (w.chat && w.chatMid && w.mates && w.root.position.distanceTo(w.chat) < 0.4) {
       chat = true;
       // Who is talking: it changes every few beats (not on a fixed count), per group.
@@ -749,8 +752,7 @@ export class Docks {
       while (dh > Math.PI) dh -= 2 * Math.PI;
       while (dh < -Math.PI) dh += 2 * Math.PI;
       headTurn = talking ? Math.sin(t * 0.7) * 0.35 : clamp(dh, -0.7, 0.7);
-      // Weight on one leg, then the other, at its own slow pace.
-      sway = Math.sin(t * 0.25) * 0.03;
+      // (Weight from one leg to the other: `settle` does that at each one's own pace.)
       if (talking) {
         // Talking with the hands, each at its own speed.
         armF = 0.35 + 0.2 * Math.sin(t * 1.3);
@@ -781,22 +783,41 @@ export class Docks {
     w.yaw += dy * (dance ? 0.08 : k);
     w.root.rotation.y = w.yaw;
     w.torso.rotation.x += (bend - w.torso.rotation.x) * k;
-    const armL = dance ? -armUpL : -armF;
-    const armR = dance ? -armUpR : -(armR2 ?? armF);
-    w.armL.rotation.x += (armL - w.armL.rotation.x) * k;
-    w.armR.rotation.x += (armR - w.armR.rotation.x) * k;
-    // Elbows: bent when carrying or pushing, a little when hanging; while chatting as set above.
-    const carry = st && (st.pose === 'carry' || st.pose === 'push' || st.pose === 'pick' || st.pose === 'drop');
-    const fl = chat ? foreL : carry ? -0.55 : dance ? -0.4 : -0.12;
-    const fr = chat ? foreR : carry ? -0.55 : dance ? -0.4 : -0.12;
-    w.foreL.rotation.x += (fl - w.foreL.rotation.x) * k * 0.6;
-    w.foreR.rotation.x += (fr - w.foreR.rotation.x) * k * 0.6;
-    w.armR.rotation.z += (0.07 + hipR - w.armR.rotation.z) * k * 0.6;
     w.head.rotation.y += (headTurn - w.head.rotation.y) * k * 0.4;
     w.head.rotation.x += (nod - w.head.rotation.x) * k * 0.6;
-    w.root.rotation.z = sway;
-    w.legL.rotation.x = step;
-    w.legR.rotation.x = -step;
+    // Legs and pelvis: one step per beat (each worker a little out of phase), knees down when crouching.
+    const swing = gait(w, dt, Math.PI * bt + w.phase, speed);
+    crouch(w, squat);
+    // Arms: the hands on the parcel's sides, or on the cage's push bar; otherwise posed as above.
+    const holding = st && w.parcel && (st.pose === 'pick' || st.pose === 'carry' || st.pose === 'drop');
+    const pushing = st?.pose === 'push';
+    if (holding || pushing) {
+      const c = this.t3;
+      const right = this.t4.set(Math.cos(w.yaw), 0, -Math.sin(w.yaw));
+      let half: number;
+      if (holding) {
+        c.copy(w.parcel!.pos).setY(w.parcel!.pos.y + w.parcel!.h / 2);
+        half = w.parcel!.w / 2 + 0.01;
+      } else {
+        c.set(Math.sin(w.yaw) * 0.45, 0, Math.cos(w.yaw) * 0.45).add(w.root.position).setY(1.02);
+        half = 0.24;
+      }
+      const kk = Math.min(1, dt * 14);
+      reach(w, 'L', this.t5.copy(c).addScaledVector(right, -half), kk, holding ? 1 : 0);
+      reach(w, 'R', this.t5.copy(c).addScaledVector(right, half), kk, holding ? 1 : 0);
+    } else {
+      const armL = dance ? -armUpL : -armF + (st ? 0.42 * swing : 0);
+      const armR = dance ? -armUpR : -(armR2 ?? armF) - (st ? 0.42 * swing : 0);
+      w.armL.rotation.x += (armL - w.armL.rotation.x) * k;
+      w.armR.rotation.x += (armR - w.armR.rotation.x) * k;
+      // Elbows: a little bent when hanging, more as the arm swings forward; while chatting as set above.
+      const fl = chat ? foreL : dance ? -0.4 : -0.14 - (st ? 0.4 * Math.max(0, -swing) : 0);
+      const fr = chat ? foreR : dance ? -0.4 : -0.14 - (st ? 0.4 * Math.max(0, swing) : 0);
+      w.foreL.rotation.x += (fl - w.foreL.rotation.x) * k * 0.6;
+      w.foreR.rotation.x += (fr - w.foreR.rotation.x) * k * 0.6;
+      relaxArms(w, k * 0.6, 0, hipR);
+    }
+    settle(w, dt, { idle: dance ? 0 : 1 });
   }
 
   // ---------- building ----------
