@@ -105,6 +105,8 @@ export interface HumanLook {
   hair?: number;
   /** Build (default: from a seed): height and width factors (about 0.9…1.1) and a belly 0…1. */
   build?: { height?: number; width?: number; belly?: number };
+  /** Over-ear headphones in this colour (someone who dances a little while working). */
+  headphones?: number;
 }
 
 /**
@@ -255,11 +257,16 @@ function shapes(level: BodyLevel): Record<string, THREE.BufferGeometry> {
     brimH: new THREE.TorusGeometry(0.133, 0.028, 6, 18).rotateX(Math.PI / 2).translate(0, 0.865, 0),
     // Father Christmas: a full white beard and moustache, and a sack over his shoulder.
     beard: merge(ell(0.085, 0.1, 0.06, 0, 0.66, 0.06, 12), ell(0.05, 0.018, 0.02, 0, 0.715, 0.1, 8)),
+    // Headphones: a band from ear to ear over the head (wider over a helmet) and the ear cups.
+    phonesBand: new THREE.TorusGeometry(0.112, 0.012, 6, 18, Math.PI).translate(0, 0.75, 0),
+    phonesBandH: new THREE.TorusGeometry(0.152, 0.012, 6, 18, Math.PI).translate(0, 0.75, 0),
+    phonesCups: merge(ell(0.03, 0.045, 0.04, -0.11, 0.745, 0, 10), ell(0.03, 0.045, 0.04, 0.11, 0.745, 0, 10)),
+    phonesCupsH: merge(ell(0.03, 0.045, 0.04, -0.125, 0.745, 0, 10), ell(0.03, 0.045, 0.04, 0.125, 0.745, 0, 10)),
     sack: ell(0.2, 0.26, 0.17, 0.06, 0.48, -0.24, 12),
 
   };
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
-  for (const key of ['head', 'ears', 'eyes', 'pupils', 'lips', 'hair', 'hairLong', 'hairTail', 'hairT', 'hairLongT', 'hairTailT', 'helmet', 'band', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
+  for (const key of ['head', 'ears', 'eyes', 'pupils', 'lips', 'hair', 'hairLong', 'hairTail', 'hairT', 'hairLongT', 'hairTailT', 'helmet', 'band', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard', 'phonesBand', 'phonesBandH', 'phonesCups', 'phonesCupsH']) geo[key]!.translate(0, -NECK_Y, 0);
   // Eyes and mouth hang from their own joints on the head.
   for (const key of ['eyes', 'pupils']) geo[key]!.translate(-EYES.x, -EYES.y, -EYES.z);
   for (const key of ['lips']) geo[key]!.translate(-MOUTH.x, -MOUTH.y, -MOUTH.z);
@@ -553,6 +560,8 @@ const bodyMats = new WeakMap<FloorKit, THREE.MeshStandardMaterial>();
 
 /** Every person built (their root), so a click can pick one to follow. */
 export const HUMANS: THREE.Object3D[] = [];
+/** The joints of every person, by their root (for gestures played on top of their own animation). */
+export const RIGS = new Map<THREE.Object3D, Human>();
 
 /** 0 below a, 1 above b (or the other way round when b < a), smooth in between. */
 const smooth = (a: number, b: number, x: number) => {
@@ -892,6 +901,12 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
       const c = look.cap ?? 0x2f3b6b;
       add(head, g.cap!, c);
       add(head, g.peak!, c);
+    }
+    if (look.headphones !== undefined) {
+      // Over-ear headphones: a band over the head (over the helmet for workers) and two cups.
+      const h = look.helmet !== undefined;
+      add(head, h ? g.phonesBandH! : g.phonesBand!, 0x1d1d1f);
+      add(head, h ? g.phonesCupsH! : g.phonesCups!, look.headphones);
     }
     return parts;
   };

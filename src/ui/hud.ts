@@ -762,11 +762,16 @@ export class Hud {
         return;
       }
       const p = this.scene.pickParcel(e.clientX, e.clientY);
-      if (p) this.showLabel(p);
-      else {
-        // Not a parcel: a robot, forklift or person under the pointer is followed.
+      if (p) {
+        this.scene.pokeParcel(p);
+        this.showLabel(p);
+      } else {
+        // Not a parcel: a robot, forklift or person under the pointer reacts and is followed.
         const t = this.scene.pickThing(e.clientX, e.clientY);
-        if (t) this.scene.followObject(t);
+        if (t) {
+          this.scene.poke(t);
+          this.scene.followObject(t);
+        } else this.scene.tapEgg(e.clientX, e.clientY);
       }
     });
     window.addEventListener('pointermove', (e) => {

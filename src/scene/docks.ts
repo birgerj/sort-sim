@@ -18,6 +18,7 @@ import { Labels } from './labels';
 import { buildHuman, type Human } from './people';
 import { crouch, gait, reach, relaxArms, settle } from './motion';
 import { checkerPlate, checkerPlateNormal, sectionalDoor, sectionalDoorNormal, wireMesh } from './textures';
+import { ANTICS } from './antics';
 
 type V3 = THREE.Vector3;
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -38,6 +39,8 @@ export interface DockParcel {
   dead: boolean;
   /** Postcode (four digits). */
   pc: number;
+  /** Service marks on the label ('fragile' is handled with care). */
+  tags?: readonly string[];
 }
 
 interface Cage {
@@ -82,7 +85,9 @@ interface Step {
   to: V3;
   /** Point to face while doing it. */
   face?: V3;
-  pose: 'walk' | 'pick' | 'carry' | 'drop' | 'push';
+  pose: 'walk' | 'pick' | 'carry' | 'drop' | 'push' | 'throw';
+  /** On tiptoe, arms out, eyes on the parcel (a fragile one). */
+  careful?: boolean;
   /** A cage that moves along with the worker, to this spot. */
   cage?: { c: Cage; to: V3 };
   done?: () => void;
@@ -111,6 +116,9 @@ interface Worker extends Human {
   rate: number;
   phase: number;
   style: number;
+  /** Dances a little while working (headphones on); caught by the camera until this beat. */
+  dancer?: boolean;
+  caughtUntil?: number;
 }
 
 interface Dock {
@@ -127,6 +135,9 @@ interface Dock {
   staged: Staged[];
   /** Spare cage frames (in the stack of empties), swapped in for staged ones. */
   spares: THREE.Group[];
+  /** Its truck was in cleardown on the last beat; the loader stretches once it is over. */
+  wasClearing: boolean;
+  stretchDue: boolean;
 }
 
 interface Staged {
@@ -166,6 +177,10 @@ const STOCK_Z = -36.6;
 const STAGE_AT: [number, number][] = [[1.6, -36.2], [1.6, -37.6], [3.0, -36.2], [3.0, -37.6]];
 /** The front parcel stops this far before the end of the belt. */
 const QUEUE_FRONT = 0.1;
+/** The dock whose picker does not walk: he throws the parcels into the cages (all but the fragile ones). */
+const THROW_DOCK = 5;
+/** The picker with headphones, who dances a little while working. */
+const DANCE_DOCK = 2;
 
 let cageGeo: Record<'frame' | 'wheels' | 'parcel', THREE.BufferGeometry> | null = null;
 /** Roll cage geometry, built once: frame and wheels merged, and a parcel for the pile. */
@@ -206,6 +221,13 @@ export class Docks {
   /** Postcode boards on the cages (two per cage, back to back). */
   private boards: Labels;
   private readonly m = new THREE.Matrix4();
+  /** The beat now (for acts started from a step's end). */
+  private now = 0;
+  /** A Mexican wave along the docks: who goes up on which beat. */
+  private waveQueue: { w: Worker; at: number }[] = [];
+  /** Tempo on the last frame (air guitar when the music turns to acid techno). */
+  private lastBpm = 0;
+  private nextGuitar = 0;
 
   constructor(
     private kit: FloorKit,
@@ -240,6 +262,27 @@ export class Docks {
         d.loader.mates = spots;
       });
     });
+  }
+
+  /** A Mexican wave along the docks from this beat: dock after dock, half a beat apart, picker then loader. */
+  startWave(from: number): void {
+    if (this.waveQueue.length) return;
+    [...this.docks].sort((a, b) => a.x - b.x).forEach((d, i) => {
+      this.waveQueue.push({ w: d.worker, at: from + i * 0.5 });
+      this.waveQueue.push({ w: d.loader, at: from + i * 0.5 + 0.25 });
+    });
+  }
+
+  /** The picker with headphones. */
+  get dancer(): Human {
+    return this.docks[DANCE_DOCK]!.worker;
+  }
+
+  /** Caught dancing (tapped): stand still and look at the camera, then pretend to work. */
+  catchDancer(bt: number, camera: V3): void {
+    const w = this.docks[DANCE_DOCK]!.worker;
+    w.caughtUntil = bt + 8;
+    ANTICS.play(w, 'caught', bt, { look: camera.clone() }, true);
   }
 
   /** City of a dock (by chute), or −1. */
@@ -298,8 +341,20 @@ export class Docks {
 
   /** One beat: each worker finishes a step or starts the next job. Day and night alike. */
   beat(b: number, day: boolean): void {
-    void day;
+    this.now = b;
+    // Now and then by day, a Mexican wave runs along the docks, west to east, half a beat apart.
+    if (day && b % 64 === 32 && Math.random() < 0.35) this.startWave(b + 1);
     for (const d of this.docks) {
+      // After a cleardown the loader stretches (once the truck has gone and nothing waits).
+      const clearing = this.handlers.truck.clearing?.(d.x) === true;
+      if (d.wasClearing && !clearing) d.stretchDue = true;
+      d.wasClearing = clearing;
+      if (d.stretchDue && !d.loader.step && !d.loader.steps.length && !ANTICS.busy(d.loader)) {
+        d.stretchDue = false;
+        ANTICS.play(d.loader, 'stretch', b);
+        // (Standing still while it lasts.)
+        d.loader.steps.push({ beats: 4, to: d.loader.root.position.clone().setY(0), pose: 'walk' });
+      }
       for (const w of [d.worker, d.loader]) {
         if (w.step && b >= w.t0 + w.step.beats) {
           const st = w.step;
@@ -323,6 +378,8 @@ export class Docks {
           w.t0 = b;
           w.from.copy(w.root.position).setY(0);
           if (w.step.cage) w.cageFrom.copy(w.step.cage.c.g.position);
+          // Once in a while a loader nearly trips over something on a longer walk.
+          if (day && w === d.loader && w.step.pose === 'walk' && w.step.beats >= 3 && Math.random() < 0.015) ANTICS.play(w, 'windmill', b + 1);
         }
       }
     }
@@ -482,6 +539,9 @@ export class Docks {
           done: () => {
             w.parcel = null;
             this.handlers.missort(p);
+            // Not again...
+            ANTICS.play(w, 'facepalm', this.now);
+            w.steps.push({ beats: 4, to: w.home, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'walk' });
           },
         },
       );
@@ -507,6 +567,44 @@ export class Docks {
     const belt = v(d.x, 0, DOCK_BELT_END + 0.35);
     // In front of the cage's open side, square to it, so the parcel goes straight in.
     const near = c.at.clone().addScaledVector(v(Math.sin(c.ry), 0, Math.cos(c.ry)), 1.15).setY(0);
+    const fragile = !!p.tags?.includes('fragile');
+    if (this.docks.indexOf(d) === THROW_DOCK) {
+      if (!fragile) {
+        // This one does not walk: he throws it in from where he stands.
+        w.steps.push(
+          { beats: 1, to: w.home, face: belt, pose: 'pick' },
+          {
+            beats: 1,
+            to: w.home,
+            face: c.at,
+            pose: 'throw',
+            done: () => {
+              this.put(d, ci, p);
+              w.parcel = null;
+            },
+          },
+        );
+        return;
+      }
+      // Except a fragile one: that he carries over on tiptoe, very slowly, and puts down ever so gently.
+      w.steps.push(
+        { beats: 1, to: w.home, face: belt, pose: 'pick' },
+        { beats: 3, to: near, face: c.at, pose: 'carry', careful: true },
+        {
+          beats: 2,
+          to: near,
+          face: c.at,
+          pose: 'drop',
+          careful: true,
+          done: () => {
+            this.put(d, ci, p);
+            w.parcel = null;
+          },
+        },
+        { beats: 2, to: w.home, face: belt, pose: 'walk' },
+      );
+      return;
+    }
     w.steps.push(
       { beats: 1, to: w.home, face: belt, pose: 'pick' },
       { beats: 1, to: near, face: c.at, pose: 'carry' },
@@ -583,7 +681,23 @@ export class Docks {
     this.fetchEmpty(d, c, aisle);
   }
 
-  update(dt: number, bt: number, s: { kick: number; snare: number; dayShown: boolean; dance?: boolean }): void {
+  update(dt: number, bt: number, s: { kick: number; snare: number; dayShown: boolean; dance?: boolean; bpm?: number }): void {
+    // The Mexican wave: each one goes up on their beat (not with a parcel in the hands).
+    for (let i = this.waveQueue.length - 1; i >= 0; i--) {
+      const q = this.waveQueue[i]!;
+      if (bt < q.at) continue;
+      this.waveQueue.splice(i, 1);
+      if (!q.w.parcel && !q.w.step?.cage) ANTICS.play(q.w, 'waveUp', q.at);
+    }
+    // When the music turns to acid techno, someone plays air guitar (and again every 32 bars while it lasts).
+    const bpm = s.bpm ?? 0;
+    if (bpm > 136 && (this.lastBpm <= 136 || bt >= this.nextGuitar)) {
+      const idle = this.docks.flatMap((d) => [d.worker, d.loader]).filter((w) => !w.parcel && !w.step?.cage && !ANTICS.busy(w));
+      const w = idle[Math.floor(Math.random() * idle.length)];
+      if (w) ANTICS.play(w, 'airguitar', Math.ceil(bt));
+      this.nextGuitar = bt + 128;
+    }
+    this.lastBpm = bpm;
     if (s.dayShown !== this.boardsDay) {
       this.boardsDay = s.dayShown;
       for (const m of boardMats) m.color.setScalar(s.dayShown ? 1 : 0.22);
@@ -670,6 +784,8 @@ export class Docks {
     let speed = 0;
     let squat = 0;
     let dance = false;
+    /** The headphone picker's little dance when idle (stepping on the spot). */
+    let groove = false;
     let chat = false;
     w.m.talk = 0;
     let headTurn = 0;
@@ -705,9 +821,34 @@ export class Docks {
         armF = 1.5;
         bend = 0.3;
         squat = 0.12;
+      } else if (st.pose === 'throw') {
+        // Swing back, then a big underarm throw up and over into the cage.
+        armF = f < 0.35 ? 1.2 - 2.0 * ease(f / 0.35) : -0.8 + 3.2 * ease(Math.min(1, (f - 0.35) / 0.3));
+        bend = f < 0.35 ? 0.3 * ease(f / 0.35) : 0.3 - 0.45 * ease(Math.min(1, (f - 0.35) / 0.3));
+        bounce = f > 0.35 && f < 0.7 ? 0.05 * Math.sin(((f - 0.35) / 0.35) * Math.PI) : 0;
+      }
+      if (st.careful) {
+        // On tiptoe, arms out in front, eyes on the parcel (slow, short steps).
+        bounce = 0.07;
+        if (moving) speed = Math.min(speed, 0.3);
+        armF = st.pose === 'drop' ? 1.5 - 0.9 * ease(f) : 1.55;
+        bend = st.pose === 'drop' ? 0.25 + 0.35 * Math.sin(f * Math.PI) : 0.18;
+        nod = 0.45;
       }
       // The parcel follows the hands.
-      if (w.parcel && (st.pose === 'pick' || st.pose === 'carry' || st.pose === 'drop')) {
+      if (w.parcel && st.pose === 'throw') {
+        const hands = this.hands.set(Math.sin(w.yaw) * 0.55, 0.95, Math.cos(w.yaw) * 0.55).add(w.root.position).setY(0.95);
+        if (f < 0.5) w.parcel.pos.copy(hands).setY(0.95 - 0.35 * Math.sin((f / 0.5) * Math.PI));
+        else {
+          // A high arc into the cage, tumbling as it goes.
+          const top = this.cageTop(d.cages[w.cage]!);
+          const u = ease((f - 0.5) / 0.5);
+          w.parcel.pos.lerpVectors(hands, top, u);
+          w.parcel.pos.y += Math.sin(u * Math.PI) * 1.1;
+          this.q.setFromAxisAngle(this.t2.set(Math.cos(w.yaw), 0, -Math.sin(w.yaw)), u * Math.PI * 2);
+          w.parcel.q.copy(this.q);
+        }
+      } else if (w.parcel && (st.pose === 'pick' || st.pose === 'carry' || st.pose === 'drop')) {
         // (Its own vector: cageTop below uses this.t.)
         // Held in front at waist height, the hands on its sides (the parcel's base is lower by half its height).
         const hands = this.hands.set(Math.sin(w.yaw) * 0.4, 0, Math.cos(w.yaw) * 0.4).add(w.root.position).setY(1.02 - w.parcel.h / 2);
@@ -781,7 +922,22 @@ export class Docks {
         bend = 0.03 * Math.sin(t * 0.5);
       }
     } else bend = 0.04 * Math.sin(bt * Math.PI * 0.5);
-    w.root.position.lerp(this.t.copy(pos).setY(bounce), st ? 1 : k);
+    if (w.dancer && s.dayShown && !dance && (w.caughtUntil ?? -1) < bt) {
+      // Headphones on: nodding along on the beat while working, and a little dance when there is nothing to do.
+      nod += 0.18 * Math.abs(Math.sin(bt * Math.PI));
+      headTurn += Math.sin(bt * Math.PI) * 0.12;
+      if (!st) {
+        bounce = 0.05 * Math.abs(Math.sin(bt * Math.PI));
+        armF = 0.6 + 0.25 * Math.sin(bt * Math.PI);
+        armR2 = 0.6 - 0.25 * Math.sin(bt * Math.PI);
+        foreL = foreR = -1.5;
+        chat = true;
+        // A little step on the spot, on the beat.
+        groove = true;
+        face = w.yaw + Math.sin(bt * Math.PI * 0.25) * 0.05;
+      }
+    }
+    w.root.position.lerp(this.t.copy(pos).setY(bounce), st && !st.careful ? 1 : k);
     let dy = face - w.yaw;
     while (dy > Math.PI) dy -= 2 * Math.PI;
     while (dy < -Math.PI) dy += 2 * Math.PI;
@@ -791,7 +947,7 @@ export class Docks {
     w.head.rotation.y += (headTurn - w.head.rotation.y) * k * 0.4;
     w.head.rotation.x += (nod - w.head.rotation.x) * k * 0.6;
     // Legs and pelvis: one step per beat (each worker a little out of phase), knees down when crouching.
-    const swing = gait(w, dt, Math.PI * bt + w.phase, speed, dance);
+    const swing = gait(w, dt, Math.PI * bt + w.phase, groove ? 0.2 : speed, dance || groove);
     crouch(w, squat);
     // Arms: the hands on the parcel's sides, or on the cage's push bar; otherwise posed as above.
     const holding = st && w.parcel && (st.pose === 'pick' || st.pose === 'carry' || st.pose === 'drop');
@@ -889,7 +1045,8 @@ export class Docks {
       g.visible = false;
       return g;
     });
-    this.docks.push({ x, chute, city, queue: [], cages, worker, loader, staged: [], spares });
+    if (this.docks.length === DANCE_DOCK) worker.dancer = true;
+    this.docks.push({ x, chute, city, queue: [], cages, worker, loader, staged: [], spares, wasClearing: false, stretchDue: false });
   }
 
   private readonly cageMeshGeo = (() => {
@@ -988,6 +1145,8 @@ export class Docks {
       vest: n % 3 === 2 ? 0xf2a51a : 0xc8ff3a,
       helmet: [0xffffff, 0xf2c200, 0x1755fe][n % 3]!,
       skin: [0xf0cfb0, 0xd9a77e, 0x8d5a3b, 0xf5d9c4][n % 4]!,
+      // The picker who dances along wears headphones.
+      headphones: role === 0 && this.docks.length === DANCE_DOCK ? 0xd6339a : undefined,
     });
     h.root.position.copy(home);
     this.kit.put(h.root);
