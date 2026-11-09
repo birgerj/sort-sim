@@ -117,6 +117,13 @@ export class Life {
     }
   }
 
+  /** Someone walking a round along `pts` (metres per beat), for routes the scene knows best. */
+  addWalker(look: Parameters<typeof buildHuman>[1], pts: V2[], speed: number): void {
+    const h = buildHuman(this.k, look);
+    this.group.add(h.root);
+    this.walkers.push({ h, route: new Route(pts), speed, s: 0, yaw: 0 });
+  }
+
   // ---------- people and the scrubber ----------
 
   private buildWalkers(): void {
