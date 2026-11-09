@@ -127,11 +127,11 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     collar: new THREE.TorusGeometry(0.058, 0.014, 6, 16).rotateX(Math.PI / 2).scale(1, 1, 0.9).translate(0, 0.555, 0.008),
     belt: lathe([[0.152, -0.03], [0.152, 0.03]], 0.66, 0.06),
     buckle: box(0.05, 0.035, 0.015, 0, 0.06, 0.1),
-    vest: lathe([[0.158, 0.08], [0.152, 0.14], [0.16, 0.25], [0.155, 0.3]], 0.68),
-    vestU: lathe([[0.157, 0.2], [0.158, 0.25], [0.174, 0.36], [0.18, 0.43], [0.17, 0.49], [0.13, 0.535]], 0.68),
+    vest: lathe([[0.158, 0.08], [0.152, 0.14], [0.158, 0.25], [0.155, 0.3]], 0.72),
+    vestU: lathe([[0.156, 0.2], [0.157, 0.25], [0.168, 0.36], [0.173, 0.43], [0.164, 0.49], [0.128, 0.535]], 0.72),
     // Two reflective bands round the vest (one on the belly, one on the chest).
-    bands: new THREE.CylinderGeometry(0.168, 0.164, 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, 0.22, 0),
-    bandsU: new THREE.CylinderGeometry(0.168, 0.176, 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, 0.36, 0),
+    bands: new THREE.CylinderGeometry(0.166, 0.162, 0.035, 20, 1, true).scale(1.0, 1, 0.74).translate(0, 0.22, 0),
+    bandsU: new THREE.CylinderGeometry(0.17, 0.175, 0.035, 20, 1, true).scale(1.0, 1, 0.74).translate(0, 0.36, 0),
     sleeve: lathe([[0.056, -0.1], [0.058, -0.14], [0.05, -0.15]], 0.9, 0, 12),
     // Hand: palm, four fingers slightly curled, and the thumb forward.
     // (Wrist joint at the top.)
@@ -198,6 +198,8 @@ function shapes(): Record<string, THREE.BufferGeometry> {
   };
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
   for (const key of ['head', 'ears', 'eyes', 'pupils', 'lips', 'hair', 'hairLong', 'hairTail', 'hairT', 'hairLongT', 'hairTailT', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
+  // What sits on the front of the chest, just proud of its (deeper) front.
+  for (const key of ['lanyard', 'badge', 'buttons', 'shirtV', 'lapels', 'tie', 'jacketButtons']) geo[key]!.translate(0, 0, 0.006);
   // Eyes and mouth hang from their own joints on the head.
   for (const key of ['eyes', 'pupils']) geo[key]!.translate(-EYES.x, -EYES.y, -EYES.z);
   for (const key of ['lips']) geo[key]!.translate(-MOUTH.x, -MOUTH.y, -MOUTH.z);
@@ -522,9 +524,9 @@ function skins(): Record<'leg' | 'torso' | 'arm', THREE.BufferGeometry> {
     // Hip to ankle: full thigh, the knee, a calf, a slim ankle (inside the boot).
     leg: lathe([[0, 0.05], [0.06, 0.05], [0.09, 0.02], [0.096, -0.06], [0.09, -0.16], [0.082, -0.28], [0.071, -0.38], [0.066, -0.42], [0.066, -0.46], [0.071, -0.53], [0.069, -0.6], [0.06, -0.7], [0.053, -0.78], [0.052, -0.84], [0, -0.845]], 0.95, 26),
     // Crotch to collar (waist joint at 0): seat and hips, waist, chest, sloping shoulders.
-    torso: lathe([[0, -0.11], [0.09, -0.1], [0.142, -0.06], [0.156, 0.0], [0.15, 0.05], [0.143, 0.12], [0.15, 0.25], [0.166, 0.36], [0.174, 0.43], [0.164, 0.49], [0.122, 0.535], [0.06, 0.56], [0, 0.565]], 0.66, 34),
+    torso: lathe([[0, -0.11], [0.09, -0.1], [0.142, -0.06], [0.156, 0.0], [0.15, 0.05], [0.143, 0.12], [0.15, 0.25], [0.16, 0.36], [0.165, 0.43], [0.156, 0.49], [0.12, 0.535], [0.06, 0.56], [0, 0.565]], 0.7, 34),
     // Shoulder to wrist: a round shoulder cap, upper arm, elbow, forearm, wrist.
-    arm: lathe([[0, 0.075], [0.04, 0.07], [0.061, 0.045], [0.066, 0.01], [0.062, -0.05], [0.056, -0.13], [0.051, -0.22], [0.047, -0.28], [0.046, -0.3], [0.048, -0.34], [0.047, -0.4], [0.041, -0.47], [0.035, -0.53], [0.033, -0.56], [0, -0.565]], 0.92, 22),
+    arm: lathe([[0, 0.075], [0.04, 0.07], [0.061, 0.045], [0.066, 0.01], [0.062, -0.05], [0.056, -0.13], [0.051, -0.22], [0.047, -0.28], [0.046, -0.3], [0.048, -0.34], [0.047, -0.4], [0.041, -0.47], [0.035, -0.53], [0.033, -0.56], [0, -0.565]], 1, 22),
   });
 }
 
@@ -578,7 +580,8 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   };
   const pelvis = joint(root, 0, HIP_Y, 0);
   const hipX = 0.085 * (1 + (width - 1) * 0.6);
-  const shoulderX = 0.182 * (1 + (width - 1) * 0.7);
+  // The arms hang outside the chest: the chest is narrower under the arms than across the shoulders.
+  const shoulderX = 0.195 * width;
   const legL = joint(pelvis, -hipX, 0, 0);
   const legR = joint(pelvis, hipX, 0, 0);
   const kneeL = joint(legL, 0, -KNEE, 0);
