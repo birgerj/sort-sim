@@ -205,6 +205,12 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   in tray space). Never name a GLSL variable `patch` (reserved).
   Belts are grey rubber in Day (`drawBelt(..., real)`) with specks, smears and
   dust (`beltWear`, in the belt texture's moving space).
+  People in Day (`people.ts`, gated by `REAL`): cloth with soft creases and
+  a little less saturation, skin with a sheen, reflective vest bands that
+  catch the light, hi-vis slightly fluorescent; heads and gear less saturated
+  (`realGear`). Printed signs, cage cards and door numbers take light like
+  paper (`litPaper`: a fixed sun term, no lights in the shader); screens and
+  lamps still glow.
   A light vignette and warm/cool finish (`gradePass`) runs only in
   Day. The Day hall is built the first time Day is chosen.
 - **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`

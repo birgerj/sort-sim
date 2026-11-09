@@ -605,3 +605,41 @@ export function beltWear(m: THREE.MeshStandardMaterial): void {
   const key = m.customProgramCacheKey.bind(m);
   m.customProgramCacheKey = () => `${key()}-beltwear`;
 }
+
+/** Where the light comes from in the realistic day (the baked sun's direction). */
+const PAPER_SUN = new THREE.Vector3(50, 90, 60).normalize();
+
+/**
+ * Printed signs, boards and cards are drawn unlit (flat), which reads as glowing in a lit hall.
+ * In the realistic day they take light like paper or painted metal: brighter facing the sun and
+ * the roof lights, duller facing away. A fixed light (no lights in the shader, so no cost); off
+ * in the other looks. Not for screens, lamps and projections: those do glow.
+ */
+export function litPaper(m: THREE.MeshBasicMaterial): void {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
+    sh.uniforms.uReal = REAL;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vPaper;')
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        {
+          vec3 nrm = normal;
+          #ifdef USE_INSTANCING
+            nrm = mat3(instanceMatrix) * nrm;
+          #endif
+          vec3 wn = normalize(mat3(modelMatrix) * nrm);
+          vec3 sun = vec3(${PAPER_SUN.x.toFixed(4)}, ${PAPER_SUN.y.toFixed(4)}, ${PAPER_SUN.z.toFixed(4)});
+          // Facing either way counts (single planes, seen from both sides).
+          vPaper = 0.5 + 0.3 * abs(dot(wn, sun)) + 0.12 * max(wn.y, 0.0);
+        }`,
+      );
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uReal;\nvarying float vPaper;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(1.0, vPaper, uReal);');
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${key()}-paper`;
+}

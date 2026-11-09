@@ -14,6 +14,7 @@ import type { FloorKit } from './floor';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasTexture } from './textures';
+import { REAL } from './realDay';
 import { BODY_LEVELS, bodyField, bodySurfaceZ, buildBody, type BodyLevel } from './bodySdf';
 
 import { XMAS } from '../sim/season';
@@ -626,6 +627,33 @@ interface Clothes {
   sleeves: 0 | 1 | 2;
   shoulderX: number;
 }
+/**
+ * Clothes in the realistic day (uReal 0 elsewhere): woven cloth with a fine weave and soft
+ * creases, a little less saturated than the drawing; skin with a soft sheen; reflective bands
+ * that catch the light (metal-like, smooth); hi-vis fabric a touch glossy; leather and rubber.
+ */
+const REAL_CLOTH_GLSL = /* glsl */ `
+uniform float uReal;
+vec3 realCloth(vec3 c, float kind) {
+  if (uReal < 0.001) return c;
+  vec3 r = c;
+  if (kind == 0.0 || kind == 3.0) {
+    // Soft creases round the limbs and across the body (no fine weave: it would shimmer).
+    float crease = 0.5 + 0.5 * sin(vRest.y * 55.0 + sin(vRest.x * 40.0 + vRest.z * 30.0) * 2.2);
+    r *= 0.92 + 0.1 * crease;
+    if (kind == 0.0) r = mix(vec3(dot(r, vec3(0.299, 0.587, 0.114))), r, 0.85);
+  }
+  if (kind == 2.0) r = vec3(0.78, 0.8, 0.82);
+  return mix(c, r, uReal);
+}
+void realClothSurface(float kind, inout float rough, inout float metal) {
+  if (uReal < 0.001) return;
+  float rr = kind == 1.0 ? 0.5 : kind == 2.0 ? 0.18 : kind == 3.0 ? 0.6 : kind == 4.0 ? 0.55 : 0.92;
+  float mm = kind == 2.0 ? 0.85 : 0.0;
+  rough = mix(rough, rr, uReal);
+  metal = mix(metal, mm, uReal);
+}
+`;
 const CLOTHES_GLSL = /* glsl */ `
 uniform vec3 cShirt, cTrousers, cVest, cSkin, cGlove, cBelt, cBand, cCuff;
 uniform vec4 uCloth; // vest (0/1), sleeves (0/1/2), shoulder x, wrist y
@@ -673,8 +701,18 @@ function clothesMaterial(k: FloorKit, c: Clothes, wristY: number): THREE.MeshSta
       .replace('#include <common>', '#include <common>\nattribute vec3 part;\nvarying vec3 vRest;\nvarying vec3 vPart;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;\nvPart = part;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + CLOTHES_GLSL)
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= clothes(vRest, vPart);');
+      .replace('#include <common>', '#include <common>\n' + CLOTHES_GLSL + REAL_CLOTH_GLSL)
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        vec3 cloth = clothes(vRest, vPart);
+        // What it is made of, for the realistic day (0 cloth, 1 skin, 2 reflective band, 3 hi-vis, 4 leather or rubber).
+        float kind = cloth == cBand ? 2.0 : cloth == cSkin ? 1.0 : (uCloth.x > 0.5 && cloth == cVest) ? 3.0 : (cloth == cBelt || cloth == cGlove) ? 4.0 : 0.0;
+        diffuseColor.rgb *= realCloth(cloth, kind);`,
+      )
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nrealClothSurface(kind, roughnessFactor, metalnessFactor);')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n// Hi-vis: fluorescent, so a little brighter than the light alone makes it.\nif (kind == 3.0) totalEmissiveRadiance += cVest * 0.1 * uReal;');
+    sh.uniforms.uReal = REAL;
   };
   const key = m.customProgramCacheKey.bind(m);
   m.customProgramCacheKey = () => key() + '|clothes';
@@ -703,6 +741,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     // By day people keep about half of their smooth shading under the toon
     // steps, so faces and limbs read as round.
     mat.userData.toonK = 0.45;
+    realGear(mat);
     bodyMats.set(k, mat);
   }
   const skin = look.skin ?? 0xf0cfb0;
@@ -953,3 +992,28 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
 export const INK_MASK_LAYER = 3;
 /** The levels' grids (for the record and the tests). */
 export { BODY_LEVELS };
+
+/**
+ * Heads, hair, hands, boots and helmets in the realistic day: a little less saturated (the
+ * drawing's colours are bright), and a surface between skin and plastic instead of matte paper.
+ */
+function realGear(m: THREE.MeshStandardMaterial): void {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
+    sh.uniforms.uReal = REAL;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uReal;')
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        if (uReal > 0.001) {
+          float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(l), diffuseColor.rgb, 0.85), uReal);
+          roughnessFactor = mix(roughnessFactor, 0.55, uReal);
+        }`,
+      );
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => key() + '|realgear';
+}

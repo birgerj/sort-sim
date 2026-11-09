@@ -33,7 +33,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
-import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear } from './realDay';
+import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -4708,7 +4708,12 @@ export class Sorter implements Scene3D {
     y = Math.min(y, SIGN_MAX_Y);
     // A framed sign: printed faces on both sides, an aluminium edge and two hanging eyes.
     const face = new THREE.MeshBasicMaterial({ map: signTex(text, color, icon) });
-    const edge = this.signEdge ?? (this.signEdge = new THREE.MeshBasicMaterial({ color: 0xc3c8ce }));
+    litPaper(face);
+    if (!this.signEdge) {
+      this.signEdge = new THREE.MeshBasicMaterial({ color: 0xc3c8ce });
+      litPaper(this.signEdge);
+    }
+    const edge = this.signEdge;
     const board = new THREE.Mesh(new THREE.BoxGeometry(4.9, 1.3, 0.08), [edge, edge, edge, edge, face, face]);
     board.position.set(x, y, z);
     board.rotation.y = ry;
