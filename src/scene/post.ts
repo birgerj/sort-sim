@@ -188,18 +188,20 @@ export function toonify(m: THREE.MeshStandardMaterial): void {
   m.onBeforeCompile = (sh, r) => {
     prev.call(m, sh, r);
     sh.uniforms.uToon = TOON;
+    // How much of the toon steps this material takes (1: all; less keeps some smooth shading).
+    const k = (m.userData.toonK as number | undefined) ?? 1;
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uToon;')
+      .replace('#include <common>', `#include <common>\nuniform float uToon;\nconst float uToonK = ${k.toFixed(3)};`)
       .replace(
         '#include <opaque_fragment>',
         `{
           float base = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)) + 1e-4;
           float lit = dot(outgoingLight - totalEmissiveRadiance, vec3(0.299, 0.587, 0.114)) / base;
           float q = lit < 0.45 ? 0.7 : (lit < 0.85 ? 0.86 : 1.0);
-          outgoingLight = mix(outgoingLight, diffuseColor.rgb * q + totalEmissiveRadiance, uToon);
+          outgoingLight = mix(outgoingLight, diffuseColor.rgb * q + totalEmissiveRadiance, uToon * uToonK);
         }
         #include <opaque_fragment>`,
       );
   };
-  m.customProgramCacheKey = () => 'toon';
+  m.customProgramCacheKey = () => 'toon' + ((m.userData.toonK as number | undefined) ?? 1);
 }

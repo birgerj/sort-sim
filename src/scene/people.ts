@@ -461,6 +461,9 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     mat = k.std(0xffffff, 0.8, 0, 0xffffff);
     mat.vertexColors = true;
     mat.map = faceAtlas();
+    // By day people keep about half of their smooth shading under the toon
+    // steps, so faces and limbs read as round.
+    mat.userData.toonK = 0.45;
     bodyMats.set(k, mat);
   }
   const skin = look.skin ?? 0xf0cfb0;
@@ -618,6 +621,25 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   if (tail) bones.push(tail);
   const index = new Map(bones.map((b, i) => [b, i]));
   const col = new THREE.Color();
+  const nv = new THREE.Vector3();
+  /**
+   * Shadow painted into the colours (as an illustrator would): undersides a
+   * little darker, and the places light hardly reaches: eye sockets, under the
+   * nose, beside it, under the chin, the sides under the arms.
+   */
+  const bump = (x: number, y: number, cx: number, cy: number, sx: number, sy: number) => Math.exp(-(((x - cx) / sx) ** 2 + ((y - cy) / sy) ** 2));
+  const shade = (part: Part, q: THREE.Vector3, n: THREE.Vector3): number => {
+    const y = q.y - HIP_Y;
+    let f = 1 - 0.16 * Math.max(0, -n.y);
+    if (part.face) {
+      const ax = Math.abs(q.x);
+      const front = Math.max(0, n.z);
+      f *= 1 - front * (0.2 * bump(ax, y, 0.034, 0.765, 0.018, 0.012) + 0.18 * bump(q.x, y, 0, 0.713, 0.014, 0.006) + 0.1 * bump(ax, y, 0.017, 0.738, 0.006, 0.018));
+      f *= 1 - 0.15 * Math.min(1, Math.max(0, 0.68 - y) / 0.04) * Math.min(1, Math.max(0, 0.3 - n.y));
+    } else if (part.geo === g.neck) f *= 1 - 0.3 * smooth(0.59, 0.66, y);
+    else if (part.w === torsoW && part.j !== head) f *= 1 - 0.14 * bump(Math.abs(q.x) / width, y, 0.17, 0.38, 0.04, 0.09);
+    return Math.max(0.62, f);
+  };
   const p = new THREE.Vector3();
   const geos = parts.map((part) => {
     const geo = (part.geo.index ? part.geo.toNonIndexed() : part.geo.clone()).applyMatrix4(part.j.matrixWorld);
@@ -662,9 +684,11 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     const colors = new Float32Array(n * 3);
     const si = new Uint16Array(n * 4);
     const sw = new Float32Array(n * 4);
+    const nrm = geo.attributes.normal as THREE.BufferAttribute;
     for (let i = 0; i < n; i++) {
       p.fromBufferAttribute(pos, i);
       col.setHex(typeof part.c === 'number' ? part.c : part.c(p));
+      col.multiplyScalar(shade(part, p, nv.fromBufferAttribute(nrm, i)));
       colors.set([col.r, col.g, col.b], i * 3);
       const ws = part.w ? part.w(p).filter(([, w]) => w > 1e-3) : [[part.j, 1] as [THREE.Object3D, number]];
       const sum = ws.reduce((a, [, w]) => a + w, 0) || 1;
