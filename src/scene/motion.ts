@@ -18,6 +18,8 @@ const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 /** A narrow bump around `c` (1 there, falling off on both sides). */
 const bump = (q: number, c: number) => Math.max(0, Math.cos(q - c)) ** 6;
 
+/** The longest step (m); see `gait`. */
+const MAX_STEP = 0.72;
 /** Part of a stride (two steps) a foot is on the floor. */
 const STANCE = 0.62;
 /** Ankle height standing (hip height minus the straight leg). */
@@ -31,20 +33,20 @@ const smooth01 = (x: number) => {
  * Where a foot is at stride phase `ph` (0…1; 0: heel lands in front): forward of the hip,
  * ankle height, and its pitch to the floor (+ is toes down).
  */
-function footAt(ph: number, stride: number, lift: number): { z: number; y: number; pitch: number } {
+function footAt(ph: number, stride: number, lift: number, w = 1): { z: number; y: number; pitch: number } {
   if (ph < STANCE) {
     // On the floor, moving back under the body at walking speed (so it stays put on the
     // floor): heel down first (toes up), the heel rising at the end to push off.
     const u = ph / STANCE;
     const heel = smooth01((u - 0.62) / 0.38);
-    return { z: stride * (0.27 - 0.62 * u), y: ANKLE_Y + 0.05 * heel * heel, pitch: -0.22 * (1 - smooth01(u / 0.16)) + 0.55 * heel };
+    return { z: stride * (0.27 - 0.62 * u), y: ANKLE_Y + 0.05 * w * heel * heel, pitch: -0.22 * (1 - smooth01(u / 0.16)) + 0.55 * heel };
   }
   // In the air: forward on an eased arc, highest early (toe clearance), toes up to land.
   const u = (ph - STANCE) / (1 - STANCE);
   const e = 0.5 - 0.5 * Math.cos(Math.PI * u);
   return {
     z: stride * (-0.35 + 0.62 * e),
-    y: ANKLE_Y + 0.05 * (1 - u) ** 2 + lift * Math.sin(Math.PI * Math.min(1, u * 1.15)) ** 1.4,
+    y: ANKLE_Y + 0.05 * w * (1 - u) ** 2 + lift * Math.sin(Math.PI * Math.min(1, u * 1.15)) ** 1.4,
     pitch: 0.55 * (1 - smooth01(u / 0.35)) - 0.22 * smooth01((u - 0.6) / 0.4),
   };
 }
@@ -61,7 +63,15 @@ function footAt(ph: number, stride: number, lift: number): { z: number; y: numbe
 export function gait(h: Human, dt: number, phase: number, speed: number, inPlace = false): number {
   const m = h.m;
   const e = Math.min(1, dt * 6);
-  m.walk += ((speed > 0.04 ? 1 : 0) - m.walk) * e;
+  // A step is at most MAX_STEP long: faster, and the person takes two (or more) steps per beat
+  // instead of ever-longer ones (which ended in the splits). Still on the beat.
+  if (!inPlace && speed > MAX_STEP) {
+    const n = Math.min(4, Math.ceil(speed / MAX_STEP));
+    phase *= n;
+    speed /= n;
+  }
+  // How much the person walks: a short shuffle lifts the feet only a little; standing, not at all.
+  m.walk += ((inPlace && speed > 0.04 ? 1 : smooth01((speed - 0.04) / 0.3)) - m.walk) * e;
   // The stride (two steps), eased; on the spot, a little shuffle.
   const want = speed > 0.04 ? (inPlace ? 0.08 : 2 * speed) : 0;
   m.amp += (want - m.amp) * e;
@@ -70,7 +80,8 @@ export function gait(h: Human, dt: number, phase: number, speed: number, inPlace
   const s = Math.min(1, stride / 1.05);
   const ph = (((phase / (2 * Math.PI)) % 1) + 1) % 1;
   const lift = 0.07 * W;
-  const feet = [footAt(ph, stride, lift), footAt((ph + 0.5) % 1, stride, lift)] as const;
+  // (The feet's own small lifts at heel and toe go with the walking too: standing, the feet stay down.)
+  const feet = [footAt(ph, stride, lift, W), footAt((ph + 0.5) % 1, stride, lift, W)] as const;
   // Hips: a smooth wave, softly held below what both legs can reach.
   const reachL = L1 + L2 - 0.012;
   let limit = HIP_Y;

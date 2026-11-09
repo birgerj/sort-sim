@@ -153,7 +153,8 @@ function helmetGeometry([U, V, RIM]: [number, number, number]): THREE.BufferGeom
       else idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
   };
-  grid(shell, U, V, false);
+  // (Wound so its outside faces out: the other way round only its inside showed, and the hair poked through.)
+  grid(shell, U, V, true);
   // The rim: a peak in front, narrow at the sides, a little flare at the back.
   const reach = (ph: number) => 0.009 + 0.056 * Math.max(0, Math.cos(ph)) ** 3 + 0.02 * Math.max(0, -Math.cos(ph)) ** 2;
   const rimAt = (t: number, ph: number, dy: number): [number, number, number] => {

@@ -20,6 +20,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
@@ -33,7 +34,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
-import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper } from './realDay';
+import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper, lightPools, parcelWear } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -265,6 +266,9 @@ const DAY = {
  * dark grey-blue enclosures, blue a deeper RAL blue; scan tunnels keep a signal orange.
  * Safety yellow and red stay. (Only for materials; people, parcels and trucks keep theirs.)
  */
+/** Dark RAL blue (steel structure paint), for supports and legs in the realistic day. */
+const RAL_BLUE = 0x1e3a66;
+
 const REAL_PALETTE = new Map<number, { c: number; metal?: number; rough?: number }>([
   [DAY.teal, { c: 0x9da3a9, metal: 0.7, rough: 0.42 }],
   [DAY.tealD, { c: 0x6e757c, metal: 0.6, rough: 0.45 }],
@@ -953,6 +957,7 @@ export class Sorter implements Scene3D {
   private bloom: UnrealBloomPass;
   /** Vignette and warm/cool finish of the realistic day. */
   private grade: ShaderPass;
+  private smaa: SMAAPass;
   /** Day outlines as a screen effect. */
   private ink: InkPass;
   private gtao: GTAOPass;
@@ -1081,7 +1086,7 @@ export class Sorter implements Scene3D {
   /** Christmas decorations (Settings → Christmas). */
   private xmas: Xmas | null = null;
   private dayShown: boolean | null = null;
-  private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number; rc?: THREE.Color }[] = [];
+  private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number; rc?: THREE.Color; rr?: number; rm?: number }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
   readonly nightOnly: THREE.Object3D[] = [];
   /** What the night party shows (see NightFx); night-only objects that one switch hides. */
@@ -1173,6 +1178,10 @@ export class Sorter implements Scene3D {
     this.composer.addPass(this.bokeh);
     this.grade = gradePass();
     this.composer.addPass(this.grade);
+    // Edge smoothing for the realistic day: without the ink lines, stair-stepped edges show.
+    this.smaa = new SMAAPass(1, 1);
+    this.smaa.enabled = false;
+    this.composer.addPass(this.smaa);
     this.composer.addPass(new OutputPass());
     try {
       const saved = localStorage.getItem(CAM_KEY);
@@ -3330,6 +3339,25 @@ export class Sorter implements Scene3D {
     this.realNormals.push({ m, s: scale });
   }
 
+  /** In the realistic day, paint `m` this colour (and finish) instead of its palette colour. */
+  realColor(m: THREE.MeshStandardMaterial, color: number, rough?: number, metal?: number): void {
+    const t = this.themed.find((x) => x.m === m);
+    if (t) {
+      t.rc = new THREE.Color(color);
+      if (rough !== undefined) t.rr = rough;
+      if (metal !== undefined) t.rm = metal;
+      return;
+    }
+    const p = this.plain.find((x) => x.m === m);
+    if (p) {
+      p.pal.setHex(color);
+      if (rough !== undefined) p.pr = rough;
+      if (metal !== undefined) p.pm = metal;
+      return;
+    }
+    this.plain.push({ m, c: m.color.clone(), r: m.roughness, mt: m.metalness, pal: new THREE.Color(color), pr: rough ?? m.roughness, pm: metal ?? m.metalness });
+  }
+
   /** In the realistic day, show `map` (with colour and roughness) on `m` instead of its own look. */
   realMap(m: THREE.MeshStandardMaterial, map: THREE.Texture, color = 0xffffff, roughness = m.roughness): void {
     this.realMaps.push({ m, own: m.map, real: map, col: m.color.clone(), realCol: new THREE.Color(color), rough: m.roughness, realRough: roughness });
@@ -3365,8 +3393,8 @@ export class Sorter implements Scene3D {
       const d = this.real ? (t.rc ?? (pal ? this.realC.setHex(pal.c) : this.realCol(t.d))) : t.d;
       t.m.color.lerpColors(t.n, d, day);
       // Realistic day: as paint on steel (between the matte drawing and the club's metal).
-      const dr = this.real ? pal?.rough ?? Math.max(0.3, (t.nr + t.dr) / 2) : t.dr;
-      const dm = this.real ? pal?.metal ?? t.nm * 0.5 : t.dm;
+      const dr = this.real ? t.rr ?? pal?.rough ?? Math.max(0.3, (t.nr + t.dr) / 2) : t.dr;
+      const dm = this.real ? t.rm ?? pal?.metal ?? t.nm * 0.5 : t.dm;
       t.m.roughness = t.nr + (dr - t.nr) * day;
       t.m.metalness = t.nm + (dm - t.nm) * day;
     }
@@ -3405,6 +3433,7 @@ export class Sorter implements Scene3D {
       p.m.metalness = p.mt + (p.pm - p.mt) * rd;
     }
     this.grade.enabled = this.real && day > 0.02;
+    this.smaa.enabled = this.real && day > 0.5;
     (this.grade.uniforms.uAmount as THREE.IUniform<number>).value = day;
     const show = day > 0.5;
     if (show === this.dayShown) return;
@@ -3724,6 +3753,8 @@ export class Sorter implements Scene3D {
     const chuteMat = this.theme(new THREE.MeshStandardMaterial({ color: 0xa8b0ba, map: chuteTex, roughness: 0.3, metalness: 0.9, side: THREE.DoubleSide }), DAY.tealP);
     const trackMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x3c4048, roughness: 0.45, metalness: 0.7, side: THREE.DoubleSide }), DAY.teal);
     const legMat = this.std(0x6b7280, 0.5, 0.7, DAY.teal);
+    // Realistic day: the supports in a dark RAL blue, as on many real sorters.
+    this.realColor(legMat, RAL_BLUE, 0.45, 0.3);
     const strip = () => {
       const m = new THREE.ShaderMaterial({
         uniforms: { uCol: { value: new THREE.Color() }, uBeat: { value: 0 }, uKick: { value: 0 }, uGain: { value: 1 }, uDay: { value: 0 }, uDayCol: { value: new THREE.Color(DAY.tealD) } },
@@ -4234,6 +4265,8 @@ export class Sorter implements Scene3D {
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow;');
     };
     toonify(mat);
+    // Realistic day: every box its own cardboard shade, worn at the edges.
+    parcelWear(mat);
     // Plastic for the polybags: shiny, no cardboard print.
     const plastic = mat.clone();
     plastic.map = null;
@@ -4476,6 +4509,10 @@ export class Sorter implements Scene3D {
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
     add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
+    // The LED fixtures' light on the floor (they hang every 10 m in four rows; see buildDay).
+    const spots: [number, number][] = [];
+    for (let x = WX + 10; x <= EX - 10; x += 10) for (const z of [-28, -10, 10, 28]) spots.push([x, z]);
+    add(lightPools(spots, 7, 4.5));
     // Where the roll cages are pushed, the floor shows it.
     add(wheelTracks(this.docks.cagePaths().map((pts) => ({ pts })), CAGE_TRACKS));
     // The robots keep to one-way lanes on a grid: the busy lanes show as worn tracks.

@@ -25,6 +25,8 @@ export interface FloorKit {
   std(color: number, rough?: number, metal?: number, day?: number): THREE.MeshStandardMaterial;
   /** Relief that shows only in the realistic day look (a normal map, off in the drawn one). */
   realNormal(m: THREE.MeshStandardMaterial, map: THREE.Texture, scale?: number): void;
+  /** In the realistic day, paint the material this colour instead (supports in RAL blue...). */
+  realColor(m: THREE.MeshStandardMaterial, color: number, rough?: number, metal?: number): void;
   inkify(m: THREE.Mesh, angle?: number): void;
   /** Day outline for rounded shapes. */
   outline(m: THREE.Mesh, width?: number): void;
@@ -644,6 +646,9 @@ export class RobotFloor {
   private buildStations(cols: number[]): void {
     const k = this.kit;
     const alu = k.std(0x6b7078, 0.4, 0.7, 0xc3c8ce);
+    // The legs on their own material: dark RAL blue in the realistic day.
+    const aluLeg = k.std(0x6b7078, 0.4, 0.7, 0xc3c8ce);
+    k.realColor(aluLeg, 0x1e3a66, 0.45, 0.3);
     const roller = k.std(0x9aa0a8, 0.35, 0.8, 0xe6e9ec);
     for (const i of cols) {
       const x = cellX(i);
@@ -654,7 +659,7 @@ export class RobotFloor {
       // (Rollers on top at the robots' deck height, so a parcel slides level onto a robot.)
       const top = DECK_Y;
       k.box('stable', alu, x, top - 0.1, zc, 1.1, 0.08, STATION_TABLE);
-      for (const sx of [-0.5, 0.5]) for (let sz = z0 + 0.1; sz <= z1; sz += 1.5) k.box('stable', alu, x + sx, (top - 0.14) / 2, sz, 0.06, top - 0.14, 0.06);
+      for (const sx of [-0.5, 0.5]) for (let sz = z0 + 0.1; sz <= z1; sz += 1.5) k.box('stableleg', aluLeg, x + sx, (top - 0.14) / 2, sz, 0.06, top - 0.14, 0.06);
       for (let zz = z0 + 0.1; zz < z1; zz += 0.21) k.box('sroll', roller, x, top - 0.03, zz, 1.0, 0.06, 0.06);
       for (const sx of [-0.55, 0.55]) k.box('stable', alu, x + sx, top + 0.04, zc, 0.04, 0.12, STATION_TABLE);
       k.blob(x, zc, 1.6, STATION_TABLE + 0.7);

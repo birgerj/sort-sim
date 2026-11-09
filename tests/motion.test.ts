@@ -89,4 +89,39 @@ describe('motion', () => {
     const pitch = h.legL.rotation.x + h.kneeL.rotation.x + h.footL.rotation.x;
     expect(Math.abs(pitch)).toBeLessThan(0.45);
   });
+
+  it('standing still keeps both feet on the floor (no stepping in place)', () => {
+    const h = person();
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let f = 0; f < 240; f++) {
+      const bt = f / 30;
+      gait(h, 1 / 60, Math.PI * bt, 0);
+      settle(h, 1 / 60);
+      if (f < 120) continue;
+      h.root.updateMatrixWorld(true);
+      for (const s of ['L', 'R'] as const) {
+        const y = ankle(h, s).y;
+        lo = Math.min(lo, y);
+        hi = Math.max(hi, y);
+      }
+    }
+    expect(hi - lo).toBeLessThan(0.01);
+  });
+
+  it('a fast walk takes more steps, never the splits', () => {
+    const h = person();
+    let most = 0;
+    for (let f = 0; f < 600; f++) {
+      const bt = f / 60;
+      gait(h, 1 / 60, Math.PI * bt, 2.4);
+      settle(h, 1 / 60);
+      if (f < 120) continue;
+      h.root.updateMatrixWorld(true);
+      most = Math.max(most, Math.abs(ankle(h, 'L').z - ankle(h, 'R').z));
+    }
+    // Two steps' worth at most, well short of a split.
+    expect(most).toBeLessThan(1.0);
+  });
 });
+
