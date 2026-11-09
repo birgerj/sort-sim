@@ -179,7 +179,15 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   mapping and a daylight environment, caps light day colours at a light grey
   (`realCol`), and swaps the flat hall surfaces (`flatOnly`) for lit ones
   (`realOnly`). Without the ink pass it draws about half the calls of
-  Minimal. Shadows and AO still come with quality high.
+  Minimal. Colours: `REAL_PALETTE` maps the illustration palette to what the
+  parts really are (galvanised and grey steel, dark enclosures, RAL blue,
+  signal orange), for themed and single-colour `std()` materials alike.
+  Shadows (`updateShadows`): Day on quality normal and up uses a **baked**
+  sun shadow over the whole hall: drawn once, again every 30 s; what moves
+  (found by watching every caster for 1.5 s: skinned, moved, or instance
+  matrices updated) casts none and keeps its contact shadow. Minimal and
+  Night keep the **live** camera-following shadow on high. See-through
+  things that write no depth are hidden from the AO pass.
 - **Day details:** wheel marks where roll cages are pushed (`Docks.cagePaths`,
   following the loader's jobs) and where robots drive (`RobotFloor.trafficPaths`:
   a stand-in fleet runs 3,000 beats at load and counts every step; busier

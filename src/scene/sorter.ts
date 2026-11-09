@@ -259,6 +259,24 @@ const DAY = {
   blue: 0x1755fe,
 };
 
+/**
+ * The realistic day's colours for the illustration palette: what these parts would really be.
+ * Frames, cages and racks are galvanised or grey steel, the monitoring and computing corners
+ * dark grey-blue enclosures, blue a deeper RAL blue; scan tunnels keep a signal orange.
+ * Safety yellow and red stay. (Only for materials; people, parcels and trucks keep theirs.)
+ */
+const REAL_PALETTE = new Map<number, { c: number; metal?: number; rough?: number }>([
+  [DAY.teal, { c: 0x9da3a9, metal: 0.7, rough: 0.42 }],
+  [DAY.tealD, { c: 0x6e757c, metal: 0.6, rough: 0.45 }],
+  [DAY.tealL, { c: 0xb5bbc1, metal: 0.5, rough: 0.5 }],
+  [DAY.tealP, { c: 0xb9bfc5, metal: 0.8, rough: 0.35 }],
+  [DAY.orange, { c: 0xd8862a, metal: 0.2, rough: 0.5 }],
+  [DAY.orangeL, { c: 0xe0a85a }],
+  [DAY.purple, { c: 0x3d4450, metal: 0.3, rough: 0.55 }],
+  [DAY.magenta, { c: 0x2b2f36, metal: 0.3, rough: 0.5 }],
+  [DAY.blue, { c: 0x24508f, metal: 0.2, rough: 0.5 }],
+]);
+
 /** Position and direction of travel at loop position s (counter-clockwise seen from above: east along the north side). */
 function loopAt(s: number, pos: V3, tan: V3): void {
   s = ((s % LOOP_LEN) + LOOP_LEN) % LOOP_LEN;
@@ -1132,6 +1150,19 @@ export class Sorter implements Scene3D {
     this.gtao = new GTAOPass(this.scene, this.camera, 512, 512);
     this.gtao.enabled = false;
     this.gtao.blendIntensity = 0.85;
+    // AO is worked out from depth and normals: see-through things that write no depth (floor marks,
+    // light shafts, glass, blob shadows) must stay out of it, or they darken whatever lies under them.
+    {
+      const gtao = this.gtao as unknown as { overrideVisibility(): void };
+      const own = gtao.overrideVisibility.bind(gtao);
+      gtao.overrideVisibility = () => {
+        own();
+        this.scene.traverse((o) => {
+          const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+          if ((o as THREE.Mesh).isMesh && m && !Array.isArray(m) && m.transparent && !m.depthWrite) o.visible = false;
+        });
+      };
+    }
     this.composer.addPass(this.gtao);
     this.ink = new InkPass(this.scene, this.camera, INK_MASK_LAYER);
     this.composer.addPass(this.ink);
@@ -1543,7 +1574,8 @@ export class Sorter implements Scene3D {
     });
     this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown, dance: this.fx.dance });
     this.updateCamera(dt, bar, i.travelSpeed);
-    if (this.quality === 'high' || this.quality === 'ultra') {
+    this.bakeShadows();
+    if (this.shadowMode === 'live') {
       // The sun stands high in the south-east; its shadow box is centred where the camera looks.
       this.keyLight.position.copy(this.look).add(this.t.set(25, 45, 30));
       this.keyLight.target.position.copy(this.look);
@@ -1674,30 +1706,109 @@ export class Sorter implements Scene3D {
   setQuality(q: Quality): void {
     if (q === this.quality) return;
     const hq = q === 'high' || q === 'ultra';
-    const shadows = hq;
-    if (shadows !== this.renderer.shadowMap.enabled) {
-      this.renderer.shadowMap.enabled = shadows;
+    this.gtao.enabled = hq;
+    const ultra = q === 'ultra';
+    this.gtao.updateGtaoMaterial({ samples: ultra ? 24 : 12, radius: ultra ? 0.5 : 0.35 });
+    this.quality = q;
+    this.shadowMode = null; // re-decide the shadows for this quality
+    this.dayShown = null; // re-apply the look (mirror floor, shadows)
+    this.applyTheme(this.day);
+  }
+
+  /**
+   * Sun shadows. `live` (quality high and up, Minimal and Night): every solid casts, in a box
+   * that follows the camera, drawn every frame. `baked` (the realistic day, quality normal and
+   * up): one box over the whole hall, drawn once and then only now and then, with only what
+   * stands still casting (what moves keeps its soft contact shadow), so the shadows cost
+   * next to nothing per frame. `off` otherwise.
+   */
+  private shadowMode: 'off' | 'live' | 'baked' | null = null;
+  /** Meshes that move (found by watching them for a moment), kept out of the baked shadows. */
+  private movers: THREE.Mesh[] | null = null;
+  private moverWatch: { list: { m: THREE.Mesh; w: THREE.Matrix4; v: number }[]; until: number } | null = null;
+  private nextBake = 0;
+
+  private updateShadows(): void {
+    const q = this.quality;
+    const hq = q === 'high' || q === 'ultra';
+    const mode = this.real && this.dayShown === true ? (q === 'low' ? 'off' : 'baked') : hq ? 'live' : 'off';
+    if (mode === this.shadowMode) return;
+    const on = mode !== 'off';
+    if (on !== this.renderer.shadowMap.enabled) {
+      this.renderer.shadowMap.enabled = on;
       // Shadow maps change the shader programs.
       this.scene.traverse((o) => {
         const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
         if (m) for (const x of Array.isArray(m) ? m : [m]) x.needsUpdate = true;
       });
     }
-    this.keyLight.castShadow = shadows;
-    this.gtao.enabled = hq;
-    // Ultra (laptops and desktops): finer shadows over a larger area and more AO samples.
-    const ultra = q === 'ultra';
-    this.keyLight.shadow.mapSize.setScalar(ultra ? 4096 : 2048);
-    const sc = this.keyLight.shadow.camera;
-    sc.left = sc.bottom = ultra ? -55 : -36;
-    sc.right = sc.top = ultra ? 55 : 36;
+    const sun = this.keyLight;
+    sun.castShadow = on;
+    const sc = sun.shadow.camera;
+    if (mode === 'baked') {
+      // The whole hall from a fixed sun (high in the south-east, as in the live mode).
+      sun.target.position.set(HCX, 0, HZC);
+      sun.position.set(HCX + 50, 90, HZC + 60);
+      sc.left = sc.bottom = -115;
+      sc.right = sc.top = 115;
+      sc.near = 1;
+      sc.far = 320;
+      sun.shadow.mapSize.setScalar(hq ? 4096 : 2048);
+      sun.shadow.normalBias = 0.06;
+      sun.shadow.bias = -0.0004;
+      this.renderer.shadowMap.autoUpdate = false;
+      this.renderer.shadowMap.needsUpdate = true;
+      for (const m of this.movers ?? []) m.castShadow = false;
+      if (!this.movers) this.watchMovers();
+    } else {
+      const ultra = q === 'ultra';
+      sc.left = sc.bottom = ultra ? -55 : -36;
+      sc.right = sc.top = ultra ? 55 : 36;
+      sc.near = 1;
+      sc.far = 140;
+      sun.shadow.mapSize.setScalar(ultra ? 4096 : 2048);
+      sun.shadow.normalBias = 0.03;
+      sun.shadow.bias = -0.0006;
+      this.renderer.shadowMap.autoUpdate = true;
+      for (const m of this.movers ?? []) m.castShadow = true;
+    }
     sc.updateProjectionMatrix();
-    this.keyLight.shadow.map?.dispose();
-    this.keyLight.shadow.map = null as unknown as THREE.WebGLRenderTarget;
-    this.gtao.updateGtaoMaterial({ samples: ultra ? 24 : 12, radius: ultra ? 0.5 : 0.35 });
-    this.quality = q;
-    this.dayShown = null; // re-apply the look (mirror floor)
-    this.applyTheme(this.day);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null as unknown as THREE.WebGLRenderTarget;
+    this.shadowMode = mode;
+  }
+
+  /** Note where every shadow caster is now; `checkMovers` compares a moment later. */
+  private watchMovers(): void {
+    const list: { m: THREE.Mesh; w: THREE.Matrix4; v: number }[] = [];
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.castShadow) return;
+      const im = m as THREE.InstancedMesh;
+      list.push({ m, w: m.matrixWorld.clone(), v: im.isInstancedMesh ? im.instanceMatrix.version : 0 });
+    });
+    this.moverWatch = { list, until: this.time + 1.5 };
+  }
+
+  /** Per frame while baking: find the movers, then bake again now and then (doors, trucks). */
+  private bakeShadows(): void {
+    if (this.shadowMode !== 'baked') return;
+    const w = this.moverWatch;
+    if (w && this.time >= w.until) {
+      this.movers = w.list
+        .filter(({ m, w: mw, v }) => {
+          const im = m as THREE.InstancedMesh;
+          return (m as THREE.SkinnedMesh).isSkinnedMesh || !m.matrixWorld.equals(mw) || (im.isInstancedMesh && im.instanceMatrix.version !== v);
+        })
+        .map(({ m }) => m);
+      for (const m of this.movers) m.castShadow = false;
+      this.moverWatch = null;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.nextBake = this.time + 30;
+    } else if (!w && this.time >= this.nextBake) {
+      this.renderer.shadowMap.needsUpdate = true;
+      this.nextBake = this.time + 30;
+    }
   }
 
   /** Belt speed, as a multiple of 2 m per beat (3.3 m/s at 100 BPM). */
@@ -3142,6 +3253,9 @@ export class Sorter implements Scene3D {
     const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
     if (day === undefined) {
       toonify(m);
+      // One colour in every look; the realistic day may still re-colour it (REAL_PALETTE).
+      const pal = REAL_PALETTE.get(color);
+      if (pal) this.plain.push({ m, c: new THREE.Color(color), r: rough, mt: metal, pal: new THREE.Color(pal.c), pr: pal.rough ?? rough, pm: pal.metal ?? metal });
       return m;
     }
     return this.theme(m, day);
@@ -3192,6 +3306,8 @@ export class Sorter implements Scene3D {
     this.applyTheme(this.day);
   }
 
+  /** Single-colour materials in the illustration palette, re-coloured in the realistic day. */
+  private plain: { m: THREE.MeshStandardMaterial; c: THREE.Color; r: number; mt: number; pal: THREE.Color; pr: number; pm: number }[] = [];
   private realC = new THREE.Color();
   /** A day colour toned down for the lit look: light colours are capped at a light grey. */
   private realCol(c: THREE.Color): THREE.Color {
@@ -3232,12 +3348,14 @@ export class Sorter implements Scene3D {
     this.ink.strength = smooth01(flat * 1.2);
     if (this.blobMat) this.blobMat.opacity = this.real ? 0.45 - 0.1 * day : 0.45 - 0.17 * day;
     for (const t of this.themed) {
-      // Realistic day: the day colours, but no pure whites (a lit white reads as paper, not steel).
-      const d = this.real ? (t.rc ?? this.realCol(t.d)) : t.d;
+      // Realistic day: what the part really is (REAL_PALETTE), else the day colour without pure
+      // whites (a lit white reads as paper, not steel).
+      const pal = this.real ? REAL_PALETTE.get(t.d.getHex()) : undefined;
+      const d = this.real ? (t.rc ?? (pal ? this.realC.setHex(pal.c) : this.realCol(t.d))) : t.d;
       t.m.color.lerpColors(t.n, d, day);
-      // Realistic day: the day colours, as paint on steel (between the matte drawing and the club's metal).
-      const dr = this.real ? Math.max(0.3, (t.nr + t.dr) / 2) : t.dr;
-      const dm = this.real ? t.nm * 0.5 : t.dm;
+      // Realistic day: as paint on steel (between the matte drawing and the club's metal).
+      const dr = this.real ? pal?.rough ?? Math.max(0.3, (t.nr + t.dr) / 2) : t.dr;
+      const dm = this.real ? pal?.metal ?? t.nm * 0.5 : t.dm;
       t.m.roughness = t.nr + (dr - t.nr) * day;
       t.m.metalness = t.nm + (dm - t.nm) * day;
     }
@@ -3264,6 +3382,17 @@ export class Sorter implements Scene3D {
     this.cageLine.color.setHex(0x8a8f96).lerp(this.c.setHex(DAY.tealD), day);
     for (const n of this.realNormals) n.m.normalScale.setScalar(this.real ? n.s * day : 0);
     REAL.value = this.real ? day : 0;
+    // The belts' side strips: the frame's teal in the drawn day, plain dark rubber edging in the realistic one.
+    for (const st of this.strips) {
+      const u = st.uniforms.uDayCol;
+      if (u) (u.value as THREE.Color).setHex(this.real ? 0x3a3e44 : DAY.tealD);
+    }
+    const rd = this.real ? day : 0;
+    for (const p of this.plain) {
+      p.m.color.lerpColors(p.c, p.pal, rd);
+      p.m.roughness = p.r + (p.pr - p.r) * rd;
+      p.m.metalness = p.mt + (p.pm - p.mt) * rd;
+    }
     this.grade.enabled = this.real && day > 0.02;
     (this.grade.uniforms.uAmount as THREE.IUniform<number>).value = day;
     const show = day > 0.5;
@@ -3285,6 +3414,7 @@ export class Sorter implements Scene3D {
       r.m.color.copy(on ? r.realCol : r.col);
       r.m.roughness = on ? r.realRough : r.rough;
     }
+    this.updateShadows();
     this.scene.environment = show ? (this.real ? this.dayEnv : null) : this.nightEnv;
     // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
     const hq = this.quality === 'high' || this.quality === 'ultra';
