@@ -1,7 +1,12 @@
-// People: dock workers (hi-vis vest, helmet) and staff (shirt, cap). Jointed at
-// hips, waist, neck, shoulders and elbows, so they can walk, carry, bend, talk and
-// dance. Facing +z. Each person gets one of a few hair styles, and staff wear short
-// sleeves and a badge on a lanyard; workers long sleeves, gloves and a radio.
+// People: dock workers (hi-vis vest, helmet) and staff (shirt, cap). Jointed like
+// a simple skeleton: pelvis, hips, knees, ankles, waist, chest (lower back), neck,
+// shoulders, elbows and wrists, and a ponytail that swings. `motion.ts` poses them
+// (walking, crouching, reaching, breathing). Facing +z. Each person gets one of a
+// few hair styles, and staff wear short sleeves and a badge on a lanyard; workers
+// long sleeves, gloves and a radio.
+//
+// Every part is a proxy in an instanced batch (`kit.batch`), so more joints cost
+// no draw calls per person: only a few more matrices to copy each frame.
 import * as THREE from 'three';
 
 import type { FloorKit } from './floor';
@@ -13,7 +18,12 @@ import { XMAS } from '../sim/season';
 
 export interface Human {
   root: THREE.Group;
+  /** Pelvis (hip height): walking bob, sway and hip turn; legs and torso hang from it. */
+  pelvis: THREE.Group;
+  /** Waist: bend forward with positive x. */
   torso: THREE.Group;
+  /** Lower back: the chest, shoulders and head hang from it. */
+  chest: THREE.Group;
   armL: THREE.Group;
   armR: THREE.Group;
   /** Elbows (bend forward with negative x). */
@@ -21,8 +31,50 @@ export interface Human {
   foreR: THREE.Group;
   /** Neck: turn (y) and nod (x). */
   head: THREE.Group;
+  /** Hips (forward with negative x). */
   legL: THREE.Group;
   legR: THREE.Group;
+  /** Knees (bend with positive x). */
+  kneeL: THREE.Group;
+  kneeR: THREE.Group;
+  /** Ankles (toes up with negative x). */
+  footL: THREE.Group;
+  footR: THREE.Group;
+  /** Wrists. */
+  handL: THREE.Group;
+  handR: THREE.Group;
+  /** Ponytail (only with that hair style). */
+  tail: THREE.Group | null;
+  /** Motion state, kept by `motion.ts`. */
+  m: MotionState;
+}
+
+/** What `motion.ts` keeps per person between frames. */
+export interface MotionState {
+  /** Real seconds (for breathing). */
+  t: number;
+  /** Walking amount 0…1 and stride (hip swing, radians), eased. */
+  walk: number;
+  amp: number;
+  /** Pelvis offsets from the gait (sideways, up, turn, tilt) and from crouching (down). */
+  px: number;
+  py: number;
+  pyaw: number;
+  proll: number;
+  drop: number;
+  /** Feet's pitch in the world (from the gait), set level at the end. */
+  footL: number;
+  footR: number;
+  /** Ponytail spring: angle and speed (x and z). */
+  tx: number;
+  tvx: number;
+  tz: number;
+  tvz: number;
+  /** Last yaw and height (for the ponytail). */
+  yaw: number;
+  y: number;
+  /** A per-person seed 0…1 (rhythm of breathing and weight shift). */
+  seed: number;
 }
 
 export interface HumanLook {
@@ -59,21 +111,31 @@ function shapes(): Record<string, THREE.BufferGeometry> {
   // An arc over the top of the helmet, front to back, following the dome (the ridge).
   const ridge = new THREE.TorusGeometry(1, 0.11, 6, 20, Math.PI).rotateY(Math.PI / 2).scale(1, 0.84, 1.08).scale(0.128, 0.128, 0.128).translate(0, 0.79, 0);
   geo = {
-    // Leg (hip joint at the top): a tapering thigh, the knee, a calf with a bit of shape.
-    leg: lathe([[0, 0.02], [0.082, 0.0], [0.084, -0.08], [0.074, -0.25], [0.06, -0.42], [0.056, -0.46], [0.06, -0.55], [0.057, -0.66], [0.044, -0.8], [0.042, -0.84], [0, -0.84]], 0.95, 0, 14),
-    // Safety boot: rounded upper, toe cap, and a thick dark sole (the sole is its own part).
-    boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)),
-    sole: box(0.12, 0.03, 0.27, 0, -0.905, 0.04),
+    // Thigh (hip joint at the top), tapering down to the knee.
+    thigh: lathe([[0, 0.02], [0.082, 0.0], [0.084, -0.08], [0.074, -0.25], [0.06, -0.42], [0.058, -0.45], [0, -0.45]], 0.95, 0, 14),
+    // Shin (knee joint at the top): a round knee, so a bent knee shows no gap, and a calf with a bit of shape.
+    shin: merge(
+      lathe([[0, -0.4], [0.057, -0.41], [0.056, -0.46], [0.06, -0.55], [0.057, -0.66], [0.044, -0.8], [0.042, -0.84], [0, -0.84]], 0.95, 0, 14),
+      ell(0.059, 0.059, 0.056, 0, -0.42, 0, 12),
+    ).translate(0, KNEE, 0),
+    // Safety boot (ankle joint at the top): rounded upper, toe cap, and a thick dark sole (the sole is its own part).
+    boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)).translate(0, ANKLE, 0),
+    sole: box(0.12, 0.03, 0.27, 0, -0.905, 0.04).translate(0, ANKLE, 0),
     // Pelvis and torso (waist joint at the bottom): hips, a waist, the chest and sloping shoulders.
     // Hips (in the trousers' colour) and the torso: a waist, the chest and sloping shoulders.
     hips: ell(0.152, 0.1, 0.104, 0, 0.0, 0),
-    torso: lathe([[0, 0.02], [0.148, 0.02], [0.142, 0.12], [0.15, 0.25], [0.166, 0.36], [0.172, 0.43], [0.16, 0.49], [0.118, 0.535], [0.06, 0.56], [0, 0.565]], 0.64),
+    // The torso in two: the belly (waist joint) and the chest (lower-back joint). They
+    // overlap a little, the belly just inside, so bending the back shows no gap.
+    torso: lathe([[0, 0.02], [0.148, 0.02], [0.142, 0.12], [0.15, 0.25], [0.146, 0.3], [0, 0.3]], 0.64),
+    torsoU: lathe([[0, 0.2], [0.147, 0.2], [0.15, 0.25], [0.166, 0.36], [0.172, 0.43], [0.16, 0.49], [0.118, 0.535], [0.06, 0.56], [0, 0.565]], 0.64),
     collar: new THREE.TorusGeometry(0.058, 0.014, 6, 16).rotateX(Math.PI / 2).scale(1, 1, 0.9).translate(0, 0.555, 0.008),
     belt: lathe([[0.152, -0.03], [0.152, 0.03]], 0.66, 0.06),
     buckle: box(0.05, 0.035, 0.015, 0, 0.06, 0.1),
-    vest: lathe([[0.158, 0.08], [0.152, 0.14], [0.16, 0.25], [0.178, 0.38], [0.182, 0.45], [0.168, 0.51], [0.13, 0.545]], 0.68),
-    // Two reflective bands round the vest.
-    bands: merge(...[0.22, 0.36].map((y) => new THREE.CylinderGeometry(0.168, 0.164 + (y > 0.3 ? 0.012 : 0), 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, y, 0))),
+    vest: lathe([[0.158, 0.08], [0.152, 0.14], [0.16, 0.25], [0.155, 0.3]], 0.68),
+    vestU: lathe([[0.157, 0.2], [0.16, 0.25], [0.178, 0.38], [0.182, 0.45], [0.168, 0.51], [0.13, 0.545]], 0.68),
+    // Two reflective bands round the vest (one on the belly, one on the chest).
+    bands: new THREE.CylinderGeometry(0.168, 0.164, 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, 0.22, 0),
+    bandsU: new THREE.CylinderGeometry(0.168, 0.176, 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, 0.36, 0),
     // Arm (shoulder joint at the top): upper arm, elbow, forearm, wrist.
     // Upper arm (shoulder joint at the top), down to the elbow; a short sleeve's hem for staff.
     upper: lathe([[0, 0.05], [0.04, 0.045], [0.054, 0.0], [0.05, -0.1], [0.042, -0.24], [0.039, -0.29], [0, -0.3]], 0.9, 0, 12),
@@ -81,11 +143,12 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     // Forearm (elbow joint at the top) and the wrist.
     fore: lathe([[0, 0.03], [0.038, 0.02], [0.04, -0.05], [0.031, -0.22], [0.027, -0.26], [0, -0.265]], 0.88, 0, 12),
     // Hand: palm, four fingers slightly curled, and the thumb forward.
+    // (Wrist joint at the top.)
     hand: merge(
       new RoundedBoxGeometry(0.055, 0.065, 0.026, 2, 0.01).translate(0, -0.3, 0),
       ...[-0.019, -0.006, 0.007, 0.019].map((x, i) => new THREE.CapsuleGeometry(0.0068, 0.04 - Math.abs(i - 1.5) * 0.006, 2, 6).rotateX(0.25).translate(x, -0.355, 0.006)),
       new THREE.CapsuleGeometry(0.008, 0.03, 2, 6).rotateZ(0.5).rotateX(-0.4).translate(-0.028, -0.3, 0.016),
-    ),
+    ).translate(0, WRIST, 0),
     // Workers: a cuff where the glove starts; and a radio on the belt.
     cuff: lathe([[0.03, -0.235], [0.033, -0.255], [0.03, -0.27]], 0.88, 0, 10),
     radio: merge(box(0.05, 0.1, 0.03, 0.12, 0.08, 0.09), box(0.008, 0.06, 0.008, 0.135, 0.16, 0.09)),
@@ -103,7 +166,8 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     jacketButtons: merge(ball(0.007, 0, 0.3, 0.104, 5), ball(0.007, 0, 0.24, 0.1, 5)),
     // Trousers: back pockets and a crease down the front of each leg.
     pockets: merge(box(0.075, 0.08, 0.008, -0.075, -0.03, -0.1), box(0.075, 0.08, 0.008, 0.075, -0.03, -0.1)),
-    crease: box(0.006, 0.7, 0.006, 0, -0.42, 0.072),
+    crease: box(0.006, 0.35, 0.006, 0, -0.245, 0.072),
+    creaseS: box(0.006, 0.35, 0.006, 0, -0.175, 0.056),
     neck: new THREE.CylinderGeometry(0.044, 0.05, 0.11, 12).translate(0, 0.62, 0.005),
     // Head: skull, jaw and chin, cheeks, ears and a nose.
     head: merge(
@@ -133,10 +197,9 @@ function shapes(): Record<string, THREE.BufferGeometry> {
       ell(0.07, 0.022, 0.03, 0.02, 0.83, 0.07, 8),
     ),
     // A ponytail at the back.
-    hairTail: merge(
-      new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.1, 0.12, 0.11).translate(0, 0.756, -0.004),
-      new THREE.CapsuleGeometry(0.026, 0.12, 3, 8).rotateX(0.35).translate(0, 0.69, -0.12),
-    ),
+    hairTail: new THREE.SphereGeometry(1, 16, 10, Math.PI * 0.95, Math.PI * 1.1, 0, Math.PI * 0.58).scale(0.1, 0.12, 0.11).translate(0, 0.756, -0.004),
+    // The tail itself hangs from its own joint (TAIL), so it can swing.
+    tail: new THREE.CapsuleGeometry(0.026, 0.12, 3, 8).rotateX(0.35).translate(0, -0.08, -0.03),
     helmet: merge(new THREE.SphereGeometry(1, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.122, 0.106, 0.134).translate(0, 0.79, 0), ridge),
     brim: lathe([[0.118, 0.0], [0.15, -0.012], [0.15, -0.024], [0.118, -0.012]], 1.08, 0.795, 20).translate(0, 0, 0.01),
     cap: new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.3).scale(0.104, 0.1, 0.112).translate(0, 0.79, 0),
@@ -152,11 +215,26 @@ function shapes(): Record<string, THREE.BufferGeometry> {
   };
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
   for (const key of ['head', 'eyes', 'face', 'hair', 'hairLong', 'hairTail', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
+  // The chest, and everything on it, hangs from the lower back.
+  for (const key of ['torsoU', 'collar', 'vestU', 'bandsU', 'neck', 'lanyard', 'badge', 'buttons', 'shirtV', 'lapels', 'tie', 'jacketButtons', 'sack']) geo[key]!.translate(0, -CHEST_Y, 0);
   return geo;
 }
 
 /** Height of the neck joint in the torso. */
 const NECK_Y = 0.6;
+/** Height of the lower-back joint in the torso. */
+const CHEST_Y = 0.25;
+/** Hip to knee, knee to ankle, elbow to wrist (the joints' offsets). */
+export const KNEE = 0.42;
+export const ANKLE = 0.4;
+export const WRIST = 0.265;
+/** Shoulder to elbow, and elbow to the middle of the palm (for reaching). */
+export const UPPER_ARM = 0.29;
+export const FOREARM = 0.3;
+/** Hip height (the pelvis above the root). */
+export const HIP_Y = 0.92;
+/** Where the ponytail hangs from, on the head. */
+const TAIL = new THREE.Vector3(0, 0.17, -0.09);
 
 /** A floppy hat: a cone that bends back, the tip lower down behind. */
 function santaHat(r: number, y: number): THREE.BufferGeometry {
@@ -209,47 +287,67 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     parent.add(j);
     return j;
   };
-  const legL = joint(root, -0.085, 0.92, 0);
-  const legR = joint(root, 0.085, 0.92, 0);
+  const pelvis = joint(root, 0, HIP_Y, 0);
+  const legL = joint(pelvis, -0.085, 0, 0);
+  const legR = joint(pelvis, 0.085, 0, 0);
+  const knees: THREE.Group[] = [];
+  const feet: THREE.Group[] = [];
   for (const l of [legL, legR]) {
-    add(l, g.leg!, M.cloth, look.trousers);
-    add(l, g.boot!, M.boots);
-    add(l, g.sole!, M.dark);
+    add(l, g.thigh!, M.cloth, look.trousers);
+    add(l, g.crease!, M.cloth, look.trousers);
+    const kn = joint(l, 0, -KNEE, 0);
+    add(kn, g.shin!, M.cloth, look.trousers);
+    add(kn, g.creaseS!, M.cloth, look.trousers);
+    const f = joint(kn, 0, -ANKLE, 0);
+    add(f, g.boot!, M.boots);
+    add(f, g.sole!, M.dark);
+    knees.push(kn);
+    feet.push(f);
   }
-  const torso = joint(root, 0, 0.92, 0);
+  const torso = joint(pelvis, 0, 0, 0);
+  const chest = joint(torso, 0, CHEST_Y, 0);
   add(torso, g.hips!, M.cloth, look.trousers);
   add(torso, g.torso!, M.cloth, look.shirt);
-  add(torso, g.collar!, M.cloth, look.shirt);
+  add(chest, g.torsoU!, M.cloth, look.shirt);
+  add(chest, g.collar!, M.cloth, look.shirt);
   add(torso, g.belt!, M.dark);
   add(torso, g.buckle!, M.hard, 0xb9c0c8);
   if (look.vest !== undefined) {
     add(torso, g.vest!, M.vest, look.vest);
+    add(chest, g.vestU!, M.vest, look.vest);
     add(torso, g.bands!, M.reflect);
+    add(chest, g.bandsU!, M.reflect);
   }
-  add(torso, g.neck!, M.skin, skin);
+  add(chest, g.neck!, M.skin, skin);
   const worker = look.vest !== undefined;
   if (worker) add(torso, g.radio!, M.dark);
   else if (look.suit) {
-    add(torso, g.shirtV!, M.cloth, 0xffffff);
-    add(torso, g.lapels!, M.cloth, look.shirt);
-    add(torso, g.tie!, M.cloth, look.suit.tie);
-    add(torso, g.jacketButtons!, M.dark);
+    add(chest, g.shirtV!, M.cloth, 0xffffff);
+    add(chest, g.lapels!, M.cloth, look.shirt);
+    add(chest, g.tie!, M.cloth, look.suit.tie);
+    add(chest, g.jacketButtons!, M.dark);
   } else {
-    add(torso, g.lanyard!, M.cloth, 0x1755fe);
-    add(torso, g.badge!, M.cloth, 0xffffff);
-    add(torso, g.buttons!, M.cloth, 0xf3f4f6);
+    add(chest, g.lanyard!, M.cloth, 0x1755fe);
+    add(chest, g.badge!, M.cloth, 0xffffff);
+    add(chest, g.buttons!, M.cloth, 0xf3f4f6);
   }
   add(torso, g.pockets!, M.cloth, look.trousers);
-  const head = joint(torso, 0, NECK_Y, 0);
+  const head = joint(chest, 0, NECK_Y - CHEST_Y, 0);
   add(head, g.head!, M.skin, skin);
   add(head, g.eyes!, M.cloth, 0xf6f6f2);
   add(head, g.face!, M.dark);
   const seed = Math.abs((look.shirt * 7 + (look.skin ?? 0) * 13 + HUMANS.length * 31) | 0);
   const hair = look.hair ?? HAIR[seed % HAIR.length]!;
-  add(head, [g.hair!, g.hairLong!, g.hairTail!][look.hairStyle ?? Math.floor(seed / 7) % 3]!, M.cloth, hair);
+  const style = look.hairStyle ?? Math.floor(seed / 7) % 3;
+  add(head, [g.hair!, g.hairLong!, g.hairTail!][style]!, M.cloth, hair);
+  let tail: THREE.Group | null = null;
+  if (style === 2) {
+    tail = joint(head, TAIL.x, TAIL.y, TAIL.z);
+    add(tail, g.tail!, M.cloth, hair);
+  }
   if (look.santa) {
     add(head, g.beard!, M.cloth, 0xffffff);
-    add(torso, g.sack!, M.cloth, 0x8a5a2a);
+    add(chest, g.sack!, M.cloth, 0x8a5a2a);
   }
   if (XMAS || look.santa) {
     // Christmas hats for everyone (over the helmet for workers).
@@ -265,12 +363,13 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(head, g.cap!, M.cloth, c);
     add(head, g.peak!, M.cloth, c);
   }
-  const armL = joint(torso, -0.182, 0.465, 0);
-  const armR = joint(torso, 0.182, 0.465, 0);
+  const armL = joint(chest, -0.182, 0.465 - CHEST_Y, 0);
+  const armR = joint(chest, 0.182, 0.465 - CHEST_Y, 0);
   // Arms hang a little away from the body.
   armL.rotation.z = -0.07;
   armR.rotation.z = 0.07;
   const fores: THREE.Group[] = [];
+  const hands: THREE.Group[] = [];
   for (const a of [armL, armR]) {
     add(a, g.upper!, M.cloth, look.shirt);
     if (!worker && !look.suit) add(a, g.sleeve!, M.cloth, look.shirt);
@@ -283,9 +382,10 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(f, g.fore!, worker || look.suit ? M.cloth : M.skin, worker || look.suit ? look.shirt : skin);
     if (look.suit) add(f, g.cuff!, M.cloth, 0xffffff);
     if (worker) add(f, g.cuff!, M.cloth, 0x3a3d44);
-    add(f, g.hand!, worker ? M.cloth : M.skin, worker ? 0x3a3d44 : skin);
+    const hd = joint(f, 0, -WRIST, 0);
+    add(hd, g.hand!, worker ? M.cloth : M.skin, worker ? 0x3a3d44 : skin);
+    hands.push(hd);
   }
-  for (const l of [legL, legR]) add(l, g.crease!, M.cloth, look.trousers);
   k.blobUnder(root, 0.8, 0.6);
   HUMANS.push(root);
   if (at) {
@@ -293,5 +393,9 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     root.rotation.y = at.ry;
     k.put(root);
   }
-  return { root, torso, armL, armR, foreL: fores[0]!, foreR: fores[1]!, head, legL, legR };
+  const m: MotionState = { t: 0, walk: 0, amp: 0, px: 0, py: 0, pyaw: 0, proll: 0, drop: 0, footL: 0, footR: 0, tx: 0, tvx: 0, tz: 0, tvz: 0, yaw: 0, y: 0, seed: (seed % 997) / 997 };
+  return {
+    root, pelvis, torso, chest, armL, armR, foreL: fores[0]!, foreR: fores[1]!, head, legL, legR,
+    kneeL: knees[0]!, kneeR: knees[1]!, footL: feet[0]!, footR: feet[1]!, handL: hands[0]!, handR: hands[1]!, tail, m,
+  };
 }

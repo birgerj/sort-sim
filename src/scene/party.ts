@@ -5,6 +5,7 @@ import * as THREE from 'three';
 
 import type { FloorKit } from './floor';
 import { buildHuman, type Human } from './people';
+import { crouch, gait, settle } from './motion';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export interface PartyInput {
@@ -175,12 +176,16 @@ export class Party {
     const o = this.o;
     // DJ: bounce on the kick, nod, one hand on the deck, the other up on the snare.
     const d = this.dj;
-    d.root.position.copy(this.djBase).setY(this.djBase.y + 0.06 * s.kick);
+    d.root.position.copy(this.djBase);
     d.torso.rotation.x = 0.12 * s.kick;
+    d.head.rotation.x = 0.25 * s.kick;
     d.armL.rotation.x = -1.1;
+    d.foreL.rotation.x = -0.5;
     d.armR.rotation.x = -1.2 - 1.6 * s.snare;
-    d.legL.rotation.x = -0.1 * s.kick;
-    d.legR.rotation.x = 0.1 * s.kick;
+    // Down in the knees on the kick.
+    gait(d, dt, 0, 0);
+    crouch(d, 0.35 * s.kick);
+    settle(d, dt, { idle: 0.4 });
     this.panel.color.copy(s.cols[Math.floor(bt) % s.cols.length]!).multiplyScalar(0.6 + s.kick * 1.4);
     // Decks: the jog wheels turn (one a little faster: beat matching), play blinks on the beat, cue on the off-beat.
     this.jogs.forEach((j, i) => (j.rotation.y = -bt * (1.6 + i * 0.03)));

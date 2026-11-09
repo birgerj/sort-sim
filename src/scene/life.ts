@@ -12,6 +12,7 @@ import type { FloorKit } from './floor';
 import { buildForklift } from './forklift';
 import { XMAS } from '../sim/season';
 import { buildHuman, type Human } from './people';
+import { gait, relaxArms, settle, sit, swingArms } from './motion';
 
 type V2 = [number, number];
 
@@ -101,19 +102,22 @@ export class Life {
         w.seated.rotation.y = w.yaw;
         continue;
       }
-      // Two steps per beat.
-      const swing = Math.sin(bt * Math.PI * 2) * 0.45;
-      w.h.legL.rotation.x = swing;
-      w.h.legR.rotation.x = -swing;
-      w.h.armL.rotation.x = -swing * 0.7;
-      w.h.armR.rotation.x = w.h.armR.userData.hold ? -0.9 : swing * 0.7;
+      // One step per beat; the stride follows the walking speed.
+      const swing = gait(w.h, dt, Math.PI * bt + w.h.m.seed * 6.28, w.speed);
       if (w.h.armR.userData.wave) {
         // Father Christmas waves (and carries his sack with the other hand).
         w.h.armR.rotation.x = -2.7;
         w.h.armR.rotation.z = 0.25 + Math.sin(bt * Math.PI * 2) * 0.35;
+        w.h.foreR.rotation.x = -0.3 - 0.25 * Math.sin(bt * Math.PI * 2);
         w.h.armL.rotation.x = -0.35;
-      }
-      w.h.root.position.y = Math.abs(Math.cos(bt * Math.PI * 2)) * 0.03;
+      } else if (w.h.armR.userData.hold) {
+        // The tablet stays in front; the other arm swings.
+        swingArms(w.h, swing, 1);
+        w.h.armR.rotation.x = -0.5;
+        w.h.foreR.rotation.x = -1.2;
+        relaxArms(w.h, 1);
+      } else swingArms(w.h, swing, 1);
+      settle(w.h, dt);
     }
   }
 
@@ -134,7 +138,8 @@ export class Life {
       if (tablet) {
         const t = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.02, 0.2), k.std(0x1d1d1f, 0.4, 0.2, 0x1d1d1f));
         t.position.set(0, -0.3, 0.1);
-        h.foreR.add(t);
+        t.position.set(0, -0.03, 0.1);
+        h.handR.add(t);
         h.foreR.rotation.x = -1.2;
         h.armR.userData.hold = true;
       }
@@ -169,8 +174,7 @@ export class Life {
     this.k.blobUnder(sc, 1.6, 2.2);
     const driver = buildHuman(this.k, { shirt: 0x1755fe, trousers: 0x22283f, cap: 0x2fa58f });
     driver.root.position.set(0, 0.0, -0.2);
-    driver.legL.rotation.x = driver.legR.rotation.x = -1.4;
-    driver.armL.rotation.x = driver.armR.rotation.x = -0.9;
+    sit(driver);
     for (const c of [...driver.root.children]) if (c.userData.noInk) driver.root.remove(c);
     const seat = new THREE.Group();
     seat.add(driver.root);

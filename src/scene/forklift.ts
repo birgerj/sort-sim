@@ -8,6 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
 import { buildHuman } from './people';
+import { sit } from './motion';
 import { XMAS } from '../sim/season';
 
 export interface ForkliftModel {
@@ -140,9 +141,8 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   // The driver, seated.
   const d = buildHuman(k, { shirt: 0x2f3b6b, trousers: 0x22283f, vest: 0xc8ff3a, helmet: 0xffffff });
   d.root.position.set(0, 0.18, -0.2);
-  d.legL.rotation.x = d.legR.rotation.x = -1.4;
-  d.legL.position.y = d.legR.position.y = 0.82;
-  d.armL.rotation.x = d.armR.rotation.x = -0.9;
+  sit(d);
+  d.legL.position.y = d.legR.position.y = -0.1;
   // (No floor shadow for someone on a seat.)
   for (const c of [...d.root.children]) if (c.userData.noInk) d.root.remove(c);
   g.add(d.root);
