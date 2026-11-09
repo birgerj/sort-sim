@@ -2,7 +2,7 @@
 // It is the referee for balance (par scores per seed) and the preview the briefing
 // and the move dialogs show ("−64 late parcels"). The 3D sim plays the same rules
 // in detail; small differences are absorbed by clamping the shown score at 1000.
-import { HOURS, type Night } from './night';
+import { announced, HOURS, type Night } from './night';
 
 export const NORTH_DOORS = 20;
 export const ROBOT_DOORS = 20;
@@ -32,7 +32,7 @@ export const POINTS = { onTime: 10, late: -30, fullTrailer: 150, hold: -100 };
 /** What the player can do during the night (hour 0 = 22:00–23:00). */
 export type Move =
   | { kind: 'swap'; hour: number; from: number; to: number } // a north door to another city (max 2)
-  | { kind: 'go'; hour: number; city: number } // 01:00 or 05:00: a ≥90% full trailer leaves an hour early, a spare backs in (max 3)
+  | { kind: 'go'; hour: number; city: number } // 00:00 or 04:00: a ≥90% full trailer leaves early, a short spare backs in (max 2)
   | { kind: 'hold'; city: number; window: 0 | 1 } // the city's trailers wait 10 min: +25 parcels, −100
   | { kind: 'forklift'; hour: number } // forklifts first to the robots' full boxes: +25 that hour (max 2)
   | { kind: 'release'; hour: number }; // free the store reserve now (it frees itself at 02:00)
@@ -58,9 +58,11 @@ export const MAX_SWAPS = 1;
 /** Forklift priority calls per night (the forklifts have their own round). */
 export const MAX_FORKLIFT = 2;
 /** Spare trailers in the yard: a 'go' needs one (it is staged at once). */
-export const MAX_GO = 3;
+export const MAX_GO = 1;
+/** The spare trailer after a go: a short one, a quarter of the room. */
+const SPARE = 0.25;
 /** Door swaps unlock at 00:00 (hour 2): the plan stands for the first two hours. */
-export const SWAP_FROM = 2;
+export const SWAP_FROM = 4;
 
 export function validPlan(p: Plan): boolean {
   const n = p.doors.reduce((a, b) => a + b, 0);
@@ -72,7 +74,7 @@ export function validPlan(p: Plan): boolean {
  * Plays the night. `actual` false = the forecast only (the briefing's estimate):
  * no drift, the late inbound as announced, no unannounced events.
  */
-export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true): Result {
+export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true, what?: { unsure: number }): Result {
   const C = night.cities;
   const n = C.length;
   const doors = plan.doors.map((d) => Array<number>(HOURS).fill(d));
@@ -80,6 +82,7 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
   const inb = C.map((c) =>
     PROFILE.map((p, h) => {
       let v = c.forecast * p;
+      if (!actual && what && c.unsure && h >= 2) v *= 1 + what.unsure; // a planner's what-if
       if (actual && c.drift && h >= c.driftFrom) {
         const rest = PROFILE.slice(c.driftFrom).reduce((a, b) => a + b, 0);
         v *= 1 + c.drift / rest; // the whole night's drift lands after it shows
@@ -93,7 +96,7 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
   let lateIn = 0;
   for (const e of night.events) {
     if (e.kind === 'lateInbound') lateIn = actual ? e.actual : e.forecast;
-    if (!actual) continue;
+    if (!actual && !announced(e)) continue;
     if (e.kind === 'robotsDown') for (let h = e.hour; h < Math.min(HOURS, e.hour + e.hours); h++) robotH[h] = robotH[h]! * (1 - e.share);
     if (e.kind === 'lateTrailer') doorFactor[e.city]![e.hour] = 0;
     if (e.kind === 'earlyCutoff') doorFactor[e.city]![7] = 0.5;
@@ -114,11 +117,12 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
     if (m.kind === 'swap' && swaps < MAX_SWAPS && m.hour >= SWAP_FROM && doors[m.from]![m.hour]! > 0 && plan.doors[m.to]! > 0) {
       swaps++;
       for (let h = m.hour; h < HOURS; h++) doors[m.from]![h]!--;
-      for (let h = m.hour + 2; h < HOURS; h++) doors[m.to]![h]!++;
+      // The moved door runs with a borrowed crew and a half trailer: half a door.
+      for (let h = m.hour + 2; h < HOURS; h++) doors[m.to]![h]! += 0.5;
     }
     if (m.kind === 'forklift' && forklifts < MAX_FORKLIFT) {
       forklifts++;
-      robotH[m.hour] = robotH[m.hour]! + 25;
+      robotH[m.hour] = robotH[m.hour]! + 15;
     }
     if (m.kind === 'release') releaseAt = Math.min(releaseAt, m.hour);
     if (m.kind === 'hold' && !hold.has(`${m.city}/${m.window}`)) {
@@ -134,6 +138,7 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
 
   const chute = Array<number>(n).fill(0); // waiting at the city's chutes
   const loaded = Array<number>(n).fill(0); // in the current trailer(s)
+  const short = Array<boolean>(n).fill(false); // a go swapped in a short spare
   let store = 0;
   let recirc = 0;
   let robotQ = 0;
@@ -167,7 +172,8 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
       const g = goAt.get(`${i}/${w}`);
       // The hour after a go, the spare trailer is still being backed in: half speed.
       const cap = d * LOAD_H * doorFactor[i]![h]! * (g !== undefined && g === h - 1 ? 0.5 : 1);
-      const room = d * TRAILER + (hold.has(`${i}/${w}`) ? 40 : 0) - loaded[i]!;
+      const tcap = d * TRAILER * (short[i] ? SPARE : 1);
+      const room = tcap + (hold.has(`${i}/${w}`) ? 25 : 0) - loaded[i]!;
       // Load: chute first, then from the store (released), then new arrivals.
       let want = chute[i]! + arr[i]!;
       const fromStore = h >= releaseAt || h >= 4 ? Math.min(storeOf[i]!, Math.max(0, Math.min(cap, room) - want)) : 0;
@@ -186,9 +192,11 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
       storeOf[i]! += toStore;
       recirc += spill - toStore;
       // A go this hour: the trailer leaves now if it is full enough.
-      if (g === h && loaded[i]! >= FULL * d * TRAILER) {
+      if (g === h && !short[i] && loaded[i]! >= FULL * tcap) {
         full += d;
+        // The spare in the yard is a short trailer (five cages): half the room.
         loaded[i] = 0;
+        short[i] = true;
       }
     }
     // Robots.
@@ -217,8 +225,9 @@ export function play(night: Night, plan: Plan, moves: Move[] = [], actual = true
       for (let i = 0; i < n; i++) {
         const d = doors[i]![h]!;
         if (d === 0) continue;
-        if (loaded[i]! >= FULL * d * TRAILER) full += d;
+        if (loaded[i]! >= FULL * d * TRAILER * (short[i] ? SPARE : 1)) full += short[i] ? d * SPARE : d;
         loaded[i] = 0;
+        short[i] = false;
       }
     }
     lateByHour.push(late);

@@ -21,16 +21,21 @@ export interface NightCity {
   driftFrom: number;
   /** Doors in the hall as it stands (0 = robots), from inhabitants: planDoors. */
   standing: number;
+  /** Marked 'uncertain' in the briefing: it may drift either way (or not at all). */
+  unsure: boolean;
 }
 
 export type NightEvent =
-  /** Shown on the timeline from the briefing on. */
+  // Announced in the briefing (on the timeline from the start):
   | { kind: 'lateInbound'; hour: number; forecast: number; actual: number }
-  /** Shown when they happen. */
+  | { kind: 'robotsDown'; hour: number; hours: number; share: number } // planned robot maintenance
+  | { kind: 'earlyCutoff'; hour: number; city: number } // a carrier leaves at 05:30
+  // Only shown when they happen:
   | { kind: 'drift'; hour: number; city: number; delta: number }
-  | { kind: 'robotsDown'; hour: number; hours: number; share: number }
-  | { kind: 'lateTrailer'; hour: number; city: number }
-  | { kind: 'earlyCutoff'; hour: number; city: number };
+  | { kind: 'lateTrailer'; hour: number; city: number };
+
+/** Events the planner sees in the briefing. */
+export const announced = (e: NightEvent) => e.kind === 'lateInbound' || e.kind === 'robotsDown' || e.kind === 'earlyCutoff';
 
 export interface Night {
   seed: string;
@@ -56,7 +61,7 @@ export function makeNight(s: NightSeed): Night {
   const cities: NightCity[] = [
     ...north.map((c, i) => ({ name: c.name, base: (NIGHT_PARCELS * NORTH_SHARE * c.pop) / popN, standing: doors[i]! })),
     ...south.map((c) => ({ name: c.name, base: (NIGHT_PARCELS * (1 - NORTH_SHARE) * c.pop) / popS, standing: 0 })),
-  ].map((c) => ({ name: c.name, forecast: Math.round(c.base), tag: '', drift: 0, driftFrom: 0, standing: c.standing }));
+  ].map((c) => ({ name: c.name, forecast: Math.round(c.base), tag: '', drift: 0, driftFrom: 0, standing: c.standing, unsure: false }));
 
   // Forecast twists (known in the briefing): two or three up, one or two down.
   const pickCity = (from = 0, to = cities.length - 1, not: Set<number> = new Set()) => {
@@ -93,7 +98,11 @@ export function makeNight(s: NightSeed): Night {
     cities[i]!.drift = delta;
     cities[i]!.driftFrom = hour;
     events.push({ kind: 'drift', hour, city: i, delta });
+    // Two of the three are flagged 'uncertain' in the briefing (direction unknown).
+    if (k < 2) cities[i]!.unsure = true;
   }
+  // …and one city that is flagged but holds to its forecast.
+  cities[pickCity(0, cities.length - 1, drifted)]!.unsure = true;
   if (rng.chance(0.7)) events.push({ kind: 'robotsDown', hour: ri(3, 5), hours: 2, share: r(0.1, 0.2) });
   if (rng.chance(0.6)) events.push({ kind: 'lateTrailer', hour: ri(4, 6), city: ri(0, north.length - 1) });
   if (rng.chance(0.5)) events.push({ kind: 'earlyCutoff', hour: 6, city: ri(0, north.length - 1) });

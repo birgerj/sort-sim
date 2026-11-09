@@ -11,13 +11,20 @@ export const MAX_MOVES = 10;
 
 export const standingPlan = (night: Night): Plan => ({ doors: night.cities.map((c) => c.standing), reserve: STANDING_RESERVE });
 
-/** Hill climb on the forecast: what a perfect planner can know before 22:00. */
+/**
+ * What a planner can expect from a plan: the forecast with the announced events,
+ * averaged with the 'uncertain' cities running 15% over and 15% under.
+ */
+export const expected = (night: Night, p: Plan) =>
+  (play(night, p, [], false).raw + play(night, p, [], false, { unsure: 0.15 }).raw + play(night, p, [], false, { unsure: -0.15 }).raw) / 3;
+
+/** Hill climb on the briefing's knowledge: what a perfect planner can know before 22:00. */
 export function bestPlan(night: Night): Plan {
   let best: Plan | null = null;
   let bestRaw = -Infinity;
   for (const reserve of RESERVES) {
     let p: Plan = { doors: night.cities.map((c) => c.standing), reserve };
-    let cur = play(night, p, [], false).raw;
+    let cur = expected(night, p);
     for (let improved = true; improved; ) {
       improved = false;
       for (let i = 0; i < p.doors.length; i++) {
@@ -29,7 +36,7 @@ export function bestPlan(night: Night): Plan {
           d[j]!++;
           const q = { doors: d, reserve };
           if (!validPlan(q)) continue;
-          const s = play(night, q, [], false).raw;
+          const s = expected(night, q);
           if (s > cur) {
             p = q;
             cur = s;

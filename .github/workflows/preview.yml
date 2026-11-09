@@ -1,0 +1,24 @@
+name: Preview
+
+# Tests and builds the test branch. When it passes, the Pages workflow on main
+# (workflow_run) builds this branch into /next/ next to the live site.
+on:
+  push:
+    branches: [night-shift-game]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
