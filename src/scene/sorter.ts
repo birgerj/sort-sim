@@ -1753,7 +1753,8 @@ export class Sorter implements Scene3D {
       sc.right = sc.top = 115;
       sc.near = 1;
       sc.far = 320;
-      sun.shadow.mapSize.setScalar(hq ? 4096 : 2048);
+      // (2048 even on high: a 4096 depth map is 64 MB, too much for many phones.)
+      sun.shadow.mapSize.setScalar(2048);
       sun.shadow.normalBias = 0.06;
       sun.shadow.bias = -0.0004;
       this.renderer.shadowMap.autoUpdate = false;

@@ -25,9 +25,30 @@ import { WalkControls } from './ui/walk';
 import { GameUi } from './ui/game';
 
 const q = new URLSearchParams(location.search);
+
+// When something goes wrong, say so on screen (phones have no console to look in): a script error,
+// or the graphics chip dropping the WebGL context (usually out of memory), which leaves a black canvas.
+function showProblem(title: string, detail: string): void {
+  let box = document.getElementById('problem');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'problem';
+    box.style.cssText =
+      'position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;padding:12px 14px;border-radius:10px;background:#2b1b1b;color:#ffd9d9;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap;max-height:40vh;overflow:auto';
+    document.body.append(box);
+  }
+  box.textContent = `${title}\n${detail}\n\nTry ?quality=low or ?look=minimal in the address, or reload.`;
+}
+window.addEventListener('error', (e) => showProblem('Something went wrong', `${e.message}\n${e.filename?.split('/').pop() ?? ''}:${e.lineno}:${e.colno}`));
+window.addEventListener('unhandledrejection', (e) => showProblem('Something went wrong', String((e.reason as Error)?.stack ?? e.reason)));
 const app = document.getElementById('app')!;
 const scene = new Sorter();
 app.append(scene.canvas);
+scene.canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  showProblem('The graphics were reset (WebGL context lost)', `Quality: ${loadSettings().quality}, look: ${loadSettings().look ?? 'minimal'}. This is usually the device running out of graphics memory.`);
+});
+scene.canvas.addEventListener('webglcontextrestored', () => location.reload());
 const walk = new WalkControls(scene, scene.canvas);
 const music = new Music();
 const settings = loadSettings();
