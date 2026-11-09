@@ -5,15 +5,15 @@
 // few hair styles, and staff wear short sleeves and a badge on a lanyard; workers
 // long sleeves, gloves and a radio.
 //
-// Every part is a proxy in an instanced batch (`kit.batch`), so more joints cost
-// no draw calls per person: only a few more matrices to copy each frame.
+// Each person is one skinned mesh (one draw call): continuous legs, torso and
+// arms that bend at the joints, and rigid boots, hands, head and gear. Colours
+// are per vertex, so everyone shares one material.
 import * as THREE from 'three';
 
 import type { FloorKit } from './floor';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-import { hiVis } from './textures';
 import { XMAS } from '../sim/season';
 
 export interface Human {
@@ -111,23 +111,9 @@ function shapes(): Record<string, THREE.BufferGeometry> {
   // An arc over the top of the helmet, front to back, following the dome (the ridge).
   const ridge = new THREE.TorusGeometry(1, 0.11, 6, 20, Math.PI).rotateY(Math.PI / 2).scale(1, 0.84, 1.08).scale(0.128, 0.128, 0.128).translate(0, 0.79, 0);
   geo = {
-    // Thigh (hip joint at the top), tapering down to the knee.
-    thigh: lathe([[0, 0.02], [0.082, 0.0], [0.084, -0.08], [0.074, -0.25], [0.06, -0.42], [0.058, -0.45], [0, -0.45]], 0.95, 0, 14),
-    // Shin (knee joint at the top): a round knee, so a bent knee shows no gap, and a calf with a bit of shape.
-    shin: merge(
-      lathe([[0, -0.4], [0.057, -0.41], [0.056, -0.46], [0.06, -0.55], [0.057, -0.66], [0.044, -0.8], [0.042, -0.84], [0, -0.84]], 0.95, 0, 14),
-      ell(0.059, 0.059, 0.056, 0, -0.42, 0, 12),
-    ).translate(0, KNEE, 0),
     // Safety boot (ankle joint at the top): rounded upper, toe cap, and a thick dark sole (the sole is its own part).
     boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)).translate(0, ANKLE, 0),
     sole: box(0.12, 0.03, 0.27, 0, -0.905, 0.04).translate(0, ANKLE, 0),
-    // Pelvis and torso (waist joint at the bottom): hips, a waist, the chest and sloping shoulders.
-    // Hips (in the trousers' colour) and the torso: a waist, the chest and sloping shoulders.
-    hips: ell(0.152, 0.1, 0.104, 0, 0.0, 0),
-    // The torso in two: the belly (waist joint) and the chest (lower-back joint). They
-    // overlap a little, the belly just inside, so bending the back shows no gap.
-    torso: lathe([[0, 0.02], [0.148, 0.02], [0.142, 0.12], [0.15, 0.25], [0.146, 0.3], [0, 0.3]], 0.64),
-    torsoU: lathe([[0, 0.2], [0.147, 0.2], [0.15, 0.25], [0.166, 0.36], [0.172, 0.43], [0.16, 0.49], [0.118, 0.535], [0.06, 0.56], [0, 0.565]], 0.64),
     collar: new THREE.TorusGeometry(0.058, 0.014, 6, 16).rotateX(Math.PI / 2).scale(1, 1, 0.9).translate(0, 0.555, 0.008),
     belt: lathe([[0.152, -0.03], [0.152, 0.03]], 0.66, 0.06),
     buckle: box(0.05, 0.035, 0.015, 0, 0.06, 0.1),
@@ -136,12 +122,7 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     // Two reflective bands round the vest (one on the belly, one on the chest).
     bands: new THREE.CylinderGeometry(0.168, 0.164, 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, 0.22, 0),
     bandsU: new THREE.CylinderGeometry(0.168, 0.176, 0.035, 18, 1, true).scale(1.0, 1, 0.7).translate(0, 0.36, 0),
-    // Arm (shoulder joint at the top): upper arm, elbow, forearm, wrist.
-    // Upper arm (shoulder joint at the top), down to the elbow; a short sleeve's hem for staff.
-    upper: lathe([[0, 0.05], [0.04, 0.045], [0.054, 0.0], [0.05, -0.1], [0.042, -0.24], [0.039, -0.29], [0, -0.3]], 0.9, 0, 12),
     sleeve: lathe([[0.056, -0.1], [0.058, -0.14], [0.05, -0.15]], 0.9, 0, 12),
-    // Forearm (elbow joint at the top) and the wrist.
-    fore: lathe([[0, 0.03], [0.038, 0.02], [0.04, -0.05], [0.031, -0.22], [0.027, -0.26], [0, -0.265]], 0.88, 0, 12),
     // Hand: palm, four fingers slightly curled, and the thumb forward.
     // (Wrist joint at the top.)
     hand: merge(
@@ -149,8 +130,6 @@ function shapes(): Record<string, THREE.BufferGeometry> {
       ...[-0.019, -0.006, 0.007, 0.019].map((x, i) => new THREE.CapsuleGeometry(0.0068, 0.04 - Math.abs(i - 1.5) * 0.006, 2, 6).rotateX(0.25).translate(x, -0.355, 0.006)),
       new THREE.CapsuleGeometry(0.008, 0.03, 2, 6).rotateZ(0.5).rotateX(-0.4).translate(-0.028, -0.3, 0.016),
     ).translate(0, WRIST, 0),
-    // Workers: a cuff where the glove starts; and a radio on the belt.
-    cuff: lathe([[0.03, -0.235], [0.033, -0.255], [0.03, -0.27]], 0.88, 0, 10),
     radio: merge(box(0.05, 0.1, 0.03, 0.12, 0.08, 0.09), box(0.008, 0.06, 0.008, 0.135, 0.16, 0.09)),
     // Staff: a lanyard round the neck and a badge on the chest; a row of shirt buttons.
     lanyard: new THREE.TorusGeometry(0.075, 0.004, 4, 16, Math.PI).rotateZ(Math.PI).scale(0.9, 1.9, 1).translate(0, 0.53, 0.105),
@@ -166,8 +145,6 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     jacketButtons: merge(ball(0.007, 0, 0.3, 0.104, 5), ball(0.007, 0, 0.24, 0.1, 5)),
     // Trousers: back pockets and a crease down the front of each leg.
     pockets: merge(box(0.075, 0.08, 0.008, -0.075, -0.03, -0.1), box(0.075, 0.08, 0.008, 0.075, -0.03, -0.1)),
-    crease: box(0.006, 0.35, 0.006, 0, -0.245, 0.072),
-    creaseS: box(0.006, 0.35, 0.006, 0, -0.175, 0.056),
     neck: new THREE.CylinderGeometry(0.044, 0.05, 0.11, 12).translate(0, 0.62, 0.005),
     // Head: skull, jaw and chin, cheeks, ears and a nose.
     head: merge(
@@ -212,11 +189,12 @@ function shapes(): Record<string, THREE.BufferGeometry> {
     // Father Christmas: a full white beard and moustache, and a sack over his shoulder.
     beard: merge(ell(0.085, 0.1, 0.06, 0, 0.66, 0.06, 12), ell(0.05, 0.018, 0.02, 0, 0.715, 0.1, 8)),
     sack: ell(0.2, 0.26, 0.17, 0.06, 0.48, -0.24, 12),
+
   };
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
   for (const key of ['head', 'eyes', 'face', 'hair', 'hairLong', 'hairTail', 'helmet', 'brim', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard']) geo[key]!.translate(0, -NECK_Y, 0);
   // The chest, and everything on it, hangs from the lower back.
-  for (const key of ['torsoU', 'collar', 'vestU', 'bandsU', 'neck', 'lanyard', 'badge', 'buttons', 'shirtV', 'lapels', 'tie', 'jacketButtons', 'sack']) geo[key]!.translate(0, -CHEST_Y, 0);
+  for (const key of ['collar', 'vestU', 'bandsU', 'neck', 'lanyard', 'badge', 'buttons', 'shirtV', 'lapels', 'tie', 'jacketButtons', 'sack']) geo[key]!.translate(0, -CHEST_Y, 0);
   return geo;
 }
 
@@ -252,35 +230,76 @@ function santaHat(r: number, y: number): THREE.BufferGeometry {
 
 const HAIR = [0x2a1d14, 0x4a3221, 0x7a5a3a, 0xc9a26a, 0x1b1b1d, 0x8f8f8f];
 
-/** A person standing at the root's origin (feet on the ground). Add the root yourself, or pass `at`. */
-/** White materials shared by everyone (colour comes per instance); one set per kit. */
-const sharedMats = new WeakMap<FloorKit, Record<'cloth' | 'skin' | 'boots' | 'hard' | 'vest' | 'dark' | 'reflect', THREE.Material>>();
+/** One white, vertex-coloured material per kit, shared by every person (one shader). */
+const bodyMats = new WeakMap<FloorKit, THREE.MeshStandardMaterial>();
 
 /** Every person built (their root), so a click can pick one to follow. */
 export const HUMANS: THREE.Object3D[] = [];
 
+/** 0 below a, 1 above b (or the other way round when b < a), smooth in between. */
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/** A profile (radius, height) with points added so no step is longer than `step`: rings that bend smoothly. */
+function dense(prof: [number, number][], step = 0.03): [number, number][] {
+  const out: [number, number][] = [prof[0]!];
+  for (let i = 1; i < prof.length; i++) {
+    const [r0, y0] = prof[i - 1]!;
+    const [r1, y1] = prof[i]!;
+    const n = Math.max(1, Math.ceil(Math.hypot(r1 - r0, y1 - y0) / step));
+    for (let k = 1; k <= n; k++) out.push([r0 + ((r1 - r0) * k) / n, y0 + ((y1 - y0) * k) / n]);
+  }
+  return out;
+}
+const lathe = (prof: [number, number][], depth: number, seg: number) =>
+  new THREE.LatheGeometry(dense(prof).map(([r, h]) => new THREE.Vector2(r, h)), seg).scale(1, 1, depth);
+
+// The skin: continuous shapes over the joints, so they bend instead of showing
+// sticks and balls. Built in the joints' own frames, like the parts in shapes().
+let skinGeo: Record<'leg' | 'torso' | 'arm', THREE.BufferGeometry> | null = null;
+function skins(): Record<'leg' | 'torso' | 'arm', THREE.BufferGeometry> {
+  return (skinGeo ??= {
+    // Hip to ankle: full thigh, the knee, a calf, a slim ankle (inside the boot).
+    leg: lathe([[0, 0.05], [0.06, 0.05], [0.09, 0.02], [0.096, -0.06], [0.09, -0.16], [0.082, -0.28], [0.071, -0.38], [0.066, -0.42], [0.066, -0.46], [0.071, -0.53], [0.069, -0.6], [0.06, -0.7], [0.053, -0.78], [0.052, -0.84], [0, -0.845]], 0.95, 16),
+    // Crotch to collar (waist joint at 0): seat and hips, waist, chest, sloping shoulders.
+    torso: lathe([[0, -0.11], [0.09, -0.1], [0.142, -0.06], [0.156, 0.0], [0.15, 0.05], [0.143, 0.12], [0.15, 0.25], [0.166, 0.36], [0.174, 0.43], [0.164, 0.49], [0.122, 0.535], [0.06, 0.56], [0, 0.565]], 0.66, 20),
+    // Shoulder to wrist: a round shoulder cap, upper arm, elbow, forearm, wrist.
+    arm: lathe([[0, 0.075], [0.04, 0.07], [0.061, 0.045], [0.066, 0.01], [0.062, -0.05], [0.056, -0.13], [0.051, -0.22], [0.047, -0.28], [0.046, -0.3], [0.048, -0.34], [0.047, -0.4], [0.041, -0.47], [0.035, -0.53], [0.033, -0.56], [0, -0.565]], 0.92, 14),
+  });
+}
+
+/** Which bones move a point of the skin, by its height at rest (y above the floor). */
+type Weights = [THREE.Object3D, number][];
+
+/**
+ * A person standing at the root's origin (feet on the ground). Add the root yourself, or pass `at`.
+ *
+ * The body is one skinned mesh (one draw call) on the joints of `Human`: the
+ * legs, torso and arms are continuous skins that bend at the knees, waist,
+ * lower back, neck, shoulders and elbows; boots, hands, head and everything
+ * worn ride rigidly on their joint. Colours are per vertex (trousers, shirt,
+ * skin, vest...), so all people share one material.
+ */
 export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: number; ry: number }): Human {
   const g = shapes();
-  let M = sharedMats.get(k);
-  if (!M) {
-    const vest = k.std(0xffffff, 0.6, 0, 0xffffff);
-    vest.map = hiVis();
-    M = {
-      cloth: k.std(0xffffff, 0.85, 0, 0xffffff),
-      skin: k.std(0xffffff, 0.9, 0, 0xffffff),
-      boots: k.std(0x2a2522, 0.7, 0, 0x2a2522),
-      hard: k.std(0xffffff, 0.4, 0, 0xffffff),
-      vest,
-      dark: k.std(0x15161a, 0.8, 0, 0x1d1d1f),
-      // Reflective tape: light grey by day, it catches the light at night.
-      reflect: k.std(0xd8dde3, 0.25, 0.6, 0xe9edf2),
-    };
-    sharedMats.set(k, M);
+  const sk = skins();
+  let mat = bodyMats.get(k);
+  if (!mat) {
+    mat = k.std(0xffffff, 0.8, 0, 0xffffff);
+    mat.vertexColors = true;
+    bodyMats.set(k, mat);
   }
   const skin = look.skin ?? 0xf0cfb0;
+  const worker = look.vest !== undefined;
+  const seed = Math.abs((look.shirt * 7 + (look.skin ?? 0) * 13 + HUMANS.length * 31) | 0);
+  const hair = look.hair ?? HAIR[seed % HAIR.length]!;
+  const style = look.hairStyle ?? Math.floor(seed / 7) % 3;
+  const glove = 0x3a3d44;
+
+  // The skeleton, at rest: straight, arms hanging down (the pose comes after binding).
   const root = new THREE.Group();
-  // Every part is instanced across all people, tinted per person.
-  const add = (parent: THREE.Object3D, geom: THREE.BufferGeometry, m: THREE.Material, color?: number) => k.batch(geom, m, parent, color);
   const joint = (parent: THREE.Object3D, x: number, y: number, z: number) => {
     const j = new THREE.Group();
     j.position.set(x, y, z);
@@ -290,102 +309,166 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const pelvis = joint(root, 0, HIP_Y, 0);
   const legL = joint(pelvis, -0.085, 0, 0);
   const legR = joint(pelvis, 0.085, 0, 0);
-  const knees: THREE.Group[] = [];
-  const feet: THREE.Group[] = [];
-  for (const l of [legL, legR]) {
-    add(l, g.thigh!, M.cloth, look.trousers);
-    add(l, g.crease!, M.cloth, look.trousers);
-    const kn = joint(l, 0, -KNEE, 0);
-    add(kn, g.shin!, M.cloth, look.trousers);
-    add(kn, g.creaseS!, M.cloth, look.trousers);
-    const f = joint(kn, 0, -ANKLE, 0);
-    add(f, g.boot!, M.boots);
-    add(f, g.sole!, M.dark);
-    knees.push(kn);
-    feet.push(f);
-  }
+  const kneeL = joint(legL, 0, -KNEE, 0);
+  const kneeR = joint(legR, 0, -KNEE, 0);
+  const footL = joint(kneeL, 0, -ANKLE, 0);
+  const footR = joint(kneeR, 0, -ANKLE, 0);
   const torso = joint(pelvis, 0, 0, 0);
   const chest = joint(torso, 0, CHEST_Y, 0);
-  add(torso, g.hips!, M.cloth, look.trousers);
-  add(torso, g.torso!, M.cloth, look.shirt);
-  add(chest, g.torsoU!, M.cloth, look.shirt);
-  add(chest, g.collar!, M.cloth, look.shirt);
-  add(torso, g.belt!, M.dark);
-  add(torso, g.buckle!, M.hard, 0xb9c0c8);
-  if (look.vest !== undefined) {
-    add(torso, g.vest!, M.vest, look.vest);
-    add(chest, g.vestU!, M.vest, look.vest);
-    add(torso, g.bands!, M.reflect);
-    add(chest, g.bandsU!, M.reflect);
-  }
-  add(chest, g.neck!, M.skin, skin);
-  const worker = look.vest !== undefined;
-  if (worker) add(torso, g.radio!, M.dark);
-  else if (look.suit) {
-    add(chest, g.shirtV!, M.cloth, 0xffffff);
-    add(chest, g.lapels!, M.cloth, look.shirt);
-    add(chest, g.tie!, M.cloth, look.suit.tie);
-    add(chest, g.jacketButtons!, M.dark);
-  } else {
-    add(chest, g.lanyard!, M.cloth, 0x1755fe);
-    add(chest, g.badge!, M.cloth, 0xffffff);
-    add(chest, g.buttons!, M.cloth, 0xf3f4f6);
-  }
-  add(torso, g.pockets!, M.cloth, look.trousers);
   const head = joint(chest, 0, NECK_Y - CHEST_Y, 0);
-  add(head, g.head!, M.skin, skin);
-  add(head, g.eyes!, M.cloth, 0xf6f6f2);
-  add(head, g.face!, M.dark);
-  const seed = Math.abs((look.shirt * 7 + (look.skin ?? 0) * 13 + HUMANS.length * 31) | 0);
-  const hair = look.hair ?? HAIR[seed % HAIR.length]!;
-  const style = look.hairStyle ?? Math.floor(seed / 7) % 3;
-  add(head, [g.hair!, g.hairLong!, g.hairTail!][style]!, M.cloth, hair);
-  let tail: THREE.Group | null = null;
-  if (style === 2) {
-    tail = joint(head, TAIL.x, TAIL.y, TAIL.z);
-    add(tail, g.tail!, M.cloth, hair);
+  const tail = style === 2 ? joint(head, TAIL.x, TAIL.y, TAIL.z) : null;
+  const armL = joint(chest, -0.182, 0.465 - CHEST_Y, 0);
+  const armR = joint(chest, 0.182, 0.465 - CHEST_Y, 0);
+  const foreL = joint(armL, 0, -UPPER_ARM, 0);
+  const foreR = joint(armR, 0, -UPPER_ARM, 0);
+  const handL = joint(foreL, 0, -WRIST, 0);
+  const handR = joint(foreR, 0, -WRIST, 0);
+
+  // Skin weights by height at rest. Legs: thigh → shin around the knee, shin → foot at the ankle.
+  const legW = (leg: THREE.Object3D, kn: THREE.Object3D, ft: THREE.Object3D) => (p: THREE.Vector3): Weights => {
+    const y = p.y - HIP_Y;
+    const kw = smooth(-0.35, -0.49, y);
+    const fw = smooth(-0.79, -0.845, y);
+    return [[leg, 1 - kw], [kn, kw * (1 - fw)], [ft, kw * fw]];
+  };
+  // Torso: seat on the pelvis, belly on the waist, chest on the lower back, neck into the head.
+  const torsoW = (p: THREE.Vector3): Weights => {
+    const y = p.y - HIP_Y;
+    const pw = 1 - smooth(-0.03, 0.1, y);
+    const cw = smooth(0.16, 0.34, y);
+    const hw = smooth(0.585, 0.655, y);
+    return [[pelvis, pw], [torso, (1 - pw) * (1 - cw)], [chest, cw * (1 - hw)], [head, cw * hw]];
+  };
+  // Arms: the shoulder cap half on the chest, upper arm → forearm round the elbow, a little hand at the wrist.
+  const armW = (arm: THREE.Object3D, fo: THREE.Object3D, hd: THREE.Object3D) => (p: THREE.Vector3): Weights => {
+    const y = p.y - (HIP_Y + 0.465);
+    const top = 0.5 * smooth(-0.03, 0.07, y);
+    const fw = smooth(-0.24, -0.34, y);
+    const hw = 0.6 * smooth(-0.52, -0.565, y);
+    return [[chest, top], [arm, (1 - top) * (1 - fw)], [fo, fw * (1 - hw)], [hd, fw * hw]];
+  };
+
+  interface Part {
+    geo: THREE.BufferGeometry;
+    j: THREE.Object3D;
+    /** A colour, or one by the point (rest, root frame). */
+    c: number | ((p: THREE.Vector3) => number);
+    w?: (p: THREE.Vector3) => Weights;
   }
+  const parts: Part[] = [];
+  const add = (j: THREE.Object3D, geo: THREE.BufferGeometry, c: Part['c'], w?: Part['w']) => parts.push({ geo, j, c, w });
+
+  // Legs and boots.
+  for (const [leg, kn, ft] of [[legL, kneeL, footL], [legR, kneeR, footR]] as const) {
+    add(leg, sk.leg, look.trousers, legW(leg, kn, ft));
+    add(ft, g.boot!, 0x2a2522);
+    add(ft, g.sole!, 0x1d1d1f);
+  }
+  // Torso: trousers below the belt, shirt (or jacket) above.
+  add(torso, sk.torso, (p) => (p.y - HIP_Y < 0.04 ? look.trousers : look.shirt), torsoW);
+  add(chest, g.collar!, look.shirt, torsoW);
+  add(chest, g.neck!, skin, torsoW);
+  add(torso, g.belt!, 0x1d1d1f, torsoW);
+  add(torso, g.buckle!, 0xb9c0c8, torsoW);
+  add(torso, g.pockets!, look.trousers, torsoW);
+  if (worker) {
+    add(torso, g.vest!, look.vest!, torsoW);
+    add(chest, g.vestU!, look.vest!, torsoW);
+    add(torso, g.bands!, 0xd8dde3, torsoW);
+    add(chest, g.bandsU!, 0xd8dde3, torsoW);
+    add(torso, g.radio!, 0x1d1d1f, torsoW);
+  } else if (look.suit) {
+    add(chest, g.shirtV!, 0xffffff, torsoW);
+    add(chest, g.lapels!, look.shirt, torsoW);
+    add(chest, g.tie!, look.suit.tie, torsoW);
+    add(chest, g.jacketButtons!, 0x1d1d1f, torsoW);
+  } else {
+    add(chest, g.lanyard!, 0x1755fe, torsoW);
+    add(chest, g.badge!, 0xffffff, torsoW);
+    add(chest, g.buttons!, 0xf3f4f6, torsoW);
+  }
+  // Arms: workers' long sleeves end in gloves; staff wear short sleeves (bare forearms); a suit has a white cuff.
+  for (const [arm, fo, hd] of [[armL, foreL, handL], [armR, foreR, handR]] as const) {
+    const sleeve = (p: THREE.Vector3) => {
+      const y = p.y - (HIP_Y + 0.465);
+      if (worker) return y < -0.525 ? glove : look.shirt;
+      if (look.suit) return y < -0.53 ? 0xffffff : look.shirt;
+      return y > -0.14 ? look.shirt : skin;
+    };
+    add(arm, sk.arm, sleeve, armW(arm, fo, hd));
+    if (!worker && !look.suit) add(arm, g.sleeve!, look.shirt, armW(arm, fo, hd));
+    add(hd, g.hand!, worker ? glove : skin);
+  }
+  // Head: face, hair, and a helmet, cap or hat.
+  add(head, g.head!, skin);
+  add(head, g.eyes!, 0xf6f6f2);
+  add(head, g.face!, 0x1d1d1f);
+  add(head, [g.hair!, g.hairLong!, g.hairTail!][style]!, hair);
+  if (tail) add(tail, g.tail!, hair);
   if (look.santa) {
-    add(head, g.beard!, M.cloth, 0xffffff);
-    add(chest, g.sack!, M.cloth, 0x8a5a2a);
+    add(head, g.beard!, 0xffffff);
+    add(chest, g.sack!, 0x8a5a2a, torsoW);
   }
   if (XMAS || look.santa) {
     // Christmas hats for everyone (over the helmet for workers).
     const h = look.helmet !== undefined;
-    if (h) add(head, g.helmet!, M.hard, look.helmet);
-    add(head, h ? g.hatH! : g.hat!, M.cloth, 0xc8102e);
-    add(head, h ? g.brimH! : g.brimS!, M.cloth, 0xffffff);
+    if (h) add(head, g.helmet!, look.helmet!);
+    add(head, h ? g.hatH! : g.hat!, 0xc8102e);
+    add(head, h ? g.brimH! : g.brimS!, 0xffffff);
   } else if (look.helmet !== undefined) {
-    add(head, g.helmet!, M.hard, look.helmet);
-    add(head, g.brim!, M.hard, look.helmet);
+    add(head, g.helmet!, look.helmet);
+    add(head, g.brim!, look.helmet);
   } else if (!look.suit) {
     const c = look.cap ?? 0x2f3b6b;
-    add(head, g.cap!, M.cloth, c);
-    add(head, g.peak!, M.cloth, c);
+    add(head, g.cap!, c);
+    add(head, g.peak!, c);
   }
-  const armL = joint(chest, -0.182, 0.465 - CHEST_Y, 0);
-  const armR = joint(chest, 0.182, 0.465 - CHEST_Y, 0);
-  // Arms hang a little away from the body.
+
+  // Bake the parts into one geometry at rest, with colours and skin weights.
+  root.updateMatrixWorld(true);
+  const bones: THREE.Object3D[] = [pelvis, legL, kneeL, footL, legR, kneeR, footR, torso, chest, head, armL, foreL, handL, armR, foreR, handR];
+  if (tail) bones.push(tail);
+  const index = new Map(bones.map((b, i) => [b, i]));
+  const col = new THREE.Color();
+  const p = new THREE.Vector3();
+  const geos = parts.map((part) => {
+    const geo = (part.geo.index ? part.geo.toNonIndexed() : part.geo.clone()).applyMatrix4(part.j.matrixWorld);
+    for (const name of Object.keys(geo.attributes)) if (name !== 'position' && name !== 'normal') geo.deleteAttribute(name);
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const n = pos.count;
+    const colors = new Float32Array(n * 3);
+    const si = new Uint16Array(n * 4);
+    const sw = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) {
+      p.fromBufferAttribute(pos, i);
+      col.setHex(typeof part.c === 'number' ? part.c : part.c(p));
+      colors.set([col.r, col.g, col.b], i * 3);
+      const ws = part.w ? part.w(p).filter(([, w]) => w > 1e-3) : [[part.j, 1] as [THREE.Object3D, number]];
+      const sum = ws.reduce((a, [, w]) => a + w, 0) || 1;
+      ws.slice(0, 4).forEach(([b, w], k) => {
+        si[i * 4 + k] = index.get(b) ?? index.get(part.j)!;
+        sw[i * 4 + k] = w / sum;
+      });
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+    return geo;
+  });
+  const body = new THREE.SkinnedMesh(mergeGeometries(geos)!, mat);
+  geos.forEach((x) => x.dispose());
+  root.add(body);
+  body.updateMatrixWorld(true);
+  // (The joints are Groups, not Bones; the skeleton only needs their world matrices.)
+  body.bind(new THREE.Skeleton(bones as THREE.Bone[]));
+  // A fixed bound for frustum culling, big enough for any pose.
+  body.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.3);
+
+  // The resting pose: arms a little away from the body, elbows a little bent.
   armL.rotation.z = -0.07;
   armR.rotation.z = 0.07;
-  const fores: THREE.Group[] = [];
-  const hands: THREE.Group[] = [];
-  for (const a of [armL, armR]) {
-    add(a, g.upper!, M.cloth, look.shirt);
-    if (!worker && !look.suit) add(a, g.sleeve!, M.cloth, look.shirt);
-    const f = joint(a, 0, -0.29, 0);
-    // A little bend at the elbow when the arm hangs.
-    f.rotation.x = -0.12;
-    fores.push(f);
-    // Workers: long sleeves and gloves; staff: bare forearms and hands.
-    // (A suit has long sleeves too, with a white shirt cuff.)
-    add(f, g.fore!, worker || look.suit ? M.cloth : M.skin, worker || look.suit ? look.shirt : skin);
-    if (look.suit) add(f, g.cuff!, M.cloth, 0xffffff);
-    if (worker) add(f, g.cuff!, M.cloth, 0x3a3d44);
-    const hd = joint(f, 0, -WRIST, 0);
-    add(hd, g.hand!, worker ? M.cloth : M.skin, worker ? 0x3a3d44 : skin);
-    hands.push(hd);
-  }
+  foreL.rotation.x = foreR.rotation.x = -0.12;
+
   k.blobUnder(root, 0.8, 0.6);
   HUMANS.push(root);
   if (at) {
@@ -394,8 +477,5 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     k.put(root);
   }
   const m: MotionState = { t: 0, walk: 0, amp: 0, px: 0, py: 0, pyaw: 0, proll: 0, drop: 0, footL: 0, footR: 0, tx: 0, tvx: 0, tz: 0, tvz: 0, yaw: 0, y: 0, seed: (seed % 997) / 997 };
-  return {
-    root, pelvis, torso, chest, armL, armR, foreL: fores[0]!, foreR: fores[1]!, head, legL, legR,
-    kneeL: knees[0]!, kneeR: knees[1]!, footL: feet[0]!, footR: feet[1]!, handL: hands[0]!, handR: hands[1]!, tail, m,
-  };
+  return { root, pelvis, torso, chest, armL, armR, foreL, foreR, head, legL, legR, kneeL, kneeR, footL, footR, handL, handR, tail, m };
 }
