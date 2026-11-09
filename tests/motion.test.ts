@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../src/scene/textures', () => ({ hiVis: () => null }));
+vi.mock('../src/scene/textures', () => ({ hiVis: () => null, canvasTexture: () => null }));
 
 import { buildHuman, type Human } from '../src/scene/people';
 import { crouch, gait, reach, settle } from '../src/scene/motion';
