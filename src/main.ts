@@ -50,6 +50,8 @@ music.setMuted(settings.muted);
 let hudQuality = () => {};
 const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi, onQuality: () => hudQuality() });
 document.body.append(hud.root);
+// Walk and fly controls sit under the menu (an open panel may cover them).
+hud.root.prepend(walk.root);
 const pwa = new Pwa(hud.root, music);
 hud.appGroup.prepend(pwa.install, pwa.fullscreen);
 

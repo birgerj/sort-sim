@@ -115,7 +115,7 @@ The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go 
 |---|---|
 | Go to a department | `1`–`9`, `0` |
 | Camera: Auto / Fly / Follow a parcel | `A` / `F` / `P` (next parcel) |
-| Walk around on foot | `V`, then `W A S D` / arrows, drag to look, `Shift` run, `Esc` stop; touch: left thumb walks, right thumb looks |
+| Walk and fly | `V`, then `W A S D` / arrows, drag to look, `Shift` run (fly faster), `E` / `Q` or `PgUp` / `PgDn` up and down, `Esc` stop; touch: a stick under the left thumb (at its edge you run), drag on the right half to look, hold **Up** / **Down** at the right edge. Climbing from the floor is flying, coming down to it is walking; **Walk / Fly** at the top lands or takes off. The menu stays usable |
 | Time: Day / Night / Day ↔ night cycle (in Settings) | `D` / `N` / `C` |
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |

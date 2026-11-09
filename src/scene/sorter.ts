@@ -94,6 +94,8 @@ const NZ = -40;
 const HD = HZ - NZ;
 const HZC = (NZ + HZ) / 2;
 const HH = 11;
+/** Highest a flying visitor goes: eye a metre under the roof. */
+const WALK_MAX_ALT = HH - 1.7 - 1;
 const MAX_PARCELS = 1500;
 /** Shipping label canvas: cells of LABEL_W × LABEL_H pixels. */
 const LABEL_W = 96;
@@ -1296,7 +1298,7 @@ export class Sorter implements Scene3D {
   caption(): string {
     if (this.camMode === 'visit') return this.pois[this.visitPoi]!.dept ?? '';
     if (this.camMode === 'follow' && this.followThing) return `Following ${this.followThing.name}`;
-    if (this.camMode === 'walk') return matchMedia('(pointer: coarse)').matches ? 'Walking · left thumb to walk, right thumb to look' : 'Walking · W A S D to move, drag to look, Shift to run, Esc to stop';
+    if (this.camMode === 'walk') return this.walk.alt > 0.01 ? 'Flying' : 'Walking';
     const f = this.follow;
     if (!f || this.camMode === 'fly' || (this.camMode === 'auto' && !this.autoFollow)) return '';
     if (f.mode === 'dock') return `Parcel ${f.id} · at truck dock ${DOCK_X.indexOf(this.dockOf.get(f.dest) ?? 0) + 1}`;
@@ -2746,9 +2748,10 @@ export class Sorter implements Scene3D {
   // ---------- walking ----------
 
   /** First person on foot: position on the floor, heading and up/down look. */
-  private walk = { x: 0, z: 0, yaw: 0, pitch: 0, speed: 0, step: 0 };
+  /** On foot, or flying when `alt` (metres above eye height on the floor) is above zero. */
+  private walk = { x: 0, z: 0, yaw: 0, pitch: 0, speed: 0, step: 0, alt: 0, goal: -1 };
   /** Movement input for this frame: forward/back and sideways (−1…1), and running. */
-  private walkIn = { fwd: 0, side: 0, run: false };
+  private walkIn = { fwd: 0, side: 0, run: false, up: 0 };
 
   /** Start walking from where the camera is now, on the floor, looking the same way. */
   private startWalk(): void {
@@ -2760,21 +2763,47 @@ export class Sorter implements Scene3D {
     this.walk.z = clamp(this.camera.position.z, NZ + 1, HZ - 1);
     this.walk.yaw = Math.atan2(d.x, d.z);
     this.walk.pitch = 0;
+    this.walk.alt = 0;
+    this.walk.goal = -1;
   }
 
   /** Walking input (from the keyboard, mouse or touch). Look deltas in radians. */
-  walkInput(fwd: number, side: number, run: boolean, dYaw: number, dPitch: number): void {
+  walkInput(fwd: number, side: number, run: boolean, dYaw: number, dPitch: number, up = 0): void {
     this.walkIn.fwd = clamp(fwd, -1, 1);
     this.walkIn.side = clamp(side, -1, 1);
     this.walkIn.run = run;
+    this.walkIn.up = clamp(up, -1, 1);
+    // Climbing or descending by hand cancels a take-off or landing in progress.
+    if (up) this.walk.goal = -1;
     this.walk.yaw -= dYaw;
     this.walk.pitch = clamp(this.walk.pitch - dPitch, -1.2, 1.2);
+  }
+
+  /** Height above walking eye level, in metres (0: on foot). */
+  walkAlt(): number {
+    return this.walk.alt;
+  }
+
+  /** Climb or descend to a height on its own (the Walk / Fly switch): 0 lands, 3 takes off. */
+  walkTo(alt: number): void {
+    this.walk.goal = clamp(alt, 0, WALK_MAX_ALT);
   }
 
   private updateWalk(dt: number): void {
     const w = this.walk;
     const i = this.walkIn;
-    const want = (i.run ? 4.2 : 1.6) * Math.min(1, Math.hypot(i.fwd, i.side));
+    // Up and down: by hand (E/Q, the arrows on screen) or towards a goal; landing on the floor is walking.
+    const climb = i.run ? 6 : 3;
+    if (i.up) w.alt += i.up * climb * dt;
+    else if (w.goal >= 0) {
+      const d = w.goal - w.alt;
+      w.alt += Math.sign(d) * Math.min(Math.abs(d), climb * dt);
+      if (Math.abs(d) < 0.01) w.goal = -1;
+    }
+    w.alt = clamp(w.alt, 0, WALK_MAX_ALT);
+    const flying = w.alt > 0.01;
+    // Flying is quicker than walking (and has no footsteps).
+    const want = (flying ? (i.run ? 9 : 4) : i.run ? 4.2 : 1.6) * Math.min(1, Math.hypot(i.fwd, i.side));
     w.speed += (want - w.speed) * Math.min(1, dt * 6);
     const len = Math.hypot(i.fwd, i.side) || 1;
     const fx = Math.sin(w.yaw);
@@ -2786,10 +2815,11 @@ export class Sorter implements Scene3D {
     w.z = clamp(w.z + mz * w.speed * dt, NZ + 0.6, HZ - 0.6);
     // Footsteps bob the view, two steps per beat when walking to the music.
     w.step += w.speed * dt * 1.6;
-    const bob = Math.sin(w.step * Math.PI) * 0.035 * Math.min(1, w.speed);
-    this.camera.position.set(w.x, 1.7 + bob, w.z);
+    const bob = flying ? Math.sin(this.time * 1.3) * 0.04 : Math.sin(w.step * Math.PI) * 0.035 * Math.min(1, w.speed);
+    const eye = 1.7 + w.alt + bob;
+    this.camera.position.set(w.x, eye, w.z);
     const cp = Math.cos(w.pitch);
-    this.look.set(w.x + fx * cp, 1.7 + bob + Math.sin(w.pitch), w.z + fz * cp);
+    this.look.set(w.x + fx * cp, eye + Math.sin(w.pitch), w.z + fz * cp);
     this.want.copy(this.camera.position);
     this.wantLook.copy(this.look);
     this.camera.lookAt(this.look);
