@@ -372,7 +372,24 @@ export class RobotFloor {
     pr.icon = this.dayShown === false ? 3 + (k % 2) : [0, 1, 2][(k + Math.floor(Math.random() * 3)) % 3]!;
   }
 
-  update(dt: number, bt: number, s: { kick: number; snare: number; hat: number; day: number; dayShown: boolean; cols: THREE.Color[]; pad: THREE.Color | null; bar: number }): void {
+  update(
+    dt: number,
+    bt: number,
+    s: {
+      kick: number;
+      snare: number;
+      hat: number;
+      day: number;
+      dayShown: boolean;
+      cols: THREE.Color[];
+      pad: THREE.Color | null;
+      bar: number;
+      /** Night: the projectors' laser show, the robots' underglow, parked robots dancing. */
+      show?: boolean;
+      robotGlow?: boolean;
+      dance?: boolean;
+    },
+  ): void {
     if (s.dayShown !== this.dayShown) {
       this.dayShown = s.dayShown;
       this.beamMat.blending = s.dayShown ? THREE.NormalBlending : THREE.AdditiveBlending;
@@ -383,11 +400,12 @@ export class RobotFloor {
     // Code boards are paper, not lights: dim by night.
     this.c.setRGB(0.22, 0.22, 0.25).lerp(WHITE, s.day);
     for (const m of this.boardMats) m.color.copy(this.c);
+    this.under.visible = !s.dayShown && s.robotGlow !== false;
     this.updateRobots(dt, bt, s);
     this.updateProjectors(dt, bt, s);
   }
 
-  private updateRobots(dt: number, bt: number, s: { kick: number; dayShown: boolean; cols: THREE.Color[] }): void {
+  private updateRobots(dt: number, bt: number, s: { kick: number; dayShown: boolean; cols: THREE.Color[]; dance?: boolean }): void {
     const ph = bt - Math.floor(bt);
     for (const b of this.fleet.bots) {
       const r = this.robots[b.k]!;
@@ -431,7 +449,7 @@ export class RobotFloor {
       }
       r.yaw = r.yawTo;
       // Secret party: parked robots spin a quarter turn on every beat by night.
-      const party = !s.dayShown && b.state === 'idle' && !b.path.length;
+      const party = !s.dayShown && s.dance !== false && b.state === 'idle' && !b.path.length;
       r.spin = party ? (Math.floor(bt) + b.k) * (Math.PI / 2) + ease(ph) * (Math.PI / 2) : r.spin * Math.exp(-dt * 6);
       if (!party) r.spin %= Math.PI * 2;
       r.g.position.set(x, 0, z);
@@ -453,7 +471,7 @@ export class RobotFloor {
     if (this.under.instanceColor) this.under.instanceColor.needsUpdate = true;
   }
 
-  private updateProjectors(dt: number, bt: number, s: { hat: number; kick: number; dayShown: boolean; cols: THREE.Color[]; pad: THREE.Color | null; bar: number }): void {
+  private updateProjectors(dt: number, bt: number, s: { hat: number; kick: number; dayShown: boolean; cols: THREE.Color[]; pad: THREE.Color | null; bar: number; show?: boolean }): void {
     const fig = Math.floor(s.bar) % 4;
     const o = this.o;
     this.projectors.forEach((pr, k) => {
@@ -490,7 +508,7 @@ export class RobotFloor {
         const idx = k * BEAMS + n;
         let end: THREE.Vector3 | null = null;
         if (n === 0 && marking && pr.flash > 0.3) end = this.p.copy(target!);
-        else if (!s.dayShown && s.hat > 0.12) {
+        else if (!s.dayShown && s.show !== false && s.hat > 0.12) {
           const t = bt * Math.PI;
           let a: number;
           let r: number;

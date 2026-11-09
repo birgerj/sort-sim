@@ -606,3 +606,8 @@ input[type='range'] {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* The night group is only in the bar at night. */
+.group[hidden] {
+  display: none;
+}

@@ -30,7 +30,8 @@ const HAIR = [0x2a1d14, 0x4a3221, 0x7a5a3a, 0xc9a26a, 0x1b1b1d, 0xd6339a, 0x8f8f
 const CLOTHES = [0x1d1d1f, 0xf3f4f6, 0x2fa58f, 0xd6339a, 0x6b3fd1, 0x1755fe, 0xf2c200, 0xe2231a, 0x3a3d44, 0x86d3c3];
 
 export class Crowd {
-  private group = new THREE.Group();
+  /** Everything of the crowd (dancers and LED floor); hidden when the night has no crowd. */
+  readonly group = new THREE.Group();
   private dancers: Dancer[] = [];
   private parts: Record<'body' | 'legs' | 'head' | 'armL' | 'armR' | 'stick' | 'hair' | 'face' | 'shoes' | 'handL' | 'handR', THREE.InstancedMesh>;
   private tiles: THREE.InstancedMesh;
@@ -115,7 +116,7 @@ export class Crowd {
 
   update(dt: number, bt: number, s: CrowdInput): void {
     void dt;
-    if (s.dayShown) return;
+    if (s.dayShown || !this.group.visible) return;
     const beat = Math.floor(bt);
     const ph = bt - beat;
     const hype = 0.4 + 0.6 * s.energy;

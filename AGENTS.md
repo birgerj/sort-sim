@@ -57,6 +57,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/crowd.ts` | Night crowd inside the loop (instanced body parts, a few draw calls for 520 dancers) on an LED tile floor. |
 | `src/ui/walk.ts` | Walk-mode input: keyboard, mouse drag, touch stick and look; feeds `Sorter.walkInput`. |
 | `src/scene/xmas.ts` | Christmas decorations (`XMAS` from `src/sim/season.ts`, read at load): trees, garlands, light strings, wreaths, candy canes, stars, snowflakes, market. Hats and Father Christmas in `people.ts`/`life.ts`, forklift lights in `forklift.ts`, gift parcels (`gift`, `ribbonMesh`) in `sorter.ts`, bells in `music.ts`, countdown in `screens.ts`. |
+| `src/scene/nightFx.ts` | What the night shows (`NightFx`): parcel glow 0…1 and a switch per party effect, presets Party / Calm / Dark. `Sorter.setNightFx` applies it; the HUD's Night effects panel (only shown while the night look is on) edits and stores it. |
 | `src/scene/party.ts` | Night party: DJ booth on the maintenance platform inside the loop's west end (`PLATFORM_X`), laser fans, mirror-ball floor spots, confetti on the drop. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
@@ -154,6 +155,10 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   rounded boxes, where `inkify` would miss the silhouette.
 - `box(key, mat, x, y, z, sx, sy, sz)` adds a box to an instanced batch per
   key+material, flushed with `flushBoxes()`: use it for static clutter.
+- Night effects can be switched off (`NightFx`): register a night-only object
+  with a switch in `fxObjs`, or read `this.fx` where it is animated. Keep
+  lights dimmed rather than hidden (a change in the number of lights
+  recompiles every material).
 - Night lights are `MeshBasicMaterial` with colours above 1 so bloom picks
   them up. By day, tone mapping is off and walls are flat basic materials.
 

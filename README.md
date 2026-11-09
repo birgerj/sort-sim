@@ -119,6 +119,7 @@ Sort sim is a progressive web app: install it from the browser (the **Install ap
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |
 | Sound on/off and volume (in Settings) | `M` |
 | Hide the controls | `H` |
+| Night effects… (only in the bar at night): presets Party / Calm / Dark, how brightly parcels glow, and on/off for crowd, DJ, lasers, mirror ball, confetti, projector show, robot glow, dancing, haze, strobes and bloom; remembered | button (`?night=party\|calm\|dark`) |
 | Settings…: time of day, sound, graphics quality (Low / Normal / High / Ultra), Christmas and country | button (`?quality=`, `?country=nl\|be\|fr\|de\|fi\|se\|md\|in\|au`) |
 
 Click or tap a robot, forklift or person to follow it with the camera. Click or tap a parcel to see its shipping label (a made-up recipient: a common surname of the country with a first name, or initials in the Netherlands, at a street in the parcel's town, real ones in the Netherlands; written the way that country writes addresses) and to follow it. Drag (mouse) or swipe (touch) on the hall to look around; ten seconds after the last swipe the camera turns back to its own view. On touch screens the bar only comes up with the **☰ Menu** button (top right), so swiping never opens it by accident.
@@ -129,7 +130,7 @@ The control bar hides after three seconds without mouse movement, a tap or a key
 
 URL parameters: `?time=day|night|cycle`, `?camera=auto|fly|follow|walk`,
 `?speed=0.5|1|2|4`, `?rate=<parcels per minute>`, `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
-(no controls: for recordings), `?quality=low|high`.
+(no controls: for recordings), `?quality=low|high`, `?night=party|calm|dark`.
 
 ## Development
 

@@ -8,6 +8,7 @@
  *   mute=1                 no start screen, no sound
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
  *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
+ *   night=party|calm|dark  what the night shows (Night effects panel; remembered otherwise)
  *   quality=low|normal|high|ultra  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
@@ -15,6 +16,7 @@ import './ui/style.css';
 
 import { Music } from './audio/music';
 import { Sorter } from './scene/sorter';
+import { NIGHT_PRESETS, normalizeNightFx } from './scene/nightFx';
 import { Hud, loadSettings, type TimeMode } from './ui/hud';
 import { Pwa } from './ui/pwa';
 import { WalkControls } from './ui/walk';
@@ -35,6 +37,9 @@ const speed = Number(q.get('speed') ?? settings.speed);
 scene.setBeltSpeed(speed);
 const dept = q.get('dept');
 if (dept) scene.visit(dept, true);
+const night = q.get('night');
+const nightFx = night === 'party' || night === 'calm' || night === 'dark' ? { ...NIGHT_PRESETS[night] } : normalizeNightFx(settings.night);
+scene.setNightFx(nightFx);
 const rate = Number(q.get('rate'));
 if (rate > 0) settings.rate = rate;
 const showUi = q.get('ui') !== '0';
