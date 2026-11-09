@@ -496,3 +496,58 @@ export function gradePass(): ShaderPass {
   p.enabled = false;
   return p;
 }
+
+/**
+ * Wear that differs per tray of the sorter, only in the realistic day. Every tray gets its own
+ * age from its instance number: a shade of grey of its own, rubber streaks across the plate
+ * where parcels slide off sideways, scratches, dirt in the corners by the lips, and on some
+ * a worn patch or a darker, newer replacement plate. All in the tray's own space, so it
+ * rides along. (`gl_InstanceID`: WebGL 2.)
+ */
+export function trayWear(m: THREE.MeshStandardMaterial): void {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
+    sh.uniforms.uReal = REAL;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTl;\nvarying float vTk;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTl = position;\nvTk = float(gl_InstanceID);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uReal;\nvarying vec3 vTl;\nvarying float vTk;\n${NOISE}`)
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        if (uReal > 0.001) {
+          float k = vTk;
+          float r1 = rdHash(vec2(k, 1.7));
+          float r2 = rdHash(vec2(k, 5.3));
+          float r3 = rdHash(vec2(k, 9.1));
+          float r4 = rdHash(vec2(k, 13.9));
+          // Age 0 (new) … 1 (worn); a few trays are recent replacements.
+          float age = r4 < 0.08 ? 0.05 : 0.25 + 0.75 * r1;
+          vec2 q = vTl.xz;                   // x across the plate (the way parcels tip off), z along the loop
+          vec3 col = diffuseColor.rgb * (0.86 + 0.24 * r2);
+          col *= mix(vec3(1.0), vec3(1.03, 1.0, 0.95), r3);   // some greyer-brown, some bluer
+          // Rubber and cardboard streaks across the plate, more on older trays.
+          float st = rdNoise(vec2(q.y * 28.0 + k * 7.0, q.x * 1.5 + k));
+          float streak = smoothstep(0.62, 0.9, st) * smoothstep(0.62, 0.2, abs(q.x)) * age;
+          col *= 1.0 - 0.32 * streak;
+          // Fine scratches across, catching the light.
+          float sc = rdNoise(vec2(q.y * 55.0 + k * 3.0, q.x * 0.8 - k));
+          float scratch = smoothstep(0.9, 0.97, sc) * age;
+          col = mix(col, vec3(0.62, 0.64, 0.66), 0.35 * scratch);
+          // A worn, polished patch where most parcels land.
+          float worn = smoothstep(0.55, 0.0, length((q - vec2((r3 - 0.5) * 0.5, (r2 - 0.5) * 0.4)) * vec2(1.2, 2.0))) * step(0.55, r1);
+          // Dirt in the corners along the lips and the plate's ends.
+          float corner = max(smoothstep(0.45, 0.6, abs(q.x)), smoothstep(0.34, 0.44, abs(q.y)));
+          float dirt = corner * (0.4 + 0.6 * rdFbm(q * 9.0 + k)) * age;
+          col *= 1.0 - 0.4 * dirt;
+          diffuseColor.rgb = mix(diffuseColor.rgb, col, uReal);
+          roughnessFactor = mix(roughnessFactor, clamp(roughnessFactor + 0.25 * dirt + 0.15 * streak - 0.2 * worn, 0.1, 1.0), uReal);
+          metalnessFactor = mix(metalnessFactor, metalnessFactor + 0.15 * worn, uReal);
+        }`,
+      );
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${key()}-traywear`;
+}

@@ -33,7 +33,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
-import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, wear, wheelTracks } from './realDay';
+import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -124,6 +124,10 @@ const INDUCT = [10, 14, 18, 22];
 /** Half-beat offset of each lane's landing (see above). */
 const LANE_PHASE = [0, 0.5, 0, 0.5];
 const LANE_Y = 0.9;
+/** Belt height where an infeed joins the loop: just above the lips of the trays. */
+const LANE_TOP = LOOP_Y + 0.05;
+/** Half the width of a tray (its lips), seen from the loop's centre line. */
+const TRAY_HALF = 0.62;
 /** How far out from the loop's centre line each lane turns onto it (sets the lane's x). */
 const LANE_OUT = 3.6;
 /** z of the scan tunnels (just inside the north wall). */
@@ -390,7 +394,16 @@ export class Path {
 }
 
 /** Sweeps a 2D profile (across, up) along a path. uv.y is the distance in metres. */
-function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, step = 0.35): THREE.BufferGeometry {
+/**
+ * A plane that ends an extrusion at an angle (a mitred end): whatever lies past it (on the side
+ * `n` points to) is slid back along the path onto it. Only for an end on a straight stretch.
+ */
+interface Cut {
+  c: V3;
+  n: V3;
+}
+
+function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, step = 0.35, cut?: Cut): THREE.BufferGeometry {
   const n = Math.max(2, Math.ceil((s1 - s0) / step) + 1);
   const segs = prof.length - 1;
   const pos = new Float32Array(n * segs * 2 * 3);
@@ -409,11 +422,26 @@ function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, st
       for (let k = 0; k < 2; k++) {
         const [px, py] = prof[j + k]!;
         const o = (j * n + i) * 2 + k;
-        pos[o * 3] = P.x + Sd.x * px + N.x * py;
-        pos[o * 3 + 1] = P.y + Sd.y * px + N.y * py;
-        pos[o * 3 + 2] = P.z + Sd.z * px + N.z * py;
+        let x = P.x + Sd.x * px + N.x * py;
+        let y = P.y + Sd.y * px + N.y * py;
+        let z = P.z + Sd.z * px + N.z * py;
+        let ss = s;
+        if (cut) {
+          const over = (x - cut.c.x) * cut.n.x + (z - cut.c.z) * cut.n.z;
+          const along = T.x * cut.n.x + T.z * cut.n.z;
+          if (over > 0 && along > 1e-3) {
+            const back = over / along;
+            x -= T.x * back;
+            y -= T.y * back;
+            z -= T.z * back;
+            ss -= back;
+          }
+        }
+        pos[o * 3] = x;
+        pos[o * 3 + 1] = y;
+        pos[o * 3 + 2] = z;
         uv[o * 2] = k;
-        uv[o * 2 + 1] = s;
+        uv[o * 2 + 1] = ss;
       }
     }
   }
@@ -1034,7 +1062,7 @@ export class Sorter implements Scene3D {
   /** Christmas decorations (Settings → Christmas). */
   private xmas: Xmas | null = null;
   private dayShown: boolean | null = null;
-  private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number }[] = [];
+  private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number; rc?: THREE.Color }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
   readonly nightOnly: THREE.Object3D[] = [];
   /** What the night party shows (see NightFx); night-only objects that one switch hides. */
@@ -3204,7 +3232,7 @@ export class Sorter implements Scene3D {
     if (this.blobMat) this.blobMat.opacity = this.real ? 0.45 - 0.1 * day : 0.45 - 0.17 * day;
     for (const t of this.themed) {
       // Realistic day: the day colours, but no pure whites (a lit white reads as paper, not steel).
-      const d = this.real ? this.realCol(t.d) : t.d;
+      const d = this.real ? (t.rc ?? this.realCol(t.d)) : t.d;
       t.m.color.lerpColors(t.n, d, day);
       // Realistic day: the day colours, as paint on steel (between the matte drawing and the club's metal).
       const dr = this.real ? Math.max(0.3, (t.nr + t.dr) / 2) : t.dr;
@@ -3593,13 +3621,14 @@ export class Sorter implements Scene3D {
       }
     };
     /** A belt from s0 to s1; `rails` can limit each side rail to some stretches (where belts merge). */
-    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }) => {
-      geo.belt!.push(extrude(path, BELT, s0, s1));
-      geo.frame!.push(extrude(path, FRAME, s0, s1));
+    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }, cut?: Cut) => {
+      const ex = (prof: [number, number][], a: number, b: number) => extrude(path, prof, a, b, 0.35, cut);
+      geo.belt!.push(ex(BELT, s0, s1));
+      geo.frame!.push(ex(FRAME, s0, s1));
       const k = led === stripIn ? 'sIn' : led === stripLoop ? 'sLoop' : 'sChute';
-      geo[k]!.push(extrude(path, LEDL, s0, s1), extrude(path, LEDR, s0, s1));
-      for (const [a, b] of rails?.L ?? [[s0, s1]]) if (b > a) geo.rail!.push(extrude(path, RAIL_L, a, b));
-      for (const [a, b] of rails?.R ?? [[s0, s1]]) if (b > a) geo.rail!.push(extrude(path, RAIL_R, a, b));
+      geo[k]!.push(ex(LEDL, s0, s1), ex(LEDR, s0, s1));
+      for (const [a, b] of rails?.L ?? [[s0, s1]]) if (b > a) geo.rail!.push(ex(RAIL_L, a, b));
+      for (const [a, b] of rails?.R ?? [[s0, s1]]) if (b > a) geo.rail!.push(ex(RAIL_R, a, b));
       legs(path, s0, s1, 0.6);
       // Drive motors under the frame, one per section.
       for (let s = s0 + 4; s < s1 - 2; s += 12) {
@@ -3612,6 +3641,7 @@ export class Sorter implements Scene3D {
       }
     };
 
+    const inductGap = new THREE.MeshBasicMaterial({ color: 0x0c0d0f });
     // Infeeds: four lanes side by side at floor level, in from the north wall, each through its own scan tunnel.
     for (let k = 0; k < 4; k++) {
       const y = LANE_Y;
@@ -3621,13 +3651,26 @@ export class Sorter implements Scene3D {
       const end = this.p.clone();
       const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
       const corner = end.clone().addScaledVector(into, -LANE_OUT / Math.abs(into.z));
-      corner.y = LOOP_Y - 0.5;
+      // The last stretch is level, its belt just above the trays' lips (as on a real induction).
+      corner.y = LANE_TOP;
+      end.y = LANE_TOP;
       const x = corner.x;
       const z0 = NZ - 1;
       const path = Path.fillet([v(x, y, z0), v(x, y, -23.5), v(x, corner.y, corner.z), end], 3);
-      // The belt runs right up to the loop: its end reaches over the edge of the trays
-      // (just above them), so parcels transfer straight onto their tray with no gap.
-      belt(path, 0.6, path.len - 1.75, stripIn);
+      // The belt ends at the loop's side, cut square to it (mitred at the 30° of the join),
+      // a hand's width from the trays, so parcels slide across onto their tray.
+      outward(this.t, this.n);
+      const cut: Cut = { c: this.p.clone().addScaledVector(this.n, TRAY_HALF + 0.06), n: this.n.clone().negate() };
+      belt(path, 0.6, path.len, stripIn, undefined, cut);
+      // The run-in is made of short induction belts that time each parcel to its tray:
+      // dark gaps across the belt between them, and a drive under each.
+      const edgeS = path.len - (TRAY_HALF + 0.06) / Math.sin(Math.PI / 6);
+      for (const back of [1.1, 2.5, 3.9]) {
+        path.at(edgeS - back, this.p, this.t);
+        const ry = Math.atan2(this.t.x, this.t.z);
+        this.box('indgap', inductGap, this.p.x, this.p.y + 0.004, this.p.z, 1.2, 0.01, 0.035, undefined, ry);
+        this.box('motor', motorMat, this.p.x, this.p.y - 0.4, this.p.z, 0.5, 0.2, 0.3, undefined, ry);
+      }
 
       const tunnelS = LANE_TUNNEL_Z - z0;
       const tunnel = this.tunnel(path, tunnelS, 1.2);
@@ -3647,7 +3690,7 @@ export class Sorter implements Scene3D {
       loopAt(INDUCT[3]!, this.p, this.t);
       const wx = this.p.x - LANE_OUT / Math.tan(Math.PI / 6) + 1.7;
       const wy = LOOP_Y - 1.0;
-      const z1 = -23.5 + ((wy - LANE_Y) / (LOOP_Y - 0.5 - LANE_Y)) * (-8.5 - LANE_OUT + 23.5);
+      const z1 = -23.5 + ((wy - LANE_Y) / (LANE_TOP - LANE_Y)) * (-8.5 - LANE_OUT + 23.5);
       const z0 = z1 - 6;
       this.box('grate', grate, wx, wy - 0.05, (z0 + z1) / 2, 1.1, 0.1, z1 - z0);
       for (const z of [z0, (z0 + z1) / 2, z1]) this.box('steel', steel, wx, (wy - 0.1) / 2, z, 0.12, wy - 0.1, 0.12);
@@ -3687,6 +3730,9 @@ export class Sorter implements Scene3D {
       geo.rail!.push(extrude(tp, [[-0.15, 0.08], [-0.15, 0], [0.15, 0], [0.15, 0.08]], 0, tp.len, 0.5));
     }
     const trayMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x8c96a4, roughness: 0.35, metalness: 0.85 }), 0xffffff, 0.7);
+    // Realistic day: dark grey plates, each worn its own way.
+    this.themed[this.themed.length - 1]!.rc = new THREE.Color(0x4d5258);
+    trayWear(trayMat);
     // Tilt trays: a plate with raised side lips and a pivot block underneath.
     const trayGeo = mergeGeometries([
       new THREE.BoxGeometry(1.2, 0.06, PITCH * 0.88).toNonIndexed(),

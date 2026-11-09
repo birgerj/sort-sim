@@ -115,7 +115,9 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   the outside, s 10, 14, 18, 22; lanes come in through the north wall, x set by
   `LANE_OUT`; `LANE_PHASE` lands lanes 1 and 3 half a beat
   later so they fill the odd trays; one parcel per lane per beat; `LANE_Z`;
-  the belt reaches over the tray edge, so there is no gap), `HOLD_S` (queue point), `LANE_QUEUE`.
+  the last stretch is level at `LANE_TOP`, just above the trays' lips, made of short
+  induction belts (dark gaps), and ends mitred square to the loop a hand's width from
+  the trays: `extrude(..., cut)` slides whatever lies past a plane back onto it), `HOLD_S` (queue point), `LANE_QUEUE`.
   Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).
 - Hall: `WX`/`EX` west/east wall, `HZ` south wall, `NZ` north wall (further out: room at the docks; `HD` depth, `HZC` middle), `HH` height; `HCX`/`HW`
   centre and width.
@@ -190,7 +192,10 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   yellow (any themed material with day colour `0xf2c200`) and the red column
   feet get chipped paint and scrapes (`wear`, world space, gated by `REAL`);
   anything that moves sets `material.userData.noWear = true` (forklifts,
-  robots). A light vignette and warm/cool finish (`gradePass`) runs only in
+  robots). The sorter's trays are dark grey in Day, each worn its own way
+  (`trayWear`: shade, streaks, scratches, dirt, worn patch, from `gl_InstanceID`,
+  in tray space). Never name a GLSL variable `patch` (reserved).
+  A light vignette and warm/cool finish (`gradePass`) runs only in
   Day. The Day hall is built the first time Day is chosen.
 - **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`
   walks the scene graph once per frame, just before `composer.render`.
