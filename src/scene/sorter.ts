@@ -111,8 +111,10 @@ const HZC = (NZ + HZ) / 2;
 const HH = 11;
 /** Roof lights: tilted glass in the roof, two rows across the hall (see roof.ts). */
 const ROOF_LIGHTS = roofLights(WX, EX);
-/** Highest a flying visitor goes: eye a metre under the roof. */
-const WALK_MAX_ALT = HH - 1.7 - 1;
+/** Highest a flying visitor goes: through the roof (hidden from above) and high enough to see the whole floor at once. */
+const WALK_MAX_ALT = 220;
+/** Above the roof, what is hung higher than this is hidden too (lamps, ducts, beams, signs), so the floor shows. */
+const HIGH_Y = 8.0;
 // (Room for the inbound trucks' loads too: up to 10 × TRAILER_PARCELS stand stacked in them.)
 const MAX_PARCELS = 2600;
 /** Shipping label canvas: cells of LABEL_W × LABEL_H pixels. */
@@ -1057,6 +1059,8 @@ interface Poi {
    * track: rides along with what `at` gives, closely (riding, chasing).
    */
   hover?: 'orbit' | 'still' | 'arc' | 'track';
+  /** May leave the hall: above the roof (the top-down view). */
+  free?: boolean;
   /** How quickly the camera catches up with `at` while hovering (per second; default 1.2). */
   rate?: number;
   /** Only shown in this look (the fly tour skips it in the other one). */
@@ -1775,6 +1779,7 @@ export class Sorter implements Scene3D {
     const dt = clamp(dtIn, 0, 0.1);
     this.time += dt;
     this.updateCamera(dt, this.bt / 4, travel);
+    this.updateAboveRoof();
     if (this.shadowMode === 'live') {
       this.keyLight.position.copy(this.look).add(this.t.set(25, 45, 30));
       this.keyLight.target.position.copy(this.look);
@@ -1899,6 +1904,7 @@ export class Sorter implements Scene3D {
     // ...and their acts on top, once everyone has been animated.
     ANTICS.post(bt);
     this.updateCamera(dt, bar, i.travelSpeed);
+    this.updateAboveRoof();
     this.bakeShadows();
     if (this.shadowMode === 'live') {
       // The sun stands high in the south-east; its shadow box is centred where the camera looks.
@@ -3642,7 +3648,8 @@ export class Sorter implements Scene3D {
     // Climbing or descending by hand cancels a take-off or landing in progress.
     if (up) this.walk.goal = -1;
     this.walk.yaw -= dYaw;
-    this.walk.pitch = clamp(this.walk.pitch - dPitch, -1.2, 1.2);
+    // (Straight down is allowed: from above the roof you look down onto the floor.)
+    this.walk.pitch = clamp(this.walk.pitch - dPitch, -1.56, 1.2);
   }
 
   /** Height above walking eye level, in metres (0: on foot). */
@@ -3655,11 +3662,105 @@ export class Sorter implements Scene3D {
     this.walk.goal = clamp(alt, 0, WALK_MAX_ALT);
   }
 
+  /** The day's fog (applyTheme), and how much of it is left at the camera's height (thin from high up). */
+  private fogBase = 0.009;
+  private fogAlt = 1;
+  /** The camera is above the roof: roof, ceiling and what hangs under it are hidden. */
+  private aboveRoof = false;
+  private high: { objs: THREE.Object3D[]; shown: boolean[]; inst: { m: THREE.InstancedMesh; keep: Float32Array; hide: number[] }[] } | null = null;
+
+  /**
+   * From above the roof you look straight into the hall: the roof, the ceiling and everything
+   * hung higher than HIGH_Y (and the daylight shafts) are hidden; the fog thins out with height
+   * and the camera sees further. Back under the roof everything comes back.
+   */
+  private updateAboveRoof(): void {
+    const cam = this.camera;
+    const y = cam.position.y;
+    const far = Math.max(260, y * 1.8 + 80);
+    if (cam.far !== far) {
+      cam.far = far;
+      cam.updateProjectionMatrix();
+    }
+    this.fogAlt = Math.min(1, (HH / Math.max(HH, y)) ** 2);
+    (this.scene.fog as THREE.FogExp2).density = this.fogBase * this.fogAlt;
+    const above = y > HH - 0.4;
+    if (above && !this.high) this.high = this.findHigh();
+    const h = this.high;
+    if (!h) return;
+    if (above) {
+      // (Every frame: a change of look may have shown some of them again.)
+      for (const o of h.objs) o.visible = false;
+    }
+    if (above === this.aboveRoof) return;
+    this.aboveRoof = above;
+    if (above) {
+      h.objs.forEach((o, i) => (h.shown[i] = o.visible));
+      for (const o of h.objs) o.visible = false;
+    } else {
+      h.objs.forEach((o, i) => (o.visible = h.shown[i]!));
+      this.dayShown = null; // re-apply the look's own shown and hidden parts
+    }
+    for (const e of h.inst) {
+      const a = e.m.instanceMatrix.array as Float32Array;
+      if (above) for (const k of e.hide) for (let j = 0; j < 16; j++) a[k * 16 + j] = 0;
+      else a.set(e.keep);
+      e.m.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  private forgetHigh(): void {
+    const h = this.high;
+    if (h && this.aboveRoof) {
+      h.objs.forEach((o, i) => (o.visible = h.shown[i]!));
+      for (const e of h.inst) {
+        (e.m.instanceMatrix.array as Float32Array).set(e.keep);
+        e.m.instanceMatrix.needsUpdate = true;
+      }
+      this.dayShown = null;
+    }
+    this.aboveRoof = false;
+    this.high = null;
+  }
+
+  /** What hangs above HIGH_Y: meshes that lie wholly above it, and fixed instances (boxes, roof lights) above it. */
+  private findHigh(): NonNullable<Sorter['high']> {
+    const objs: THREE.Object3D[] = [];
+    const inst: { m: THREE.InstancedMesh; keep: Float32Array; hide: number[] }[] = [];
+    const box = new THREE.Box3();
+    const m4 = new THREE.Matrix4();
+    this.scene.updateMatrixWorld(true);
+    this.scene.traverse((o) => {
+      if (o.userData.hideAbove) {
+        objs.push(o);
+        return;
+      }
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || (m as THREE.SkinnedMesh).isSkinnedMesh || !m.geometry) return;
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      const gb = m.geometry.boundingBox!;
+      if ((m as THREE.InstancedMesh).isInstancedMesh) {
+        const im = m as THREE.InstancedMesh;
+        if (!im.userData.static) return;
+        const hide: number[] = [];
+        for (let k = 0; k < im.count; k++) {
+          im.getMatrixAt(k, m4);
+          if (box.copy(gb).applyMatrix4(m4.premultiply(im.matrixWorld)).min.y >= HIGH_Y) hide.push(k);
+        }
+        if (hide.length) inst.push({ m: im, keep: (im.instanceMatrix.array as Float32Array).slice(), hide });
+        return;
+      }
+      if (box.copy(gb).applyMatrix4(m.matrixWorld).min.y >= HIGH_Y) objs.push(m);
+    });
+    return { objs, shown: objs.map((o) => o.visible), inst };
+  }
+
   private updateWalk(dt: number): void {
     const w = this.walk;
     const i = this.walkIn;
-    // Up and down: by hand (E/Q, the arrows on screen) or towards a goal; landing on the floor is walking.
-    const climb = i.run ? 6 : 3;
+    // Up and down: by hand (E/Q, the arrows on screen) or towards a goal; landing on the floor is
+    // walking. Faster the higher you are (up to the whole floor at once in a few seconds).
+    const climb = (i.run ? 6 : 3) * Math.max(1, w.alt / 8);
     if (i.up) w.alt += i.up * climb * dt;
     else if (w.goal >= 0) {
       const d = w.goal - w.alt;
@@ -3669,7 +3770,7 @@ export class Sorter implements Scene3D {
     w.alt = clamp(w.alt, 0, WALK_MAX_ALT);
     const flying = w.alt > 0.01;
     // Flying is quicker than walking (and has no footsteps).
-    const want = (flying ? (i.run ? 9 : 4) : i.run ? 4.2 : 1.6) * Math.min(1, Math.hypot(i.fwd, i.side));
+    const want = (flying ? (i.run ? 9 : 4) * Math.max(1, w.alt / 10) : i.run ? 4.2 : 1.6) * Math.min(1, Math.hypot(i.fwd, i.side));
     w.speed += (want - w.speed) * Math.min(1, dt * 6);
     const len = Math.hypot(i.fwd, i.side) || 1;
     const fx = Math.sin(w.yaw);
@@ -3677,7 +3778,10 @@ export class Sorter implements Scene3D {
     // Forward along the heading, sideways to the right of it.
     const mx = (fx * i.fwd - fz * i.side) / len;
     const mz = (fz * i.fwd + fx * i.side) / len;
-    [w.x, w.z] = inHall(w.x + mx * w.speed * dt, w.z + mz * w.speed * dt, 0.6);
+    // (Above the roof you may fly a little beyond the walls; under it, the hall's walls stop you.)
+    const nx = w.x + mx * w.speed * dt;
+    const nz = w.z + mz * w.speed * dt;
+    [w.x, w.z] = 1.7 + w.alt > HH + 0.5 ? [clamp(nx, WX - 60, EX + 60), clamp(nz, WING.z0 - 60, HZ + 60)] : inHall(nx, nz, 0.6);
     // Footsteps bob the view, two steps per beat when walking to the music.
     w.step += w.speed * dt * 1.6;
     const bob = flying ? Math.sin(this.time * 1.3) * 0.04 : Math.sin(w.step * Math.PI) * 0.035 * Math.min(1, w.speed);
@@ -3743,9 +3847,11 @@ export class Sorter implements Scene3D {
         this.wantLook.copy(c).addScaledVector(this.fwd, 2.2);
       }
     } else this.flyTour(dt, travel);
-    // Stay inside the hall, and under the ceiling's ducts, cable trays and lamps.
-    this.want.y = Math.min(this.want.y, FLY_MAX_Y);
-    [this.want.x, this.want.z] = inHall(this.want.x, this.want.z, 1.5);
+    // Stay inside the hall, and under the ceiling's ducts, cable trays and lamps (unless the stop is above the roof).
+    if (!this.freeStop()) {
+      this.want.y = Math.min(this.want.y, FLY_MAX_Y);
+      [this.want.x, this.want.z] = inHall(this.want.x, this.want.z, 1.5);
+    }
     const k = this.first ? 1 : 1 - Math.exp(-dt * (p ? 2.6 : th ? 1.2 : this.camRate));
     // The camera's own place is kept apart from the turn by hand, so a swipe goes round
     // the target at once instead of waiting for the slow follow to catch up.
@@ -3815,9 +3921,16 @@ export class Sorter implements Scene3D {
     const h = Math.hypot(o.x, o.z) || 1;
     o.set((o.x / h) * Math.cos(el) * r, Math.sin(el) * r, (o.z / h) * Math.cos(el) * r);
     const c = this.camera.position.copy(this.look).add(o);
+    if (this.freeStop()) return;
     c.y = clamp(c.y, 0.4, FLY_MAX_Y);
     // (Inside the hall, the inbound wing included.)
     [c.x, c.z] = inHall(c.x, c.z, 1.5);
+  }
+
+  /** The tour camera is on its way to, or at, a stop that may leave the hall (above the roof). */
+  private freeStop(): boolean {
+    const t = this.tour;
+    return !this.follow && !!t && !!this.pois[t.poi]?.free && (this.camMode === 'visit' || this.camMode === 'fly' || this.camMode === 'auto');
   }
 
   /**
@@ -3882,6 +3995,7 @@ export class Sorter implements Scene3D {
         if (e[6]! >= 0) im.setColorAt(k, this.c.setHex(e[6]!));
       });
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      im.userData.static = true;
       this.put(im, only);
     }
     this.boxes.clear();
@@ -4074,6 +4188,8 @@ export class Sorter implements Scene3D {
   setRealistic(real: boolean): void {
     if (real === this.real) return;
     this.real = real;
+    // (The other look has other high parts: find them again next time above the roof.)
+    this.forgetHigh();
     if (real && !this.dayEnv) {
       this.dayEnv = dayEnvironment(this.renderer);
       this.buildRealHall();
@@ -4176,7 +4292,8 @@ export class Sorter implements Scene3D {
     bg.setHex(0x0b0910).lerp(this.c.setHex(this.real ? 0xc8ccd1 : DAY.bg), day);
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(bg);
-    fog.density = this.nightFog() + (0.009 - this.nightFog()) * day;
+    this.fogBase = this.nightFog() + (0.009 - this.nightFog()) * day;
+    fog.density = this.fogBase * this.fogAlt;
     this.renderer.toneMappingExposure = this.real ? 1.15 - 0.4 * day : 1.15 - 0.2 * day;
     if (this.real) {
       // Daylight from the roof: a warm sun through the roof lights, cool sky light from above.
@@ -5470,7 +5587,11 @@ export class Sorter implements Scene3D {
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
     this.buildWing(floorMat, wallMat, ceilMat, add, westMat);
-    add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
+    {
+      const shafts = lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position));
+      shafts.userData.hideAbove = true;
+      add(shafts);
+    }
     // The LED fixtures' light on the floor (they hang every 10 m in four rows; see buildDay).
     const spots: [number, number][] = [];
     for (let x = WX + 10; x <= EX - 10; x += 10) for (const z of [-28, -10, 10, 28]) spots.push([x, z]);
@@ -5822,6 +5943,7 @@ export class Sorter implements Scene3D {
     let liftHadJob = false;
     let botK = -1;
     let botDropping = false;
+    let botIdleAt = 0;
     /** The truck behind a north dock door. */
     const truckAt = (x: number) => this.trucks.docks.find((d) => d.x === x && d.wallZ === NZ);
     // The robot floor, for the top-down pan: east–west extent and its middle (north–south).
@@ -5830,6 +5952,24 @@ export class Sorter implements Scene3D {
     this.pois = [
       { ...fixed('infeeds', v(-33, 7.4, -17), v(-40, 3.6, -9.5), 'Infeed'), hover: 'still' },
       fixed('inbound', v(-38, 4.6, -40), v(-46, 1.4, -54), 'Inbound docks'),
+      {
+        // Straight down onto the whole floor from above the roof (hidden from up there), north at the top;
+        // as high as the screen's shape needs. Not on the fly tour.
+        name: 'top down',
+        dept: 'Top down',
+        hover: 'still',
+        free: true,
+        skip: () => true,
+        at: (p, l) => {
+          const tv = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+          const h = 1.06 * Math.max((HZ - WING.z0) / 2 / tv, (EX - WX) / 2 / (tv * this.camera.aspect));
+          const cx = (WX + EX) / 2;
+          const cz = (WING.z0 + HZ) / 2;
+          p.set(cx, h, cz);
+          l.set(cx, 0, cz - 0.01 * h);
+          return true;
+        },
+      },
       fixed('canteen', v(-51, 6.4, 10), v(-62, 5.6, 2), 'Canteen'),
       fixed('office', v(-53, 6.4, -9), v(-63.5, 5.4, -13.5), 'Office'),
       fixed('scan tunnels', v(-36, 4.4, -37), v(-46, 1.2, -45), 'Scanning'),
@@ -6064,15 +6204,20 @@ export class Sorter implements Scene3D {
           botDropping = false;
           if (b) this.chaseStart(tmp, this.floor.robotTop(b.k, tmp));
         },
+        // Stays with the same robot: after its drop it follows it to the next pickup, and so on.
+        // Only a robot that goes to park (or stands idle) is left for one that is working.
         next: (since) => {
           const bots = this.floor.fleet.bots;
           const b = bots.find((x) => x.k === botK);
           if (!b) return true;
-          if (b.state === 'toDrop') botDropping = true;
-          const working = (x: typeof b) => x.state === 'toPick' || x.state === 'toDrop';
-          // Parked with nothing to do (at start-up): go to one that is working, once there is one.
-          if (!botDropping && !working(b)) return since > 4 && bots.some(working);
-          return botDropping && b.state !== 'toDrop';
+          const working = (x: typeof b) => x.state !== 'idle' && x.state !== 'toPark';
+          if (working(b)) {
+            botDropping = true;
+            botIdleAt = since;
+            return false;
+          }
+          // (At start-up, parked: wait a little; after work, give it a few beats to get going again.)
+          return since - (botDropping ? botIdleAt : 0) > 4 && bots.some(working);
         },
         at: (p, l) => {
           if (botK < 0) return false;

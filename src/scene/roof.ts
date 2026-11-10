@@ -172,6 +172,8 @@ export class Roof {
     const o = new THREE.Object3D();
     const inst = (g: THREE.BufferGeometry, m: THREE.Material) => {
       const im = new THREE.InstancedMesh(g, m, lights.length);
+      // (Fixed: the Sorter may hide it while the camera is above the roof.)
+      im.userData.static = true;
       lights.forEach((l, i) => {
         o.position.set(l.x, hh, l.z);
         o.updateMatrix();
