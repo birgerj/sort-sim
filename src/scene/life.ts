@@ -407,7 +407,7 @@ export class Life {
    * the loop is the dance floor).
    */
   /** Lays the walkway; gives back its coating (the Sorter shows that in the realistic look only). */
-  addWalkway(x0: number, x1: number, z: number, w: number, gapNorth?: [number, number]): THREE.Mesh {
+  addWalkway(x0: number, x1: number, z: number, w: number, gapNorth?: [number, number], gapWest?: [number, number]): THREE.Mesh {
     // The path itself: a ring of coating between the edges.
     const ring = new THREE.Shape();
     const h = w / 2;
@@ -459,7 +459,11 @@ export class Life {
         strip(gapNorth[1], -zo, xo1 + 0.06, -zo);
       } else strip(xo0 - 0.06, -zo, xo1 + 0.06, -zo);
       strip(xo0 - 0.06, zo, xo1 + 0.06, zo);
-      strip(xo0, -zo, xo0, zo);
+      // (And the outer west edge where the way from the west wall joins.)
+      if (gapWest && o > 0) {
+        strip(xo0, -zo, xo0, gapWest[0]);
+        strip(xo0, gapWest[1], xo0, zo);
+      } else strip(xo0, -zo, xo0, zo);
       strip(xo1, -zo, xo1, zo);
     }
     return c;

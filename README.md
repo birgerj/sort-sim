@@ -46,7 +46,7 @@ sound is generated in code.
    wall, under the loop's west end, to the corridor south of the loop, and an aisle along the north
    docks between the roll cages and the doors. The dock projectors show each waiting parcel's
    roll cage (1–6, from the cage by the belt on its west side, clockwise; the cage cards carry the
-   number too) with a soft beam onto it. **Ride a robot** stays with one robot, pickup after pickup. The old break area by the robots is gone; its coffee
+   number too) with a soft beam onto it. **Ride a robot** stays with one robot, pickup after pickup. By day the dock crew takes breaks in small groups: they walk the walkways to the stair and sit down in the canteen (you see them through the window), and every few hours the shift changes; the break rota on the wall by the stair says who is away and until when. The managers in the office get up to look out over the hall, and one now and then walks a round over the loop's walkway. Forklifts throw blue warning spots on the floor ahead and behind. The screens above the north doors count down to each truck's departure, and turn red when it is late (late departures are red in the figures too). The old break area by the robots is gone; its coffee
    machine and vending machine stay.
 1. **Infeed (north-west).** Five lanes, 4 m apart, start at the collectors in
    the inbound wing, each through a scan tunnel, then a buffer (where parcels
