@@ -66,6 +66,7 @@ import { Staff, type Role, type StaffMember } from '../sim/staff';
 import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
+import { Relabel } from './relabel';
 import { Screens, type HubMap } from './screens';
 import { brushed, canvasTexture, cardboardNormal, cardboardSide, checkerPlate, claddingNormal, dayFloor, dayWall, floorJointNormal, roofDeckNormal, sectionalDoor, stretchFilm, stretchFilmNormal, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -192,11 +193,15 @@ const STATION_CAP = 7;
 const CHUTES: [number, number][] = [
   ...Array.from({ length: 20 }, (_, k): [number, number] => [38 + 6 * k, 1]),
   ...Array.from({ length: 20 }, (_, k): [number, number] => [178 + 6 * k, 1]),
-  // No-reads: off the south-east bend, down to the belt to the manual sort table (east of the robots).
+  // To manual sorting (too big or heavy, or round too often): off the south-east bend, down to the
+  // belt to the manual sort table (east of the robots).
   [174, 1],
+  // No-reads: on the north straight just east of the infeeds, down to the relabelling table.
+  [30, 1],
 ];
-/** The no-read chute (last in CHUTES). */
+/** The chute to manual sorting, and the no-read chute (the last two in CHUTES). */
 const REJECT = 40;
+const NOREAD = 41;
 /** x of the no-read belt, where it runs south to the manual sort belt. */
 const REJECT_X = 105.1;
 const FIRST_STATION_S = 176;
@@ -912,7 +917,7 @@ function duckGeometry(): THREE.BufferGeometry {
 }
 
 /** 'dock': at a truck dock, moved by the Docks (worker or slide into a roll cage). */
-type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual' | 'held' | 'stack';
+type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual' | 'held' | 'stack' | 'relabel';
 
 export interface Parcel {
   id: number;
@@ -1349,6 +1354,8 @@ export class Sorter implements Scene3D {
   /** The inbound wing's trucks, telescopes and unloaders. */
   private wing!: Inbound;
   private canteen!: Canteen;
+  private relabel!: Relabel;
+  private noreadEnd: V3 | null = null;
   private breaks!: BreakCrew;
   /** Parcels on their way from a trailer to the start of each lane; when each door may give its next; when the last one reaches each lane. */
   private feeding = INDUCT.map(() => 0);
@@ -1505,6 +1512,7 @@ export class Sorter implements Scene3D {
     this.buildClub();
     this.buildForklifts();
     this.manual = new ManualSort(this);
+    this.buildRelabel();
     this.floor = new RobotFloor(this, this.stationXs, this.cages, {
       waiting: (st) => (this.stationQueue[st]?.length ?? 0) > 0,
       // Exceptions go to manual sorting, while there is room at the table.
@@ -1994,7 +2002,7 @@ export class Sorter implements Scene3D {
     this.breaks.update(dt, bt, this.dayShown !== false);
     this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
-      chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),
+      chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && k !== NOREAD && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),
       robotsBusyPct: (100 * this.floor.fleet.bots.filter((b) => b.state !== 'idle').length) / this.floor.fleet.bots.length,
       infeedQueue: this.backlog + this.waiting.reduce((a, b) => a + b, 0),
       chutesDown: this.faults.down.size,
@@ -2002,6 +2010,7 @@ export class Sorter implements Scene3D {
       batch: this.batches.active ? `${this.batches.active.city.name} ${Math.round(this.batches.active.share * 100)}%` : '',
     }));
     this.manual.update(bt, this.dayShown !== false);
+    this.relabel.update(dt, bt);
     this.yard.update(bt);
     this.life.update(dt, bt);
     this.crew?.update(dt, bt);
@@ -2753,7 +2762,7 @@ export class Sorter implements Scene3D {
 
   /** When to leave the loop: at its chute (or the no-read chute), the next time it passes. */
   private retarget(p: Parcel): void {
-    const target = p.noread ? this.chutes[REJECT]!.s : p.dest >= 0 ? this.chutes[p.dest]!.s : STORE_OUT;
+    const target = p.noread ? this.chutes[p.reason === 'noread' ? NOREAD : REJECT]!.s : p.dest >= 0 ? this.chutes[p.dest]!.s : STORE_OUT;
     let at = p.tIn + beatsAlong(p.sIn, target);
     while (at <= this.ct + 0.01 && p.mode === 'loop' && at > p.tIn + 0.5) at += LOOP_LEN / BEAT_M;
     p.divertAt = at;
@@ -2969,6 +2978,9 @@ export class Sorter implements Scene3D {
         case 'manual':
           this.manual.place(p, bt);
           break;
+        case 'relabel':
+          this.relabel.place(p);
+          break;
         case 'held': {
           // In a cage or a box: rides along with it.
           const h = p.holder!;
@@ -3046,8 +3058,17 @@ export class Sorter implements Scene3D {
         this.induct(p, STORE_BACK, p.t1);
         break;
       case 'chute': {
+        if (p.rejected && p.reason === 'noread') {
+          // Down the no-read chute onto the relabelling table: a new label, then back on an infeed.
+          this.chutes[NOREAD]!.flash = 1;
+          this.inbound.set(NOREAD, Math.max(0, (this.inbound.get(NOREAD) ?? 0) - 1));
+          p.rejected = false;
+          p.mode = 'relabel';
+          this.relabel.arrive(p);
+          break;
+        }
         if (p.rejected) {
-          // Down the no-read chute: onto the belt to the manual sort table.
+          // Down the chute to manual sorting: onto the belt to the manual sort table.
           const rb = this.chutes[REJECT]!.belt!;
           this.chutes[REJECT]!.flash = 1;
           this.inbound.set(REJECT, Math.max(0, (this.inbound.get(REJECT) ?? 0) - 1));
@@ -3190,6 +3211,7 @@ export class Sorter implements Scene3D {
 
   /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
   private room(dest: number, need = 0.9): number {
+    if (dest === NOREAD) return this.relabel.room(this.inbound.get(NOREAD) ?? 0) ? 1 : 0;
     if (dest === REJECT) {
       const onRobots = this.floor.fleet.bots.filter((b) => b.bin === this.floor.tableBin).length;
       return this.manual.room(onRobots + (this.inbound.get(REJECT) ?? 0), 6) ? 1 : 0;
@@ -3296,18 +3318,20 @@ export class Sorter implements Scene3D {
   }
 
   private divert(p: Parcel): void {
-    // A no-read leaves by the no-read chute (its own chute is unknown to the sorter).
-    const to = p.noread && p.dest >= 0 ? REJECT : p.dest;
+    // A no-read leaves by the no-read chute (its own chute is unknown to the sorter); too big, or
+    // round too often, by the chute to manual sorting.
+    const out = p.reason === 'noread' ? NOREAD : REJECT;
+    const to = p.noread && p.dest >= 0 ? out : p.dest;
     if (to !== p.dest) {
-      if (this.room(REJECT) <= 0) {
+      if (this.room(out) <= 0) {
         p.divertAt += LOOP_LEN / BEAT_M;
         return;
       }
-      this.inbound.set(REJECT, (this.inbound.get(REJECT) ?? 0) + 1);
-      this.kpi.toManual();
+      this.inbound.set(out, (this.inbound.get(out) ?? 0) + 1);
+      if (out === REJECT) this.kpi.toManual();
       this.freeTrays(p, 1);
       p.rejected = true;
-      this.onPath(p, this.chutes[REJECT]!.path, 'chute', p.divertAt, p.divertAt + 1.5, 1);
+      this.onPath(p, this.chutes[out]!.path, 'chute', p.divertAt, p.divertAt + 1.5, 1);
       return;
     }
     if (p.dest >= 0 && this.room(p.dest, p.d + GAP) <= 0) {
@@ -4885,8 +4909,7 @@ export class Sorter implements Scene3D {
     // (Not where the infeed lanes come in through the north wall, x −52 … −35.)
     // (Not where the wing opens the north wall: the infeeds' collectors and lanes are there now.)
     for (let x = WING.x1 + 1.2; x < -17; x += 1.6) if (Math.random() < 0.65) stack(x, NZ + 1.4);
-    // Spare pallets in a tidy block (clear of the walkway from the dock aisle to the loop, east of it).
-    for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) if (i + j < 4 || Math.random() < 0.6) stack(-27.6 + i * 1.4, -21.2 + j * 1.2);
+    // (No spare pallets by the infeeds: the no-read worker walks there.)
     // (South wall west of the box doors: the break area.)
   }
 
@@ -5360,7 +5383,7 @@ export class Sorter implements Scene3D {
       const N = this.n.clone();
       const at = (f: number, o: number, y: number) => E.clone().addScaledVector(T, f).addScaledVector(N, o).setY(y);
       // The outer chutes of the front straight end at robot pickup stations, square to the robot floor.
-      const station = side === 1 && s >= FIRST_STATION_S && k !== REJECT;
+      const station = side === 1 && s >= FIRST_STATION_S && k !== REJECT && k !== NOREAD;
       const end = at(2.4, 6.5, 1.0);
       if (station) {
         end.x = RobotFloor.stationX(end.x);
@@ -5382,6 +5405,12 @@ export class Sorter implements Scene3D {
       legs(path, 1.2, path.len - 0.6, 0.7);
       const col = new THREE.Color().setHSL(k / CHUTES.length, 0.85, 0.55);
       const lamp = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      if (k === NOREAD) {
+        // It ends on the relabelling table (built with the station, see `Relabel`).
+        this.noreadEnd = end.clone();
+        this.chutes[k] = { s, side, path, col: new THREE.Color(DAY.red), lamp, flash: 0 };
+        return;
+      }
       if (k === REJECT) {
         // A roller belt from the chute end, south, onto the manual sort table's belt from the side.
         const belt = Path.fillet([end, end.clone().addScaledVector(N, 1.0), v(REJECT_X, 1.05, end.z + 3), v(REJECT_X, 1.1, DROP.z - 0.75), v(REJECT_X, 1.1, DROP.z - 0.35)], 1.0);
@@ -5446,7 +5475,8 @@ export class Sorter implements Scene3D {
         this.box('towerbr', legMat, px + this.n.x * 0.1, 1.96, pz + this.n.z * 0.1, Math.abs(this.n.z) * 0.18 + Math.abs(this.n.x) * 0.22, 0.03, Math.abs(this.n.x) * 0.18 + Math.abs(this.n.z) * 0.22);
         this.towerAt(k, v(px + this.n.x * 0.12, 1.975, pz + this.n.z * 0.12), 0.5);
         const dock = dockXs.findIndex(([c]) => c === k);
-        if (k === REJECT) shows.set(k, 'NO READ', 'to manual sorting', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
+        if (k === REJECT) shows.set(k, 'MANUAL', 'too big · round too often', { bg: '#2a1a0d', fg: '#ffb020', sub: '#e0c8a0' });
+        else if (k === NOREAD) shows.set(k, 'NO READ', 'new label · back on infeed 5', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
         else if (dock >= 0) {
           const c = NORTH_CITIES[DOCK_CITY[dock]!]!;
           const main = `${dock + 1} · ${c.name}`;
@@ -6953,7 +6983,7 @@ export class Sorter implements Scene3D {
     const vol = (cm(p.d) * cm(p.w) * cm(p.h)) / 5000;
     const kg = `${p.kg.toFixed(1)} kg (vol ${vol.toFixed(1)})`;
     const note =
-      p.reason === 'oversize' ? 'Too big or heavy for the sorter: to manual sorting' : p.reason === 'overflow' ? `Its chute stayed full (${p.laps ?? 0} rounds): to manual sorting` : p.noread ? 'Label could not be read: to manual sorting' : p.missorted ? 'Sent to the wrong dock by mistake: it will go back' : '';
+      p.reason === 'oversize' ? 'Too big or heavy for the sorter: to manual sorting' : p.reason === 'overflow' ? `Its chute stayed full (${p.laps ?? 0} rounds): to manual sorting` : p.noread ? 'Label could not be read: a new label, then back on an infeed' : p.missorted ? 'Sent to the wrong dock by mistake: it will go back' : '';
     const address = addressFor(p.id, p.pc, city);
     // The rubber duck is for whoever wrote all this.
     if (p.shape === 3) address.name = 'The developer';
@@ -6987,6 +7017,8 @@ export class Sorter implements Scene3D {
         return p.holder && this.floor.bins.some((b) => b.g === p.holder) ? 'In a box, for the truck' : 'In a roll cage, for the truck';
       case 'manual':
         return 'At manual sorting';
+      case 'relabel':
+        return 'At the no-read table: a new label, then back on an infeed';
       default:
         return p.buffered !== undefined ? `In the buffer store: chute ${p.buffered + 1} is full; it comes back out when there is room` : 'In the store';
     }
@@ -7008,6 +7040,60 @@ export class Sorter implements Scene3D {
    * the picker and loader of every north door, the unloaders at the inbound doors, the technician, the manual sorter and the
    * forklift drivers in the south aisle. Long hair or a ponytail gives a woman's name.
    */
+  /**
+   * The no-read station: the table at the no-read chute's end, and its worker, who carries each
+   * relabelled parcel over the walkways to the east infeed (lane 5) and puts it on the belt before
+   * its buffer, where the lane has room (it skips the lane's scanner: its new label is known).
+   */
+  private buildRelabel(): void {
+    const k = INDUCT.length - 1;
+    const lane = this.lanes[k]!;
+    // The drop point: on the lane's sloping run at the floor, where it crosses z = −34.3.
+    let sMid = 6;
+    let best = Infinity;
+    for (let s = 6; s < HOLD_S - 3; s += 0.1) {
+      lane.path.at(s, this.p, this.t);
+      const d = Math.abs(this.p.z + 34.3);
+      if (d < best) {
+        best = d;
+        sMid = s;
+      }
+    }
+    lane.path.at(sMid, this.p, this.t);
+    const belt = this.p.clone();
+    // Stand on the belt's east side, facing it.
+    const perp = new THREE.Vector3(-this.t.z, 0, this.t.x).normalize();
+    if (perp.x < 0) perp.negate();
+    const stand = belt.clone().addScaledVector(perp, 0.95).setY(0);
+    const end = this.noreadEnd!;
+    this.relabel = new Relabel(this, {
+      end,
+      way: [
+        [-19, 0, end.z - 2.65],
+        [-19, 0, -33.4],
+        [stand.x, 0, -33.4],
+        [stand.x, 0, stand.z],
+      ],
+      face: Math.atan2(belt.x - stand.x, belt.z - stand.z),
+      belt,
+      onPlace: (it) => {
+        const p = it as Parcel;
+        // Room just there: nothing on the belt within a parcel's length, and the buffer ahead not reaching back to it.
+        const near = this.parcels.some((q) => q !== p && q.mode === 'path' && q.pathKind === 'lane' && q.lane === k && Math.abs(q.sPrev - sMid) < 0.5 + (q.d + p.d) / 2);
+        if (near || HOLD_S - this.laneUse[k]! < sMid + p.d + 0.3) return false;
+        p.noread = false;
+        p.reason = undefined;
+        p.scanned = true;
+        this.toLane(k, p, null, false);
+        // (On the belt where it was put down, as if it had run there from the start of the lane.)
+        p.t0 = this.ct - sMid / BEAT_M;
+        p.sPrev = sMid;
+        if (p.labelCell) this.drawLabel(p.labelCell, p);
+        return true;
+      },
+    });
+  }
+
   private hireStaff(): void {
     const now = this.hubTime();
     const woman = (style: number, seed: number) => style === 2 || (style === 1 && seed % 2 === 1);
@@ -7024,6 +7110,7 @@ export class Sorter implements Scene3D {
     const crew = this.crew;
     if (crew) hire('technician', 'Workbench · maintenance platform', crew.h, crew.h.root, 97, () => crew.doing !== 'bench');
     hire('manual', 'Manual sort table', this.manual.worker, this.manual.worker.root, 131, () => this.manual.busy);
+    hire('manual', 'No-read table · new labels', this.relabel.worker, this.relabel.worker.root, 137, () => this.relabel.busy);
     this.yard.lifts.forEach((l, k) => {
       const driver = l.g.children.map((c) => RIGS.get(c)).find((x) => x);
       hire('driver', `South aisle · forklift ${k + 1}`, driver, l.g, 173 + k, () => this.yard.busy(k));
