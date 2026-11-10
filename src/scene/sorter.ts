@@ -4147,6 +4147,9 @@ export class Sorter implements Scene3D {
         return;
       }
       if (station) {
+        // A signal tower on a post beside the chute's end, where the pickup table starts.
+        this.box('post', legMat, end.x + 0.85, 1.4, end.z + 0.3, 0.08, 2.8, 0.08);
+        this.towerAt(k, v(end.x + 0.85, 2.8, end.z + 0.3), 0.62);
         this.stationOf.set(k, this.stationXs.length);
         this.stationXs.push(end.x);
         this.stationQueue.push([]);
