@@ -2941,12 +2941,12 @@ export class Sorter implements Scene3D {
       read: t.read,
       postcode: pcDigits(p.pc),
       city,
-      dest: p.dest >= 0 ? `chute ${p.dest + 1}` : p.buffered !== undefined ? `chute ${p.buffered + 1} → buffer` : 'buffer store',
+      dest: p.dest >= 0 ? this.chuteText(p) : p.buffered !== undefined ? `chute ${p.buffered + 1} → buffer` : 'buffer store',
       size: `${cm(p.d)}×${cm(p.w)}×${cm(p.h)} cm`,
       kg: p.kg,
     };
     for (const side of [0, 1]) {
-      if (t.read) this.scanLabels.set(t.screen * 2 + side, `${pcDigits(p.pc)} ${city}`, `${String(p.id).padStart(8, '0')} · chute ${p.dest >= 0 ? p.dest + 1 : p.buffered !== undefined ? `${p.buffered + 1} → buffer` : 'store'}`, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+      if (t.read) this.scanLabels.set(t.screen * 2 + side, `${pcDigits(p.pc)} ${city}`, `${String(p.id).padStart(8, '0')} · ${p.dest >= 0 ? this.chuteText(p) : p.buffered !== undefined ? `chute ${p.buffered + 1} → buffer` : 'chute store'}`, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
       else this.scanLabels.set(t.screen * 2 + side, 'NO READ', String(p.id).padStart(8, '0'), { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
     }
     this.scanDirty = true;
@@ -6778,13 +6778,23 @@ export class Sorter implements Scene3D {
     this.autoFollow = true;
   }
 
+  /**
+   * Its chute, and for a dock chute the roll cage it goes in as the dock numbers them
+   * (`Docks.cageNumber`, 1–6, the same number the dock projector shows): "chute 3 pos 5".
+   * No position when the dock has no cage for its postcode (a missort).
+   */
+  private chuteText(p: Parcel): string {
+    const cage = this.dockOf.has(p.dest) ? this.docks.cageNumber(p.dest, p.pc) : 0;
+    return cage > 0 ? `chute ${p.dest + 1} pos ${cage}` : `chute ${p.dest + 1}`;
+  }
+
   /** What its label says, and where it is now. */
   parcelInfo(p: Parcel): { id: string; address: Address; route: string; where: string; kg: string; size: string; noread: boolean; note: string; tags: Tag[] } {
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     const north = NORTH_CITIES.findIndex((c) => c.name === city);
     const south = SOUTH_CITIES.findIndex((c) => c.name === city);
     const door = [...this.dockOf.keys()].indexOf(p.dest);
-    const route = north >= 0 ? `Door ${door >= 0 ? door + 1 : DOCK_CITY.indexOf(north) + 1} · chute ${p.dest + 1}` : south >= 0 ? `Door ${21 + south} · robots` : 'Store';
+    const route = north >= 0 ? `Door ${door >= 0 ? door + 1 : DOCK_CITY.indexOf(north) + 1} · ${this.chuteText(p)}` : south >= 0 ? `Door ${21 + south} · robots` : 'Store';
     const cm = (x: number) => Math.round(x * 100);
     // Weighed and measured at the infeed: actual, volumetric (L×W×H cm / 5000) and the one charged.
     const vol = (cm(p.d) * cm(p.w) * cm(p.h)) / 5000;
