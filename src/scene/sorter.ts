@@ -2617,38 +2617,63 @@ export class Sorter implements Scene3D {
     return this.toLane(k, p, color, lead);
   }
 
-  /** Onto lane k at its start, now, with a tray kept for it at the loop. */
-  private toLane(k: number, p: Parcel, color: RGB | null, lead: boolean, keep = false): boolean {
+  /**
+   * Onto lane k at its start, now. Its tray is not chosen yet: that happens at the buffer, just
+   * before it is let go (`releaseLanes`), so it takes the first tray that is empty by then.
+   */
+  private toLane(k: number, p: Parcel, color: RGB | null, lead: boolean): boolean {
     const lane = this.lanes[k]!;
-    const bt = this.ct;
-    let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M) + LANE_PHASE[k]!, lane.lastArrive + 1);
+    lane.lastSpawn = this.ct;
+    p.tray = -1;
+    p.lane = k;
+    p.lead = lead;
+    if (lead && color) p.glow.setRGB(...color);
+    if (!lead) p.glow.copy(p.dest >= 0 ? this.chutes[p.dest]!.col : this.white);
+    this.onPath(p, lane.path, 'lane', this.ct, Infinity, 0);
+    return true;
+  }
+
+  /**
+   * The front parcel of each lane's buffer that has no tray yet takes one: the first empty tray
+   * of the lane's parity it can reach, at most one parcel per lane per beat. Chosen this late (a
+   * few beats ahead), a tray emptied at a chute on its way round is seen as empty, so a full
+   * buffer fills every gap that comes by. (Chosen when a parcel came onto the lane, trays still
+   * carrying a parcel then went by empty, and one parcel waiting a lap held up the whole lane.)
+   */
+  private releaseLanes(queued: Parcel[][]): void {
+    const ct = this.ct;
+    const behind = (t: number) => (t - 1 + TRAYS) % TRAYS;
+    queued.forEach((q, k) => {
+      // (Several in one frame when frames are slow or the belts fast: one per beat each.)
+      for (let n = 0; n < 8; n++) if (!this.releaseOne(q, k, ct, behind)) break;
+    });
+  }
+
+  /** One parcel of lane k's buffer takes its tray (false: none could). */
+  private releaseOne(q: Parcel[], k: number, ct: number, behind: (t: number) => number): boolean {
+    const p = q.find((x) => x.t1 === Infinity);
+    if (!p) return false;
+    const lane = this.lanes[k]!;
+    const len = lane.path.len;
+    const hold = (len - HOLD_S) / BEAT_M;
+    const ph = LANE_PHASE[k]!;
+    // Earliest: one beat after the one before it, let go now at the soonest, and not before it gets there.
+    let a = Math.max(lane.lastArrive + 1, ct + hold, p.t0 + len / BEAT_M);
+    a = Math.ceil(a - ph - 1e-6) + ph;
+    // Not yet near the buffer: choose later.
+    if (a - ct > hold + 2) return false;
     // A parcel longer than a tray takes the one behind it too.
     const long = p.d > 0.9;
-    const behind = (t: number) => (t - 1 + TRAYS) % TRAYS;
-    const free = (t: number) => !this.trayOwner[t] && (!long || !this.trayOwner[behind(t)]);
-    let tries = 0;
-    // (A parcel already on a belt looks a whole lap ahead for its tray; it is never taken off.)
-    while (!free(trayAt(INDUCT[k]!, arrive)) && tries++ < (keep ? LOOP_LEN : 6)) arrive++;
-    const tray = trayAt(INDUCT[k]!, arrive);
-    if (!free(tray)) {
-      if (keep) return false;
-      p.dead = true;
-      p.recycled = true;
-      return false;
-    }
-    lane.lastArrive = arrive;
-    lane.lastSpawn = bt;
+    const tray = trayAt(INDUCT[k]!, a);
+    if (this.trayOwner[tray] || (long && this.trayOwner[behind(tray)])) return false;
     this.trayOwner[tray] = p;
     p.tray = tray;
     if (long) {
       p.tray2 = behind(tray);
       this.trayOwner[p.tray2] = p;
     }
-    p.lane = k;
-    p.lead = lead;
-    if (lead && color) p.glow.setRGB(...color);
-    if (!lead) p.glow.copy(p.dest >= 0 ? this.chutes[p.dest]!.col : this.white);
-    this.onPath(p, lane.path, 'lane', bt, arrive, 0);
+    lane.lastArrive = a;
+    p.t1 = a;
     return true;
   }
 
@@ -2697,7 +2722,8 @@ export class Sorter implements Scene3D {
     }
     queued.forEach((q, k) => {
       let at = 0;
-      q.sort((a, b) => a.t1 - b.t1).forEach((p, n) => {
+      // (By when they go; those without a tray yet behind, in the order they came.)
+      q.sort((a, b) => a.t1 - b.t1 || a.t0 - b.t0).forEach((p, n) => {
         p.rank = n;
         p.queueAt = at;
         at += p.d + GAP;
@@ -2705,6 +2731,7 @@ export class Sorter implements Scene3D {
       this.waiting[k] = q.length;
       this.laneUse[k] = at;
     });
+    this.releaseLanes(queued);
     // Pickup tables: nose to tail by length.
     for (const q of this.stationQueue) {
       let at = 0;
@@ -2955,10 +2982,9 @@ export class Sorter implements Scene3D {
   private pathEnd(p: Parcel): void {
     switch (p.pathKind) {
       case 'feed': {
-        // Off the collector into the lane (its room on the buffer was kept for it). Without a
-        // tray for it within a lap it waits where it is and tries again next frame.
+        // Off the collector into the lane (its room on the buffer was kept for it).
         const color = this.feedColor.get(p) ?? null;
-        if (!this.toLane(p.lane, p, color, p.lead, true)) break;
+        this.toLane(p.lane, p, color, p.lead);
         this.feedColor.delete(p);
         this.feeding[p.lane] = Math.max(0, this.feeding[p.lane]! - 1);
         this.feedLen[p.lane] = Math.max(0, this.feedLen[p.lane]! - p.d - GAP);
@@ -3725,7 +3751,7 @@ export class Sorter implements Scene3D {
 
   // ---------- camera ----------
   private pickFollow(): void {
-    const fresh = this.parcels.filter((p) => p.mode === 'path' && p.pathKind === 'lane' && (p.path?.len ?? 0) * clamp((this.ct - p.t0) / (p.t1 - p.t0), 0, 1) < 20);
+    const fresh = this.parcels.filter((p) => p.mode === 'path' && p.pathKind === 'lane' && p.sPrev < 20);
     const pool = fresh.length ? fresh : this.parcels.filter((p) => p.mode === 'loop');
     const leads = pool.filter((p) => p.lead);
     const stores = pool.filter((p) => p.dest < 0);
