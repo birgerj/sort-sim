@@ -1,7 +1,7 @@
 // The inbound wing: ten dock doors in the north wall of the wing, a truck full of parcels at
 // each, a telescopic conveyor that reaches into the trailer up to the wall of parcels, and an
 // unloader who takes the parcels off that wall one at a time and puts them on the telescope's
-// nose. The telescopes run onto collector belts that merge into the four infeed lanes (the
+// nose. The telescopes run onto collector belts that merge into the five infeed lanes (the
 // collectors and the parcels' way are the Sorter's).
 //
 // As a trailer empties, the wall of parcels moves back, the telescope follows it and the unloader

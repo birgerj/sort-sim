@@ -30,17 +30,19 @@ sound is generated in code.
    opens, its load is there as real parcels stacked on the trailer floor. A telescopic
    conveyor reaches into the trailer up to the stack, and an unloader takes the parcels
    off one at a time (about 1,000 an hour each; a second unloader
-   joins when the rate needs more). The telescopes run onto four collector belts (doors
-   41–43, 44–45, 46–47, 48–50), each the start of one infeed lane, centred over the lanes.
+   joins when the rate needs more). The telescopes run onto five collector belts, two doors
+   each (41–42, 43–44, 45–46, 47–48, 49–50), each the start of one infeed lane, centred
+   over the lanes.
    An empty truck leaves and a full one backs in. The video wall in the control room
    shows the wing, the lanes and the inbound trucks (it grew taller; the plan kept its
    scale).
-1. **Infeed (north-west).** Four lanes, 4 m apart, come through the north
-   wall at floor level, each through a scan tunnel just inside it, then a
-   buffer (where parcels queue), then down a ramp to loop height and, one
+1. **Infeed (north-west).** Five lanes, 4 m apart, start at the collectors in
+   the inbound wing, each through a scan tunnel, then a buffer (where parcels
+   queue), sideways to its place, then up a ramp to loop height and, one
    after the other, turn left onto the north straight from the outside at
-   30°, 4 m apart, before the first dock chute. Two land on the beat and two
-   half a beat later, so every tray can be filled. A maintenance walkway with
+   30°, 4 m apart, before the loop scanner and the first dock chute. Three land
+   on the beat and two half a beat later, so every tray can be filled (four
+   lanes already fill every tray at the top rate; the fifth shares the load). A maintenance walkway with
    a stair runs along the lanes. The loop now runs almost to the west wall;
    inside its west end is a maintenance platform (the DJ's at night). Parcels come in
    at a set rate; when that is more than the lanes take, they queue at the

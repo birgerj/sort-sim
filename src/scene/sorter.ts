@@ -123,16 +123,16 @@ const LABEL_ROWS = 32;
 // s 0–154: north straight (infeeds at 10–22, 20 dock chutes from 38) · 161–170: east side, to and
 // from the store · 176–330: south straight, 20 robot station chutes from 178 · 330–352: west end.
 /**
- * Infeeds: four lanes come in through the north wall at floor level, 4 m apart, each
+ * Infeeds: five lanes come from the inbound wing at floor level, 4 m apart, each
  * through its own scan tunnel just inside the wall, then a buffer (the hold point
  * where parcels queue), then down the hall on a ramp to loop height, a turn to the
  * left and onto the north straight from the outside at 30°, 4 m apart, before the
  * first dock chute. The joins are on even marks: lanes 0 and 2 land on the beat
  * (even trays), lanes 1 and 3 half a beat later (odd trays), so every tray can be filled.
  */
-const INDUCT = [10, 14, 18, 22];
+const INDUCT = [10, 14, 18, 22, 26];
 /** Half-beat offset of each lane's landing (see above). */
-const LANE_PHASE = [0, 0.5, 0, 0.5];
+const LANE_PHASE = [0, 0.5, 0, 0.5, 0];
 const LANE_Y = 0.9;
 /** Belt height where an infeed joins the loop: just above the lips of the trays. */
 const LANE_TOP = LOOP_Y + 0.05;
@@ -207,13 +207,13 @@ const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }
 
 /**
  * The inbound wing: an L-shaped extension north of the west part of the hall. Ten dock doors in
- * its north wall, each with a truck and a telescopic conveyor; the telescopes run onto four
- * collector belts, each merging into one infeed lane (doors 1–3, 4–5, 6–7, 8–10, west to east),
- * centred over the lanes so the two middle lanes run out alike. The old north wall is open there.
+ * its north wall, each with a truck and a telescopic conveyor; the telescopes run onto five
+ * collector belts, two doors each, each the start of one infeed lane (west to east), centred
+ * over the lanes so the lanes run out alike on both sides (the middle one straight on). The old north wall is open there.
  */
-const WING = { x0: -66, x1: -22.5, z0: -54 };
-const INBOUND_DOORS = Array.from({ length: 10 }, (_, i) => -63.1 + 4.2 * i);
-const LANE_DOORS = [[0, 1, 2], [3, 4], [5, 6], [7, 8, 9]];
+const WING = { x0: -64, x1: -20.8, z0: -54 };
+const INBOUND_DOORS = Array.from({ length: 10 }, (_, i) => -61.1 + 4.2 * i);
+const LANE_DOORS = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
 /** Where each lane starts: the middle of its doors, on its collector. */
 const LANE_MERGE = LANE_DOORS.map((ds) => (INBOUND_DOORS[ds[0]!]! + INBOUND_DOORS[ds[ds.length - 1]!]!) / 2);
 /** The collectors run east–west just past the ends of the telescopes' bases. */
@@ -1267,9 +1267,9 @@ export class Sorter implements Scene3D {
   /** The inbound wing's trucks, telescopes and unloaders. */
   private wing!: Inbound;
   /** Parcels on their way from a trailer to the start of each lane; when each door may give its next; when the last one reaches each lane. */
-  private feeding = [0, 0, 0, 0];
+  private feeding = INDUCT.map(() => 0);
   private doorNext = INBOUND_DOORS.map(() => 0);
-  private feedArrive = [0, 0, 0, 0];
+  private feedArrive = INDUCT.map(() => 0);
   private readonly fa = new THREE.Vector3();
   private readonly fb = new THREE.Vector3();
   private manual!: ManualSort;
@@ -1929,7 +1929,7 @@ export class Sorter implements Scene3D {
   /** Conveyor beats since the last frame. */
   private dct = 0;
   /** Parcels waiting at each lane's hold point. */
-  private waiting = [0, 0, 0, 0];
+  private waiting = INDUCT.map(() => 0);
 
   /** Most parcels per minute the infeed can take at the highest belt speed. */
   static readonly MAX_RATE = 2 * BELT_SPEEDS[BELT_SPEEDS.length - 1]! * BPM;
@@ -2104,7 +2104,7 @@ export class Sorter implements Scene3D {
   }
 
   private spawnLead(color: RGB, pitch: number, vel: number): void {
-    const pair = pitch >= 0.5 ? [2, 3] : [0, 1];
+    const pair = pitch >= 0.5 ? [2, 3, 4] : [0, 1];
     if (Math.random() < 0.5) pair.reverse();
     for (const k of pair) {
       const lane = this.lanes[k]!;
@@ -4523,7 +4523,7 @@ export class Sorter implements Scene3D {
 
     const inductGap = new THREE.MeshBasicMaterial({ color: 0x0c0d0f });
     // Infeeds: four lanes side by side at floor level, in from the north wall, each through its own scan tunnel.
-    for (let k = 0; k < 4; k++) {
+    for (let k = 0; k < INDUCT.length; k++) {
       const y = LANE_Y;
       // Where it meets the loop, and where it turns towards it (LANE_OUT out from the
       // centre line, on the 30° line in from the outside); the lane runs straight south to there.
@@ -4592,7 +4592,7 @@ export class Sorter implements Scene3D {
       const grate = this.std(0x3a3e45, 0.6, 0.7, 0xc9ced4);
       const rail = this.std(0xd9a400, 0.5, 0.4, 0xf2c200);
       const steel = this.std(0x4c515a, 0.5, 0.7, DAY.steel);
-      loopAt(INDUCT[3]!, this.p, this.t);
+      loopAt(INDUCT[INDUCT.length - 1]!, this.p, this.t);
       const wx = this.p.x - LANE_OUT / Math.tan(Math.PI / 6) + 1.7;
       const wy = LOOP_Y - 1.0;
       const z1 = RAMP_Z + ((wy - LANE_Y) / (LANE_TOP - LANE_Y)) * (-LOOP_ZH - LANE_OUT - RAMP_Z);
