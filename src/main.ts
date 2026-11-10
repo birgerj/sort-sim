@@ -2,7 +2,7 @@
  * Entry point: the hall, the music and the controls, wired together.
  *
  * URL parameters (all optional):
- *   time=day|night|cycle   time of day
+ *   time=day|night         time of day (fixed: it does not change by itself)
  *   look=minimal|real      the day's look: a clean drawing, or lit like a photo
  *   camera=auto|fly|follow|walk camera mode
  *   dept=<id>              start at a department (see Sorter.departments())
@@ -96,7 +96,7 @@ const settings = loadSettings();
 liveSettings = settings;
 
 const time = q.get('time');
-if (time === 'day' || time === 'night' || time === 'cycle') settings.time = time as TimeMode;
+if (time === 'day' || time === 'night') settings.time = time as TimeMode;
 const look = q.get('look');
 if (look === 'minimal' || look === 'real') settings.look = look;
 scene.setRealistic(settings.look === 'real');
@@ -141,15 +141,9 @@ hudQuality = () => {
 window.addEventListener('resize', resize);
 resize();
 
-// Time of day: 0 day, 1 night. The cycle holds each for a while, with a slow dusk and dawn.
-const CYCLE_S = 240;
+// Time of day: 0 day, 1 night, as chosen (a switch fades over a moment).
 let tod = settings.time === 'night' ? 1 : 0;
-const targetTod = (t: number) => {
-  if (settings.time === 'day') return 0;
-  if (settings.time === 'night') return 1;
-  const c = 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / CYCLE_S);
-  return Math.min(1, Math.max(0, (c - 0.25) * 2));
-};
+const targetTod = () => (settings.time === 'night' ? 1 : 0);
 
 // Space pauses the whole simulation (the music, its clock and everything that runs on it).
 window.addEventListener('keydown', (e) => {
@@ -178,7 +172,7 @@ function frame(now: number): void {
     return;
   }
   for (const n of f.notes) scene.note(n.color, n.pitch, n.vel, n.dur, n.role);
-  tod += (targetTod(now / 1000) - tod) * Math.min(1, dt * 0.8);
+  tod += (targetTod() - tod) * Math.min(1, dt * 0.8);
   scene.render({
     dt,
     beats: f.beats,

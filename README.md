@@ -181,7 +181,7 @@ The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go 
 | Go to a department | `1`–`9`, `0` |
 | Camera: Auto / Fly / Follow a parcel | `A` / `F` / `P` (next parcel) |
 | Walk and fly | `V`, then `W A S D` / arrows, drag to look, `Shift` run (fly faster), `E` / `Q` or `PgUp` / `PgDn` up and down, `Esc` stop; touch: a stick under the left thumb (at its edge you run), drag on the right half to look, hold **Up** / **Down** at the right edge. Climbing from the floor is flying, coming down to it is walking; **Walk / Fly** at the top lands or takes off. Keep climbing and you fly up through the roof (hidden from above, with everything hung under it) until the whole floor fits on screen; look straight down. **Go to → Top down** goes there at once. The menu stays usable |
-| Time: Day / Night / Day ↔ night cycle (in Settings) | `D` / `N` / `C` |
+| Time: Day / Night (in Settings) | `D` / `N` |
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start), Fault (a dock chute goes down now) | buttons (`?rate=`, `?faults=0`) |
 | Sound on/off and volume (in Settings) | `M` |
@@ -196,7 +196,7 @@ The music follows the parcels per minute: its tempo moves (3 BPM per bar) betwee
 
 With a mouse, the dock fades after three seconds without movement or a key and comes back when the mouse moves; on touch screens it stays. **Hide controls** (More, or key `H`) hides everything; click or tap the hall to bring it back.
 
-URL parameters: `?time=day|night|cycle`, `?look=minimal|real` (the day as a drawing or lit like a photo), `?camera=auto|fly|follow|walk`,
+URL parameters: `?time=day|night`, `?look=minimal|real` (the day as a drawing or lit like a photo), `?camera=auto|fly|follow|walk`,
 `?speed=0.5|1|2|4`, `?rate=<parcels per minute>`, `?faults=0` (no random faults), `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
 (no controls: for recordings), `?quality=low|high`, `?night=party|calm|dark`.
 

@@ -14,7 +14,7 @@ import { InfoPanel } from './info';
 import { duration, ROLE_TEXT, Staff, type StaffMember } from '../sim/staff';
 import { NIGHT_PRESETS, NIGHT_SWITCHES, presetOf, type NightFx, type NightPreset } from '../scene/nightFx';
 
-export type TimeMode = 'day' | 'night' | 'cycle';
+export type TimeMode = 'day' | 'night';
 /** How the day looks: drawn and flat (Minimal) or lit like a photo (Day). */
 export type DayLook = 'minimal' | 'real';
 type Tab = 'go' | 'camera' | 'hub' | 'night' | 'more';
@@ -50,6 +50,8 @@ export function loadSettings(): Settings {
   } catch {
     /* no storage */
   }
+  // (The day ↔ night cycle is gone: a saved cycle starts by day.)
+  if (s.time !== 'day' && s.time !== 'night') s.time = 'day';
   return s;
 }
 
@@ -434,13 +436,13 @@ export class Hud {
 
   /** More: time of day, sound, graphics quality, Christmas, country, and the app. */
   private buildMore(sec: HTMLElement): void {
-    const tb = this.row(sec, 'Time of day', 'Minimal: the day as a clean drawing. Day: the day lit like a photo. Night: the party. Keys D (Minimal ↔ Day), N, C.');
-    tb.classList.add('cols4');
-    for (const [id, label] of [['minimal', 'Minimal'], ['real', 'Day'], ['night', 'Night'], ['cycle', 'Day ↔ night']] as const) {
+    const tb = this.row(sec, 'Time of day', 'Minimal: the day as a clean drawing. Day: the day lit like a photo. Night: the party. Keys D (Minimal ↔ Day), N.');
+    tb.classList.add('cols3');
+    for (const [id, label] of [['minimal', 'Minimal'], ['real', 'Day'], ['night', 'Night']] as const) {
       const b = el('button', '', label);
       b.onclick = () => {
         if (id === 'minimal' || id === 'real') this.setTime('day', id);
-        else this.setTime(id);
+        else this.setTime('night');
       };
       tb.append(b);
       this.timeBtns.set(id, b);
@@ -787,7 +789,7 @@ export class Hud {
     saveSettings(this.settings);
   }
 
-  /** Time of day, and optionally the day's look (kept for the cycle). */
+  /** Time of day, and optionally the day's look. */
   setTime(t: TimeMode, look?: DayLook): void {
     this.settings.time = t;
     if (look) {
@@ -833,7 +835,6 @@ export class Hud {
       // D: to the day, or between Minimal and Day while it is day.
       else if (k === 'd') this.setTime('day', this.settings.time === 'day' ? (this.settings.look === 'real' ? 'minimal' : 'real') : undefined);
       else if (k === 'n') this.setTime('night');
-      else if (k === 'c') this.setTime('cycle');
       else if (k === 'm') this.toggleSound();
       else if (k === '[' || k === ']') {
         const i = BELT_SPEEDS.indexOf(this.scene.beltSpeed());
