@@ -322,9 +322,36 @@ body {
   display: none;
 }
 
+/* Phones: four to a row, the icon over a short label, so every stop fits on the screen at once. */
 @media (max-width: 480px) {
   .sheet .depts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .sheet .depts .dept {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-height: 46px;
+    padding: 5px 3px;
+    font-size: 11.5px;
+    line-height: 1.15;
+    text-align: center;
+  }
+  .sheet .depts .dept svg {
+    width: 16px;
+    height: 16px;
+  }
+  .sheet .depts .dept-group {
+    margin-top: 2px;
+    font-size: 10px;
+  }
+}
+
+/* Very narrow phones: three to a row. */
+@media (max-width: 340px) {
+  .sheet .depts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

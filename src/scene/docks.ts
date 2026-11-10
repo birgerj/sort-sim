@@ -79,6 +79,14 @@ export interface TruckLink {
  * the belt, carry it, put it in a cage, push a cage into the trailer, or pull an
  * empty one out of a new truck.
  */
+/** Inside the loop where the loaders chat (z), and where the way between the belts meets the cages. */
+const CHAT_Z = -2.4;
+const OUT_Z = -25.2;
+/** Behind the cages, on the door side (between them and where full cages wait). */
+const BEHIND_Z = -31;
+/** South of this a worker is out on the floor by the loop (or inside it), not among the cages. */
+const INSIDE_Z = -12;
+
 interface Step {
   beats: number;
   /** Where the worker ends up. */
@@ -249,8 +257,10 @@ export class Docks {
       groups.push(this.docks.slice(i, i + size));
       i += size;
     }
+    // (The chat is inside the loop, off the floor where cages are pushed: they walk there and
+    // back between the belts, under the loop: see `walkX`.)
     groups.forEach((g, gi) => {
-      const mid = v(g.reduce((a, d) => a + d.x, 0) / g.length + 0.9, 0, -33.2);
+      const mid = v(g.reduce((a, d) => a + this.walkX(d), 0) / g.length, 0, CHAT_Z);
       const spots = g.map((_, k) => {
         const a = (k / g.length) * Math.PI * 2 + 0.6 + gi;
         // (Not quite a ring: people stand at their own distance.)
@@ -379,8 +389,16 @@ export class Docks {
         if (!w.step && !w.steps.length) {
           if (w === d.loader) this.planLoad(d);
           else this.plan(d);
-          // Nothing to load (by day): over to the others for a chat.
+          // Back from a chat inside the loop to work: first out between the belts to the cages.
+          if (w.steps.length && w.root.position.z > INSIDE_Z) {
+            const x = this.walkX(d);
+            const out = this.wayOut(d).reverse();
+            w.steps.unshift({ beats: 1, to: v(x, 0, CHAT_Z - 1.4), pose: 'walk' }, ...out.map((to) => ({ beats: 1, to, pose: 'walk' as const })));
+          }
+          // Nothing to load (by day): over to the others for a chat, inside the loop.
           if (w === d.loader && day && !w.steps.length && w.chat && w.root.position.distanceTo(w.chat) > 0.3) {
+            const x = this.walkX(d);
+            if (w.root.position.z < INSIDE_Z) w.steps.push(...this.wayOut(d).map((to) => ({ beats: 1, to, pose: 'walk' as const, idle: true })), { beats: 1, to: v(x, 0, CHAT_Z - 1.4), pose: 'walk', idle: true });
             w.steps.push({ beats: 1, to: w.chat, face: w.chatMid, pose: 'walk', idle: true });
           }
         }
@@ -1150,6 +1168,25 @@ export class Docks {
   }
 
   /** Is this dock's picker (role 0) or loader (1) at work: a parcel in hand or a job planned? */
+  /**
+   * The way from a door's cages to inside the loop and back (x): halfway to the next dock's belt
+   * (the last dock: to the one before), clear of the belts and the chutes, under the loop.
+   */
+  walkX(d: Dock | number): number {
+    const dock = typeof d === 'number' ? this.docks[d]! : d;
+    const i = this.docks.indexOf(dock);
+    // (Only every other gap between neighbouring docks' cages is wide enough to walk through, and
+    // clear of the loop's legs: the one east of an even dock, west of an odd one.)
+    return i % 2 === 0 ? dock.x + 3 : dock.x - 3;
+  }
+
+  /** From a door's cages to the gap between the docks (behind the cages), and south through it past them. */
+  wayOut(d: Dock | number): V3[] {
+    const dock = typeof d === 'number' ? this.docks[d]! : d;
+    const x = this.walkX(dock);
+    return [v(dock.x + 1, 0, BEHIND_Z), v(x, 0, BEHIND_Z), v(x, 0, OUT_Z)];
+  }
+
   /** The body now working at a door: the picker (role 0) or the loader (1). */
   body(dock: number, role: 0 | 1): Human {
     const d = this.docks[dock]!;

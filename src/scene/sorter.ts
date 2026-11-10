@@ -1639,14 +1639,14 @@ export class Sorter implements Scene3D {
       const zi = LOOP_ZH - 2.4;
       const x0 = PLATFORM_X + 7.6;
       // (Its green coating only in Day: Minimal keeps the plain floor between the taped edges.)
-      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4, [-20, -18], [-(zi + 1.2), -(zi - 1.2)]));
+      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4, undefined, [-(zi + 1.2), -(zi - 1.2)]));
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
     // More walkways, where people walk (checked clear of machines, belts and parked things):
     // from the canteen's stair down the west wall, under the loop's west end, to the corridor
-    // south of the loop by the manual sorting and control room; and an aisle along the north
-    // docks between the roll cages and the doors. (Coating in Day only, like the loop's.)
+    // south of the loop by the manual sorting and control room, and over to the loop's walkway.
+    // (None in front of the north doors, where roll cages are pushed.) Coating in Day only.
     {
       const ax0 = WX + 2.6;
       const ax1 = WX + 4.8;
@@ -1682,16 +1682,6 @@ export class Sorter implements Scene3D {
           [SDX - SDW, AISLE_Z + 2.25, SDX - SDW, HZ - 0.05],
           [SDX + SDW, AISLE_Z + 2.25, SDX + SDW, HZ - 0.05],
         ]),
-        // (Its west end turns south, under the loop, onto the loop's walkway.)
-        this.life.addFloorPath(-20, 100, -34.6, -32.2, [
-          [-20, -34.6, 100, -34.6],
-          [-20, -34.6, -20, -32.2],
-          [-18, -32.2, 100, -32.2],
-        ]),
-        this.life.addFloorPath(-20, -18, -32.2, -LOOP_ZH + 1.2, [
-          [-20, -32.2, -20, -LOOP_ZH + 1.2],
-          [-18, -32.2, -18, -LOOP_ZH + 1.2],
-        ]),
       );
       this.life.addCrossing(SDX - SDW, SDX + SDW, AISLE_Z - 2.3, AISLE_Z + 2.1);
       this.life.addStaffDoor(SDX, HZ);
@@ -1700,8 +1690,8 @@ export class Sorter implements Scene3D {
     // The canteen behind the west wall, with its windows and door in the wall and a stair down inside.
     this.canteen = new Canteen(this, CANTEEN);
     {
-      // The ways people walk to and from the stair: over the walkways (the dock aisle, south under
-      // the loop, west along the loop's walkway and over to the west wall, north to the stair's foot).
+      // The ways people walk to and from the stair: from the cages between the belts, under the
+      // loop into it, west along its walkway and over to the west wall, north to the stair's foot.
       const foot = canteenStairFoot(CANTEEN);
       const ax = WX + 3.7;
       const sx = WX + 0.7;
@@ -1723,14 +1713,17 @@ export class Sorter implements Scene3D {
       ]);
       this.breaks = new BreakCrew(this, this.canteen, {
         docks: DOCK_X,
-        toStair: (dx) => [
-          [dx, 0, -32.4],
-          [dx, 0, -33.4],
-          [-19, 0, -33.4],
-          [-19, 0, rz],
-          [ax, 0, rz],
-          [ax, 0, foot - 0.5],
-        ],
+        // From the door's cages between the belts, under the loop, into it and along its walkway.
+        toStair: (dx) => {
+          const i = DOCK_X.indexOf(dx);
+          const wx = this.docks.walkX(i);
+          return [
+            ...this.docks.wayOut(i).map((p) => [p.x, 0, p.z] as [number, number, number]),
+            [wx, 0, rz],
+            [ax, 0, rz],
+            [ax, 0, foot - 0.5],
+          ];
+        },
         body: (d, role) => this.docks.body(d, role),
         // A colleague takes over: the job, the door and the staff card's place go with the one who came.
         swap: (d, role, h) => {
@@ -7098,8 +7091,8 @@ export class Sorter implements Scene3D {
     this.relabel = new Relabel(this, {
       end,
       way: [
-        [-19, 0, end.z - 2.65],
-        [-19, 0, -33.4],
+        [-19.4, 0, end.z - 2.65],
+        [-19.4, 0, -33.4],
         [stand.x, 0, -33.4],
         [stand.x, 0, stand.z],
       ],

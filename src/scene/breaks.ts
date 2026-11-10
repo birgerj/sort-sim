@@ -1,7 +1,7 @@
 // Breaks and the shift change. A few of the dock crew are always on their break in the canteen
 // (you see them through the window). Now and then each of them, rested, goes down to a door to
 // relieve a colleague: down the stair and over the walkways (the west wall, the loop's walkway,
-// south under the loop, the dock aisle) to them, a word at the door, and the colleague walks the
+// under the loop, between the belts) to them, a word at the door, and the colleague walks the
 // same way up to a free seat, while the one who came carries on with the job (the door never
 // stops). So the crew takes turns. Every few hours of hub time the shift changes: the early shift
 // goes up to the lockers, the late shift comes down to the docks.
@@ -150,7 +150,7 @@ export class BreakCrew {
           continue;
         }
         if (w.state === 'down' && !w.shift) {
-          // At the dock aisle by their door: over to the colleague.
+          // By their door's cages: over to the colleague.
           w.state = 'meet';
           w.until = -1;
           continue;
@@ -231,7 +231,7 @@ export class BreakCrew {
     w.seat = s;
     w.since = this.set.hubTime();
     const up = this.wayUp(this.set.docks[w.dock]!, s);
-    // From where they stand, onto the dock aisle and the way up.
+    // From where they stand, between the belts and the way up.
     w.trip = new Trip([[w.h.root.position.x, 0, w.h.root.position.z], ...up.pts]);
     w.s = 0;
     w.state = 'up';
