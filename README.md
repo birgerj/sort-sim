@@ -83,6 +83,14 @@ sound is generated in code.
 8. Life: people walking their rounds, a ride-on scrubber, a reach truck at
    the rack, a forklift charging station, live screens with the hub's
    numbers, wall clocks, exit signs, extinguishers, a break area.
+   **Faults:** now and then a dock chute goes down (a blocked photo eye, a
+   tripped belt drive, a parcel jammed at the exit). Its signal towers flash
+   red, its display says what is wrong, the video wall marks it, and the sorter
+   sends nothing more down it. The technician leaves his workbench under the
+   maintenance platform, rides a stand-up scooter along the inside of the
+   loop, ducks under it beside the chute and works on the photo eye with his
+   toolbox for a few bars; then the towers flash green and the chute runs
+   again. He takes faults one after the other, oldest first.
 9. At night: a crowd of 520 dancing inside the loop on an LED dance floor, a DJ on the mezzanine, laser fans, mirror-ball spots, dancing
    dock workers and confetti when the groove drops in.
 
@@ -131,6 +139,7 @@ Little jokes for those who look closely, or tap things:
 - **Country** (Settings): the Netherlands, Belgium, France, Germany, Finland, Sweden, Moldova, India or Australia; by default from the browser's language. Its 40 largest towns or municipalities (with their postcode ranges) are the 40 destinations; names, streets and address format follow the country.
 - **Destinations** are weighted by inhabitants (rounded, about 2024); within a city the postcodes are equally likely.
 - **Sorter:** a parcel longer than a tray takes two trays. The scan tunnel measures and weighs every parcel (and the volumetric weight, L×W×H/5000); too big or too heavy goes to manual sorting, as do labels that cannot be read (about 2%, of which the loop scanners still read some) and parcels whose chute stayed full for 3 rounds. Now and then a parcel lands in the next dock chute (a missort): the worker puts it in the return tote and it goes back to the infeed.
+- **Faults:** about one an hour of hub time (at least 24 minutes apart), at most two chutes down at once; a chute is down from the fault until the technician has finished (riding there, then 3 minutes of work). The **Fault** button (Hub) takes a dock chute down now; `?faults=0` switches the random ones off. Figures count them.
 - **Fill by volume:** roll cages, boxes and trailers are full by volume (or weight, or places), not by count. Dock belts are full when the parcels reach back about 4 m.
 - **Figures** (button in the Hub group): parcels in and out per hour, dwell time, recirculation, no-reads, to manual, missorts, chutes full, robots busy, infeed queue, trucks on time, load factor; a chart, the last departures, and a CSV download of the timeline and all departures.
 
@@ -149,7 +158,7 @@ The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go 
 | Walk and fly | `V`, then `W A S D` / arrows, drag to look, `Shift` run (fly faster), `E` / `Q` or `PgUp` / `PgDn` up and down, `Esc` stop; touch: a stick under the left thumb (at its edge you run), drag on the right half to look, hold **Up** / **Down** at the right edge. Climbing from the floor is flying, coming down to it is walking; **Walk / Fly** at the top lands or takes off. The menu stays usable |
 | Time: Day / Night / Day ↔ night cycle (in Settings) | `D` / `N` / `C` |
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
-| Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start) | buttons (`?rate=`) |
+| Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start), Fault (a dock chute goes down now) | buttons (`?rate=`, `?faults=0`) |
 | Sound on/off and volume (in Settings) | `M` |
 | Hide the controls | `H` |
 | Night tab (only at night): presets Party / Calm / Dark, how brightly parcels glow, and on/off for crowd, DJ, lasers, mirror ball, confetti, projector show, robot glow, dancing, haze, strobes and bloom; remembered | button (`?night=party\|calm\|dark`) |
@@ -162,7 +171,7 @@ The music follows the parcels per minute: its tempo moves (3 BPM per bar) betwee
 With a mouse, the dock fades after three seconds without movement or a key and comes back when the mouse moves; on touch screens it stays. **Hide controls** (More, or key `H`) hides everything; click or tap the hall to bring it back.
 
 URL parameters: `?time=day|night|cycle`, `?look=minimal|real` (the day as a drawing or lit like a photo), `?camera=auto|fly|follow|walk`,
-`?speed=0.5|1|2|4`, `?rate=<parcels per minute>`, `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
+`?speed=0.5|1|2|4`, `?rate=<parcels per minute>`, `?faults=0` (no random faults), `?dept=<id>` (e.g. `docks`, `boxes`, `loop`, `store`), `?mute=1`, `?ui=0`
 (no controls: for recordings), `?quality=low|high`, `?night=party|calm|dark`.
 
 ## Development

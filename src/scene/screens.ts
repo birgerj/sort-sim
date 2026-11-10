@@ -22,7 +22,7 @@ export interface HubMap {
   hall: [number, number, number, number];
   loop: [number, number][];
   /** Chute ends with how full they are (0…1) and where they go. */
-  chutes: { x: number; z: number; fill: number; dock: boolean }[];
+  chutes: { x: number; z: number; fill: number; dock: boolean; fault?: boolean }[];
   /** Dock doors: state of the truck and its load (0…1). */
   doors: { x: number; z: number; state: string; load: number }[];
   robots: { x: number; z: number; busy: boolean }[];
@@ -121,7 +121,7 @@ export class Screens {
     const clear = m.doors.filter((d) => d.state === 'cleardown' || d.state === 'closing').length;
     const away = m.doors.filter((d) => d.state !== 'open' && d.state !== 'cleardown' && d.state !== 'closing').length;
     const full = m.chutes.filter((c) => c.fill >= 1).length;
-    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}   ·   infeed queue ${m.queue}   ·   on time ${m.onTime}%   ·   dwell ${m.dwell} min   ·   ${m.clock}`, 330, 27);
+    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   ${m.chutes.some((c) => c.fault) ? `FAULT ${m.chutes.filter((c) => c.fault).length}   ·   ` : ''}cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}   ·   infeed queue ${m.queue}   ·   on time ${m.onTime}%   ·   dwell ${m.dwell} min   ·   ${m.clock}`, 330, 27);
     // Hall outline.
     g.strokeStyle = '#3a3d44';
     g.lineWidth = 2;
@@ -145,6 +145,18 @@ export class Screens {
       g.fillStyle = col;
       const fh = h * Math.min(1, c.fill);
       g.fillRect(X(c.x) - 7, c.dock ? y + h - fh : y, 14, fh);
+      if (c.fault) {
+        // Down: a red frame and a mark that flash.
+        if (Math.floor(now * 2) % 2 === 0) {
+          g.strokeStyle = '#ff3b30';
+          g.lineWidth = 3;
+          g.strokeRect(X(c.x) - 8.5, y - 1.5, 17, h + 3);
+        }
+        g.fillStyle = '#ff3b30';
+        g.font = '800 20px system-ui, sans-serif';
+        g.textAlign = 'center';
+        g.fillText('!', X(c.x), c.dock ? y - 8 : y + h + 20);
+      }
     }
     // Dock doors: truck state; cleardown flashes amber.
     const blink = Math.floor(now * 2) % 2 === 0;

@@ -330,7 +330,7 @@ export class Hud {
       belt.append(b);
       this.speedBtns.set(v, b);
     }
-    const acts = el('div', 'cols2');
+    const acts = el('div', 'cols3');
     const clear = el('button', 'wide', 'Cleardown…');
     clear.title = 'Choose dock doors whose trucks should leave now';
     clear.onclick = () => {
@@ -343,7 +343,12 @@ export class Hud {
       this.openTab(null);
       this.toggleStats();
     };
-    acts.append(clear, stats);
+    const fault = el('button', 'wide', 'Fault');
+    fault.title = 'Take a dock chute down now: the technician comes to repair it';
+    fault.onclick = () => {
+      this.scene.fault();
+    };
+    acts.append(clear, stats, fault);
     hub.append(acts);
 
     this.buildNight(this.section('night'));
@@ -601,6 +606,7 @@ export class Hud {
       ['No-reads', `${s?.noreadPct ?? 0}%`, `total ${t.noreadPct}%`],
       ['To manual', `${s?.manualPct ?? 0}%`, `total ${t.manualPct}%`],
       ['Missorts', String(t.missorts)],
+      ['Faults', String(t.faults), `${this.scene.faults.down.size} chute${this.scene.faults.down.size === 1 ? '' : 's'} down now`],
       ['Chutes full', s ? `${s.chutesFull}` : '–'],
       ['Robots busy', s ? `${s.robotsBusyPct}%` : '–'],
       ['Infeed queue', s ? String(s.infeedQueue) : '–'],

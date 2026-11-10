@@ -30,6 +30,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
 import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z, TABLE as MANUAL_TABLE } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
+import { FaultCrew, type FaultSite } from './faults';
+import { FAULT_TEXT, FaultPlan } from '../sim/faults';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
@@ -1465,6 +1467,7 @@ export class Sorter implements Scene3D {
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
+    this.buildCrew();
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.eggs = new Eggs(this);
@@ -1714,15 +1717,18 @@ export class Sorter implements Scene3D {
     this.trucks.update(bt);
     this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
-      chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && this.room(k) <= 0 ? 1 : 0), 0),
+      chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),
       robotsBusyPct: (100 * this.floor.fleet.bots.filter((b) => b.state !== 'idle').length) / this.floor.fleet.bots.length,
       infeedQueue: this.backlog + this.waiting.reduce((a, b) => a + b, 0),
+      chutesDown: this.faults.down.size,
       ...this.storeUse(),
       batch: this.batches.active ? `${this.batches.active.city.name} ${Math.round(this.batches.active.share * 100)}%` : '',
     }));
     this.manual.update(bt, this.dayShown !== false);
     this.yard.update(bt);
     this.life.update(dt, bt);
+    this.crew?.update(dt, bt);
+    this.updateFaultShows();
     this.xmas?.update(bt, 1 - this.day, this.kick);
     this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown });
     this.roof.update(bt, this.day, this.camera);
@@ -2615,12 +2621,102 @@ export class Sorter implements Scene3D {
   /** Parcels on their way down a chute (diverted, not yet at the table or the dock). */
   private inbound = new Map<number, number>();
 
+  /** Faults on the dock chutes (`?faults=0` switches them off), and the technician who repairs them. */
+  readonly faults = new FaultPlan(
+    CHUTES.map((_, k) => k).filter((k) => k < 20),
+    Math.random,
+    {},
+  );
+  private crew: FaultCrew | null = null;
+  private dockEnds = new Map<number, { end: V3; s: number }>();
+  private tableS: number[] = [];
+  private chuteShows: Labels | null = null;
+  /** The dock chutes' display text (the fault text replaces it while down), and what each shows now. */
+  private showText = new Map<number, [string, string]>();
+  private showNow = new Map<number, string>();
+  /** Beat until which a repaired chute's lamps flash green. */
+  private fixedFlash = new Map<number, number>();
+
+  /** Take a dock chute down now (a random running one without `chute`); false when none could. */
+  fault(chute?: number): boolean {
+    const f = this.faults.trigger(this.bt, chute);
+    if (f) this.crew?.report(f);
+    if (f) this.kpi.fault();
+    return !!f;
+  }
+
+  /** Random faults on or off (the ones down still get repaired). */
+  setFaults(on: boolean): void {
+    this.faults.enabled = on;
+  }
+
+  /** The technician and his routes: from his bench along the inside of the loop, under it beside each dock chute. */
+  private buildCrew(): void {
+    // The corridor inside the loop, between the work tables at the chutes and the dance floor.
+    const CZ = -LOOP_ZH + 1.65;
+    const pillars: number[] = [];
+    for (let s = 1; s < STRAIGHT; s += 4) pillars.push(s);
+    const sites: FaultSite[] = [];
+    for (const [k, { end, s }] of this.dockEnds) {
+      // Under the loop beside the chute (clear of the pillars, the work tables and the
+      // neighbouring chutes): east of its belt if there is room, else west of the chute.
+      const clear = (e: number) => !pillars.some((p) => Math.abs(p - e) < 0.45) && !this.tableS.some((t) => Math.abs(t - e) < 1.35);
+      let exit: number | null = null;
+      let side = 1;
+      for (let e = s + 4.05; e <= s + 5.4 && exit === null; e += 0.05) if (clear(e)) exit = e;
+      if (exit === null) {
+        side = -1;
+        for (let e = s - 1.0; e >= s - 2.2 && exit === null; e -= 0.05) if (clear(e)) exit = e;
+      }
+      if (exit === null) continue;
+      loopAt(exit, this.p, this.t);
+      const ex = this.p.x;
+      // He stands beside the belt, just past the chute's end, and works on the photo eye on its rail.
+      const stand: [number, number] = [end.x + side * 1.15, end.z - 0.9];
+      const park: [number, number] = [ex, end.z - 1.9];
+      sites.push({ chute: k, park, stand, work: v(end.x + side * 0.66, 1.2, end.z - 0.9), way: [[ex, CZ], [ex, park[1]]] });
+    }
+    // (Only chutes he can reach go down.)
+    this.faults.only(sites.map((x) => x.chute));
+    this.faults.enabled = new URLSearchParams(location.search).get('faults') !== '0';
+    this.crew = new FaultCrew(this, {
+      bench: [PLATFORM_X - 0.5, -2.35],
+      benchTop: v(PLATFORM_X - 0.5, 0.92, -3.0),
+      park: [PLATFORM_X + 2.2, -1.7],
+      parkYaw: Math.PI / 2,
+      out: [[PLATFORM_X + 5.0, -1.9], [PLATFORM_X + 6.2, CZ]],
+      sites,
+    }, this.faults);
+    this.crew.onRepaired = (k) => this.fixedFlash.set(k, this.bt + 3);
+    this.crew.onFault = () => this.kpi.fault();
+  }
+
+  /** The dock chutes' displays: the fault and the technician's progress while down. */
+  private updateFaultShows(): void {
+    const shows = this.chuteShows;
+    if (!shows || !this.crew) return;
+    let dirty = false;
+    for (const [k, [main, sub]] of this.showText) {
+      const f = this.faults.down.get(k);
+      const st = f ? this.crew.status(k) : null;
+      const key = f ? `${f.kind}:${st}` : '';
+      if ((this.showNow.get(k) ?? '') === key) continue;
+      this.showNow.set(k, key);
+      dirty = true;
+      if (!f) shows.set(k, main, sub, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+      else shows.set(k, `FAULT · ${FAULT_TEXT[f.kind]}`, st === 'working' ? 'technician at work' : st === 'waiting' ? 'waiting for technician' : 'technician on the way', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#f2c200' });
+    }
+    if (dirty) shows.flush();
+  }
+
   /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
   private room(dest: number, need = 0.9): number {
     if (dest === REJECT) {
       const onRobots = this.floor.fleet.bots.filter((b) => b.bin === this.floor.tableBin).length;
       return this.manual.room(onRobots + (this.inbound.get(REJECT) ?? 0), 6) ? 1 : 0;
     }
+    // A chute that is down takes nothing until it is repaired.
+    if (this.faults.isDown(dest)) return 0;
     const st = this.stationOf.get(dest);
     // A pickup table holds as many as fit by length (about 0.8 m kept per parcel on its way).
     const used = st !== undefined ? this.stationQueue[st]!.reduce((a, p) => a + p.d + GAP, 0) : 0;
@@ -3052,7 +3148,7 @@ export class Sorter implements Scene3D {
       ch.flash = Math.max(0, ch.flash - dt * 2);
       // A dock belt that is full: its lamp flashes red, and the sorter sends nothing more down
       // (parcels for it go round again, or into the buffer store).
-      if (ch.belt && this.dockFree(k) < 0.9) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
+      if (ch.belt && (this.dockFree(k) < 0.9 || this.faults.isDown(k))) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
       else ch.lamp.color.copy(ch.col).multiplyScalar(0.35 + ch.flash * 3 + this.kick * 0.3);
     });
     this.updateTowers();
@@ -3432,9 +3528,18 @@ export class Sorter implements Scene3D {
         const st = door >= 0 ? this.trucks.docks[door]?.state : undefined;
         clearing = st === 'cleardown' || st === 'closing';
       }
-      const red = fill >= 1 ? 1 : 0;
-      const amber = !red && (fill > 0.6 || clearing) ? 1 : 0;
-      const green = !red && !amber && fill > 0.001 ? 1 : 0;
+      let red = fill >= 1 ? 1 : 0;
+      let amber = !red && (fill > 0.6 || clearing) ? 1 : 0;
+      let green = !red && !amber && fill > 0.001 ? 1 : 0;
+      if (this.faults.isDown(k)) {
+        // A fault: red flashing, on the beat (a full chute is steady red).
+        red = Math.floor(this.bt * 2) % 2 ? 1 : 0.15;
+        amber = green = 0;
+      } else if ((this.fixedFlash.get(k) ?? -1) > this.bt) {
+        // Just repaired: green flashing for a moment.
+        green = Math.floor(this.bt * 4) % 2 ? 1 : 0;
+        red = amber = 0;
+      }
       for (const i of list) {
         if (party) t.disco(i, this.bt, this.kick);
         // (Filmic tone mapping in the realistic day pales bright colours: a little less there keeps them saturated.)
@@ -3931,7 +4036,7 @@ export class Sorter implements Scene3D {
     }
     const chutes = this.chutes.map((ch, k) => {
       const end = ch.path.pts[ch.path.pts.length - 1]!;
-      return { x: end.x, z: end.z, fill: this.chuteFill(k), dock: !this.stationOf.has(k) };
+      return { x: end.x, z: end.z, fill: this.chuteFill(k), dock: !this.stationOf.has(k), fault: this.faults.isDown(k) };
     });
     const fills = this.trucks.list();
     const doors = this.trucks.docks.map((d, i) => ({ x: d.x, z: d.wallZ, state: d.state, load: Math.min(1, fills[i]!.fill) }));
@@ -4362,6 +4467,7 @@ export class Sorter implements Scene3D {
     dockChutes.forEach((c, n) => {
       const dx = DOCK_X[n] ?? c.end.x;
       this.dockOf.set(c.k, dx);
+      this.dockEnds.set(c.k, { end: c.end.clone(), s: c.s });
       const zTurn = -15 - n * 1.5;
       const pts = Math.abs(dx - c.end.x) < 0.3
         ? [c.end, v(dx, 1.0, DOCK_BELT_END)]
@@ -4403,8 +4509,13 @@ export class Sorter implements Scene3D {
         if (k === REJECT) shows.set(k, 'NO READ', 'to manual sorting', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
         else if (dock >= 0) {
           const c = NORTH_CITIES[DOCK_CITY[dock]!]!;
-          shows.set(k, `${dock + 1} · ${c.name}`, rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]), { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+          const main = `${dock + 1} · ${c.name}`;
+          const sub = rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]);
+          shows.set(k, main, sub, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+          this.showText.set(k, [main, sub]);
         } else shows.set(k, 'Robots', `station ${(this.stationOf.get(k) ?? 0) + 1} · doors 21–40`, { bg: '#101114', fg: '#ffffff', sub: '#f6a6d6' });
+        // (Where the work table stands along the loop: the technician keeps clear of it.)
+        this.tableS.push(legS);
         // The table: right under the display, against the pillar, along the loop.
         const tx = this.p.x + this.n.x * 0.62;
         const tz = this.p.z + this.n.z * 0.62;
@@ -4413,6 +4524,7 @@ export class Sorter implements Scene3D {
       desk.build();
       shows.flush();
       this.put(shows.mesh);
+      this.chuteShows = shows;
     }
 
     // To and from the store: off the loop's far bend and back on, tangentially.
