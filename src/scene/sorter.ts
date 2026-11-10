@@ -4783,13 +4783,17 @@ export class Sorter implements Scene3D {
       for (let x = WX + 4; x < EX - 2; x += 6) this.box('ctrayrod', trayMat, x, HH - 0.8, z, 0.02, 1.6, 0.02);
     }
 
-    // Monitoring: a purple workstation in front of the control room.
+    // Monitoring: a purple workstation in front of the control room. The desk, its screens and
+    // chair stay at night too (someone keeps an eye on the hall during the party); the operator
+    // is a day worker.
+    const dayOnly = this.only;
+    this.only = undefined;
     const purple = this.std(DAY.purple, 0.8, 0.05);
     const dx = -48;
     const dz = 20.6;
-    this.box('desk', purple, dx, 1.2, dz, 3.2, 0.12, 1.6);
+    this.box('mdesk', purple, dx, 1.2, dz, 3.2, 0.12, 1.6);
     this.blob(dx, dz - 0.3, 4, 3);
-    for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('desk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
+    for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('mdesk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
     // One big video wall over the desk: a live plan of the hall (chutes, trucks, cleardowns, robots).
     const ink = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
     const vw = new THREE.Group();
@@ -4800,21 +4804,22 @@ export class Sorter implements Scene3D {
     const sc = new THREE.Mesh(new THREE.PlaneGeometry(5.1, 1.84), new THREE.MeshBasicMaterial({ map: this.screens.map }));
     sc.position.z = 0.065;
     vw.add(sc);
-    for (const ox of [-2.2, 2.2]) this.box('wallpost', ink, dx + ox, 0.9, dz + 1.0, 0.1, 1.8, 0.1);
+    for (const ox of [-2.2, 2.2]) this.box('mwallpost', ink, dx + ox, 0.9, dz + 1.0, 0.1, 1.8, 0.1);
     // A small screen on the desk with the numbers.
     const small = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.35), new THREE.MeshBasicMaterial({ map: this.screens.dash }));
     small.position.set(dx + 1.1, 1.5, dz + 0.2);
     small.rotation.set(-0.2, Math.PI - 0.3, 0);
     this.put(small);
-    this.box('kbd', ink, dx, 1.27, dz - 0.25, 0.7, 0.03, 0.22);
-    this.box('kbd', ink, dx + 0.55, 1.27, dz - 0.25, 0.1, 0.03, 0.14);
-    this.box('mug', this.std(0xffffff, 0.5, 0, 0xffffff), dx - 1.1, 1.32, dz - 0.3, 0.1, 0.12, 0.1);
+    this.box('mkbd', ink, dx, 1.27, dz - 0.25, 0.7, 0.03, 0.22);
+    this.box('mkbd', ink, dx + 0.55, 1.27, dz - 0.25, 0.1, 0.03, 0.14);
+    this.box('mmug', this.std(0xffffff, 0.5, 0, 0xffffff), dx - 1.1, 1.32, dz - 0.3, 0.1, 0.12, 0.1);
     // Office chair: star base, pole, seat and back.
     const cz2 = dz - 1.0;
-    for (let k = 0; k < 5; k++) this.box('chair', ink, dx + Math.cos((k * 2 * Math.PI) / 5) * 0.2, 0.06, cz2 + Math.sin((k * 2 * Math.PI) / 5) * 0.2, 0.4, 0.04, 0.05, undefined, (k * 2 * Math.PI) / 5);
-    this.box('chair', ink, dx, 0.3, cz2, 0.06, 0.45, 0.06);
-    this.box('chair', purple, dx, 0.58, cz2, 0.55, 0.1, 0.5);
-    this.box('chair', purple, dx, 0.95, cz2 - 0.26, 0.5, 0.65, 0.08);
+    for (let k = 0; k < 5; k++) this.box('mchair', ink, dx + Math.cos((k * 2 * Math.PI) / 5) * 0.2, 0.06, cz2 + Math.sin((k * 2 * Math.PI) / 5) * 0.2, 0.4, 0.04, 0.05, undefined, (k * 2 * Math.PI) / 5);
+    this.box('mchair', ink, dx, 0.3, cz2, 0.06, 0.45, 0.06);
+    this.box('mchair', purple, dx, 0.58, cz2, 0.55, 0.1, 0.5);
+    this.box('mchair', purple, dx, 0.95, cz2 - 0.26, 0.5, 0.65, 0.08);
+    this.only = dayOnly;
     this.person(dx + 0.3, dz - 1.5, 0.2);
 
     // Computing: magenta GPU racks next to the control room.
@@ -5589,7 +5594,11 @@ export class Sorter implements Scene3D {
       return;
     }
     if (t.s < t.len) {
-      t.s = Math.min(t.len, t.s + speed * dt);
+      // Asked for (Go to): there in about two and a half seconds, however far, with the camera
+      // keeping close behind; the free tour cruises at its own pace.
+      const asked = this.camMode === 'visit' && t.poi === this.visitPoi;
+      if (asked) this.camRate = 6;
+      t.s = Math.min(t.len, t.s + (asked ? Math.max(speed, t.len / 2.3) : speed) * dt);
       const u = t.s / t.len;
       t.curve.getPointAt(u, this.want);
       // Look ahead along the way, then settle on the stop.
