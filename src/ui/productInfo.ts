@@ -73,7 +73,7 @@ export const STOP_INFO: Record<string, StopInfo> = {
     ],
     sim: 'Every tray asks: which chute for this postcode? Is it full? Then to the buffer store, round again, or after three rounds to manual sorting.',
   },
-  chutes: {
+  office: {
     family: 'Sorting Orchestration Solutions',
     title: 'Sorting Data Manager',
     intro: [
@@ -87,7 +87,7 @@ export const STOP_INFO: Record<string, StopInfo> = {
       'Automatic synchronization with business systems',
       'Options for automatic chute mapping, sorting simulation and sort plan optimization',
     ],
-    sim: 'The sort plan maps every postcode range to a chute: big cities get several dock doors, shared out by volume.',
+    sim: 'Up here in the office the planners keep the sort plan: it maps every postcode range to a chute, and big cities get several dock doors, shared out by volume.',
   },
   docks: {
     family: 'Flexible Sorting Solutions',
