@@ -31,7 +31,7 @@ import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
 import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z, TABLE as MANUAL_TABLE } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
 import { FaultCrew, type FaultSite } from './faults';
-import { Inbound, TELESCOPE_BASE } from './inbound';
+import { Inbound, TELESCOPE_BASE, TRAILER_PARCELS, type Stacked } from './inbound';
 import { FAULT_TEXT, FaultPlan } from '../sim/faults';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -111,7 +111,8 @@ const HH = 11;
 const ROOF_LIGHTS = roofLights(WX, EX);
 /** Highest a flying visitor goes: eye a metre under the roof. */
 const WALK_MAX_ALT = HH - 1.7 - 1;
-const MAX_PARCELS = 1500;
+// (Room for the inbound trucks' loads too: up to 10 × TRAILER_PARCELS stand stacked in them.)
+const MAX_PARCELS = 2600;
 /** Shipping label canvas: cells of LABEL_W × LABEL_H pixels. */
 const LABEL_W = 96;
 const LABEL_H = 64;
@@ -140,7 +141,7 @@ const TRAY_HALF = 0.62;
 /** How far out from the loop's centre line each lane turns onto it (sets the lane's x). */
 const LANE_OUT = 3.6;
 /** z of the scan tunnels (just inside the north wall). */
-const LANE_TUNNEL_Z = -44.0;
+const LANE_TUNNEL_Z = -43.0;
 /** The maintenance platform inside the loop at its west end (the DJ's at night): centre x, top y. */
 const PLATFORM_X = -49;
 const PLATFORM_Y = 2.4;
@@ -863,7 +864,7 @@ function duckGeometry(): THREE.BufferGeometry {
 }
 
 /** 'dock': at a truck dock, moved by the Docks (worker or slide into a roll cage). */
-type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual' | 'held';
+type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual' | 'held' | 'stack';
 
 export interface Parcel {
   id: number;
@@ -1776,6 +1777,7 @@ export class Sorter implements Scene3D {
     this.trucks.update(bt);
     // One unloader per truck while that keeps up with the rate (about UNLOAD_PER_HOUR each), else two.
     this.wing.crewSize = (this.rate * 60) / INBOUND_DOORS.length > UNLOAD_PER_HOUR ? 2 : 1;
+    for (let d = 0; d < INBOUND_DOORS.length; d++) if (this.wing.needsLoad(d)) this.loadTruck(d);
     this.wing.update(dt, bt);
     this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
@@ -2194,7 +2196,7 @@ export class Sorter implements Scene3D {
     p.dest = best;
   }
 
-  private newParcel(): Parcel | null {
+  private newParcel(noLabel = false): Parcel | null {
     if (this.parcels.length >= MAX_PARCELS) return null;
     const r = Math.random();
     // Very rarely: a rubber duck, on its own, with a label round its neck.
@@ -2254,7 +2256,7 @@ export class Sorter implements Scene3D {
       dead: false,
     };
     if (p.gift) p.col.set(pick([0xc8102e, 0x1f7a3a, 0xe8b923, 0x1755fe, 0xd6339a, 0xf3f4f6]));
-    return this.addParcel(p);
+    return this.addParcel(p, noLabel);
   }
 
   /** A rubber duck: yellow, about the size of a small parcel, and for the developer. */
@@ -2298,9 +2300,10 @@ export class Sorter implements Scene3D {
     };
   }
 
-  private addParcel(p: Parcel): Parcel {
+  private addParcel(p: Parcel, noLabel = false): Parcel {
     this.assign(p);
-    p.labelCell = this.freeCells.pop() ?? 0;
+    // (Parcels stacked in a truck get their label cell when they are taken off the stack.)
+    p.labelCell = noLabel ? 0 : this.freeCells.pop() ?? 0;
     if (p.labelCell) this.drawLabel(p.labelCell, p);
     this.parcels.push(p);
     return p;
@@ -2325,9 +2328,15 @@ export class Sorter implements Scene3D {
     if (this.waiting[k]! + this.feeding[k]! >= LANE_QUEUE) return false;
     const d = this.feedDoor(k);
     if (d < 0) return false;
-    const p = this.newParcel();
-    if (!p) return false;
-    const who = this.wing.take(d, this.fa, this.fb);
+    const t = this.wing.take(d, this.fb);
+    if (!t) return false;
+    const p = t.item as Parcel;
+    const who = t.who;
+    this.fa.copy(p.pos);
+    if (!p.labelCell) {
+      p.labelCell = this.freeCells.pop() ?? 0;
+      if (p.labelCell) this.drawLabel(p.labelCell, p);
+    }
     const dx = INBOUND_DOORS[d]!;
     const mx = LANE_MERGE[k]!;
     const pts = [this.fa.clone(), this.fb.clone(), v(dx, LANE_Y, WING.z0 + 0.6), v(dx, LANE_Y, COLL_Z)];
@@ -2348,6 +2357,62 @@ export class Sorter implements Scene3D {
     this.feeding[k]!++;
     this.wing.carrying(d, who, p, this.fa.distanceTo(this.fb));
     return true;
+  }
+
+  /**
+   * A full truck at inbound door d (its door opening): its load as real parcels, stacked on the
+   * trailer floor from the back, in columns across and up to about head height, slice by slice
+   * towards the door. They stand still (mode 'stack') until an unloader takes one.
+   */
+  private loadTruck(d: number): void {
+    const f = this.wing.floor(d);
+    const want = TRAILER_PARCELS - Math.floor(Math.random() * 15);
+    const cols: Stacked[][] = [];
+    const TOP = 2.3;
+    let zs = f.z0;
+    let sd = 0;
+    let cx = f.x0;
+    let cw = 0;
+    let y = 0.04;
+    let col: Parcel[] = [];
+    let n = 0;
+    let p = this.newParcel(true);
+    while (p && n < want) {
+      if (cx + p.w > f.x1) {
+        // This slice is full across: the next one, nearer the door.
+        if (col.length) cols.push(col);
+        col = [];
+        zs += sd + 0.03;
+        sd = 0;
+        cx = f.x0;
+        cw = 0;
+        y = 0.04;
+        if (zs + p.d > f.z1) break;
+        continue;
+      }
+      if (y + p.h > TOP || (col.length && p.w > cw + 0.15)) {
+        // This column is as high as it goes (or the next would overhang it): a new one beside it.
+        if (col.length) cols.push(col);
+        col = [];
+        cx += cw + 0.02;
+        cw = 0;
+        y = 0.04;
+        continue;
+      }
+      p.mode = 'stack';
+      p.pos.set(cx + p.w / 2, y, zs + p.d / 2);
+      p.q.setFromAxisAngle(UP, (Math.random() - 0.5) * 0.12);
+      y += p.h;
+      cw = Math.max(cw, p.w);
+      sd = Math.max(sd, p.d);
+      col.push(p);
+      n++;
+      p = n < want ? this.newParcel(true) : null;
+    }
+    if (col.length) cols.push(col);
+    // One made but not placed (no room left): it never was.
+    if (p && p.mode !== 'stack') this.parcels.splice(this.parcels.indexOf(p), 1);
+    this.wing.load(d, cols);
   }
 
   /** The lead colour a fed parcel brings to its lane (null: none). */
@@ -4424,10 +4489,10 @@ export class Sorter implements Scene3D {
       }
     };
     /** A belt from s0 to s1; `rails` can limit each side rail to some stretches (where belts merge). */
-    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }, cut?: Cut) => {
+    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }, cut?: Cut, frame = FRAME) => {
       const ex = (prof: [number, number][], a: number, b: number) => extrude(path, prof, a, b, 0.35, cut);
       geo.belt!.push(ex(BELT, s0, s1));
-      geo.frame!.push(ex(FRAME, s0, s1));
+      geo.frame!.push(ex(frame, s0, s1));
       const k = led === stripIn ? 'sIn' : led === stripLoop ? 'sLoop' : 'sChute';
       geo[k]!.push(ex(LEDL, s0, s1), ex(LEDR, s0, s1));
       for (const [a, b] of rails?.L ?? [[s0, s1]]) if (b > a) geo.rail!.push(ex(RAIL_L, a, b));
@@ -4488,12 +4553,28 @@ export class Sorter implements Scene3D {
       this.lanes.push({ path, tunnelS, lastArrive: -99, lastSpawn: -99, tunnel, door: doorMat, doorFlash: 0, doorCol: new THREE.Color(1, 1, 1) });
     }
     // Collectors: under the ends of the telescopes, each into the start of its lane.
-    for (const ds of LANE_DOORS) {
+    // Where parcels come on (from the telescopes, north side) and go off (into the lane, south side)
+    // the collector has no guide rail and its frame stays below the belt, so they slide straight across.
+    const FLUSH: [number, number][] = [[-0.68, -0.01], [-0.68, -0.28], [0.68, -0.28], [0.68, -0.01]];
+    const railsBut = (len: number, gaps: [number, number][]): [number, number][] => {
+      const out: [number, number][] = [];
+      let at = 0;
+      for (const [g0, g1] of [...gaps].sort((x, y) => x[0] - y[0])) {
+        if (g0 > at) out.push([at, g0]);
+        at = Math.max(at, g1);
+      }
+      if (at < len) out.push([at, len]);
+      return out;
+    };
+    LANE_DOORS.forEach((ds, k) => {
       const a = INBOUND_DOORS[ds[0]!]! - 0.7;
       const b = INBOUND_DOORS[ds[ds.length - 1]!]! + 0.7;
       const cp = new Path([v(a, LANE_Y, COLL_Z), v(b, LANE_Y, COLL_Z)]);
-      belt(cp, 0, cp.len, stripIn);
-    }
+      // (The path runs east: its left side is north, the telescopes' side; its right side is south, the lane's.)
+      const L = railsBut(cp.len, ds.map((d) => [INBOUND_DOORS[d]! - a - 0.6, INBOUND_DOORS[d]! - a + 0.6] as [number, number]));
+      const R = railsBut(cp.len, [[LANE_MERGE[k]! - a - 0.72, LANE_MERGE[k]! - a + 0.72]]);
+      belt(cp, 0, cp.len, stripIn, { L, R }, undefined, FLUSH);
+    });
     // A maintenance walkway along the infeeds (east of them), with a stair up to where the belts are high.
     {
       const grate = this.std(0x3a3e45, 0.6, 0.7, 0xc9ced4);

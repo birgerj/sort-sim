@@ -26,9 +26,10 @@ sound is generated in code.
 ```
 
 0. **Inbound wing (north-west).** An L-shaped extension of the hall, 43.5 × 14 m, with
-   ten dock doors (41–50) in its north wall. A truck full of parcels stands at each; a
-   telescopic conveyor reaches into the trailer up to the wall of parcels, and an
-   unloader takes them off one at a time (about 1,000 an hour each; a second unloader
+   ten dock doors (41–50) in its north wall. A truck stands at each; when its door
+   opens, its load is there as real parcels stacked on the trailer floor. A telescopic
+   conveyor reaches into the trailer up to the stack, and an unloader takes the parcels
+   off one at a time (about 1,000 an hour each; a second unloader
    joins when the rate needs more). The telescopes run onto four collector belts (doors
    41–43, 44–45, 46–47, 48–50), each the start of one infeed lane, centred over the lanes.
    An empty truck leaves and a full one backs in. The video wall in the control room
