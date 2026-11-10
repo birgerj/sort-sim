@@ -852,7 +852,24 @@ export class Hud {
     const canvas = document.querySelector('#app canvas') ?? document.querySelector('canvas');
     let drag: { id: number; x: number; y: number } | null = null;
     let tap: { x: number; y: number; t: number } | null = null;
+    // Pinch with two fingers (zoom in or out on what is followed): the fingers down, and their last spread.
+    const fingers = new Map<number, { x: number; y: number }>();
+    let spread = 0;
+    const spreadNow = () => {
+      const [a, b] = [...fingers.values()];
+      return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+    };
     const target = (canvas ?? window) as HTMLElement;
+    // The mouse wheel (or a trackpad's two-finger scroll) zooms in and out on what is followed.
+    target.addEventListener(
+      'wheel',
+      (e: WheelEvent) => {
+        if (this.scene.cameraMode() === 'walk' || !this.scene.following()) return;
+        e.preventDefault();
+        this.scene.zoomFollow(Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)));
+      },
+      { passive: false },
+    );
     target.addEventListener('pointerdown', (e: PointerEvent) => {
       if ((e.target as HTMLElement).closest?.('.bar,.sheet,.panel,.label-card')) return;
       // A tap on the hall with a panel open just closes the panel.
@@ -862,6 +879,16 @@ export class Hud {
       }
       tap = { x: e.clientX, y: e.clientY, t: performance.now() };
       if (this.scene.cameraMode() === 'walk') return;
+      if (e.pointerType === 'touch') {
+        fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (fingers.size === 2) {
+          // Two fingers: a pinch, not a swipe (and not a tap).
+          spread = spreadNow();
+          drag = null;
+          tap = null;
+          return;
+        }
+      }
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
     });
     // A click or tap (not a drag) on a parcel shows its shipping label.
@@ -895,6 +922,17 @@ export class Hud {
       }
     });
     window.addEventListener('pointermove', (e) => {
+      const f = fingers.get(e.pointerId);
+      if (f) {
+        f.x = e.clientX;
+        f.y = e.clientY;
+        if (fingers.size === 2) {
+          const s = spreadNow();
+          if (spread > 0 && s > 0 && this.scene.following()) this.scene.zoomFollow(spread / s);
+          spread = s;
+          return;
+        }
+      }
       if (!drag || drag.id !== e.pointerId) return;
       const k = 0.005;
       this.scene.lookAround((e.clientX - drag.x) * k, (e.clientY - drag.y) * k);
@@ -902,6 +940,8 @@ export class Hud {
       drag.y = e.clientY;
     });
     const end = (e: PointerEvent) => {
+      fingers.delete(e.pointerId);
+      if (fingers.size < 2) spread = 0;
       if (drag?.id === e.pointerId) drag = null;
     };
     window.addEventListener('pointerup', end);

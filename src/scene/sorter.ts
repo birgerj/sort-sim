@@ -3929,11 +3929,25 @@ export class Sorter implements Scene3D {
   private orbitPitch = 0;
   private orbitWantYaw = 0;
   private orbitWantPitch = 0;
+  /** Zoom on what is followed (pinch or wheel): the distance as a multiple of the camera's own; eased like the turn. */
+  private orbitZoom = 1;
+  private orbitWantZoom = 1;
   private readonly orbitV = new THREE.Vector3();
+
+  /** Something (a person, robot, forklift, parcel, or a moving stop) is being followed: zoom works. */
+  following(): boolean {
+    return !!this.orbitOn;
+  }
+
+  /** Zoom on what is followed: `f` < 1 closer, > 1 further (kept between a third and three times). */
+  zoomFollow(f: number): void {
+    if (!this.orbitOn || !Number.isFinite(f) || f <= 0) return;
+    this.orbitWantZoom = clamp(this.orbitWantZoom * f, 0.3, 3);
+  }
 
   /** Still turned (or turning back) by hand. */
   private orbitBusy(): boolean {
-    return Math.abs(this.orbitYaw) > 1e-3 || Math.abs(this.orbitPitch) > 1e-3;
+    return Math.abs(this.orbitYaw) > 1e-3 || Math.abs(this.orbitPitch) > 1e-3 || Math.abs(this.orbitZoom - 1) > 1e-3;
   }
 
   /** Place the camera round the point it looks at, by the turn asked for by hand. */
@@ -3942,13 +3956,15 @@ export class Sorter implements Scene3D {
       this.orbitKey = this.orbitOn;
       this.orbitWantYaw = 0;
       this.orbitWantPitch = 0;
+      this.orbitWantZoom = 1;
     }
     const e = 1 - Math.exp(-dt * 10);
     this.orbitYaw += (this.orbitWantYaw - this.orbitYaw) * e;
     this.orbitPitch += (this.orbitWantPitch - this.orbitPitch) * e;
+    this.orbitZoom += (this.orbitWantZoom - this.orbitZoom) * e;
     if (!this.orbitBusy()) return;
     const o = this.orbitV.subVectors(this.camera.position, this.look);
-    const r = o.length();
+    const r = o.length() * this.orbitZoom;
     if (r < 1e-3) return;
     o.applyAxisAngle(UP, this.orbitYaw);
     // Height as an angle over the target: from just above the floor to almost straight down.
