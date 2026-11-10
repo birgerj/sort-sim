@@ -32,6 +32,7 @@ import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z, TABLE as M
 import { DOCK_BELT_END, Docks } from './docks';
 import { FaultCrew, type FaultSite } from './faults';
 import { Inbound, TELESCOPE_BASE, TRAILER_PARCELS, type Stacked } from './inbound';
+import { Canteen } from './canteen';
 import { FAULT_TEXT, FaultPlan } from '../sim/faults';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -210,8 +211,11 @@ const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }
  * collector belts, two doors each, each the start of one infeed lane (west to east), centred
  * over the lanes so the lanes run out alike on both sides (the middle one straight on). The old north wall is open there.
  */
-const WING = { x0: -64, x1: -20.8, z0: -54 };
-const INBOUND_DOORS = Array.from({ length: 10 }, (_, i) => -61.1 + 4.2 * i);
+const WING = { x0: WX, x1: -22.2, z0: -54 };
+// (3.95 m apart: the ten fit between the hall's west wall, which runs straight on, and centred over the lanes.)
+const INBOUND_DOORS = Array.from({ length: 10 }, (_, i) => -59.98 + 3.95 * i);
+/** The canteen's floor over the inbound docks: its height and front edge (just south of the telescopes' bases). */
+const CANTEEN = { floorY: 6.2, front: -47.6 };
 const LANE_DOORS = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
 /** Where each lane starts: the middle of its doors, on its collector. */
 const LANE_MERGE = LANE_DOORS.map((ds) => (INBOUND_DOORS[ds[0]!]! + INBOUND_DOORS[ds[ds.length - 1]!]!) / 2);
@@ -1267,6 +1271,7 @@ export class Sorter implements Scene3D {
   private trucks!: Trucks;
   /** The inbound wing's trucks, telescopes and unloaders. */
   private wing!: Inbound;
+  private canteen!: Canteen;
   /** Parcels on their way from a trailer to the start of each lane; when each door may give its next; when the last one reaches each lane. */
   private feeding = INDUCT.map(() => 0);
   /**
@@ -1495,7 +1500,7 @@ export class Sorter implements Scene3D {
         beams,
         northDoors: NORTH_DOORS,
         southDoors: SOUTH_DOORS,
-        wing: { ...WING, doors: INBOUND_DOORS },
+        wing: { ...WING, doors: INBOUND_DOORS, front: CANTEEN.front },
         loopEdge: edge,
         trees: [
           { x: -55.8, z: 21.2, h: 7 },
@@ -1540,6 +1545,20 @@ export class Sorter implements Scene3D {
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
     this.buildCrew();
+    // The canteen on a first floor over the inbound docks, with a stair along the wing's east wall.
+    {
+      const between = LANE_DOORS.slice(1).map((ds, i) => (INBOUND_DOORS[LANE_DOORS[i]![1]!]! + INBOUND_DOORS[ds[0]!]!) / 2);
+      this.canteen = new Canteen(this, {
+        x0: WING.x0,
+        x1: WING.x1,
+        z0: WING.z0,
+        front: CANTEEN.front,
+        floorY: CANTEEN.floorY,
+        columns: [WING.x0 + 0.3, ...between, WING.x1 - 1.6],
+        stairX: WING.x1 - 0.75,
+        stairFootZ: CANTEEN.front + Math.ceil(CANTEEN.floorY / 0.19) * 0.26,
+      });
+    }
     this.hireStaff();
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
@@ -1813,6 +1832,7 @@ export class Sorter implements Scene3D {
       for (const d of ds) this.wing.hold(d, full);
     });
     this.wing.update(dt, bt);
+    this.canteen.update(dt, bt);
     this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
       chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),
@@ -4492,7 +4512,6 @@ export class Sorter implements Scene3D {
       sc.position.z = 0.07;
       g.add(sc);
     };
-    place(LANE_MERGE.reduce((a, b) => a + b, 0) / 4, 7.2, WING.z0 + 0.12, 0);
     place(-45, 7.2, HZ - 0.12, Math.PI);
     place(EX - 6, 7.2, NZ + 0.12, 0);
     const clock = new THREE.MeshBasicMaterial({ map: this.screens.clock, transparent: true });
@@ -5413,9 +5432,11 @@ export class Sorter implements Scene3D {
       m.rotation.y = Math.PI / 2;
       add(m);
     }
-    const stub = new THREE.Mesh(wallWithDoors([], undefined, 0, WX - WING.x0), wall);
-    stub.position.set((WX + WING.x0) / 2, HH / 2, NZ);
-    add(stub);
+    if (WX - WING.x0 > 0.1) {
+      const stub = new THREE.Mesh(wallWithDoors([], undefined, 0, WX - WING.x0), wall);
+      stub.position.set((WX + WING.x0) / 2, HH / 2, NZ);
+      add(stub);
+    }
     const c = new THREE.Mesh(ceilingWithLights(cx, cz, w, d, []), ceil);
     c.rotation.x = Math.PI / 2;
     c.position.set(cx, HH, cz);
@@ -5721,7 +5742,8 @@ export class Sorter implements Scene3D {
     const FX1 = PAN_X1;
     this.pois = [
       { ...fixed('infeeds', v(-33, 7.4, -17), v(-40, 3.6, -9.5), 'Infeed'), hover: 'still' },
-      fixed('inbound', v(-38, 5.2, -41), v(-46, 1.4, -54), 'Inbound docks'),
+      fixed('inbound', v(-38, 4.6, -40), v(-46, 1.4, -54), 'Inbound docks'),
+      fixed('canteen', v(-38, 7.2, -42), v(-46, 6.9, -51), 'Canteen'),
       fixed('scan tunnels', v(-36, 4.4, -37), v(-46, 1.2, -45), 'Scanning'),
       {
         // One lap above the inside edge of the loop, at cruise height, looking ahead and down.

@@ -25,7 +25,8 @@ sound is generated in code.
                       south wall: 20 dock doors (box trucks)
 ```
 
-0. **Inbound wing (north-west).** An L-shaped extension of the hall, 43.5 × 14 m, with
+0. **Inbound wing (north-west).** An extension of the hall to the north, its west wall in
+   line with the hall's, about 40 × 14 m, with
    ten dock doors (41–50) in its north wall. A truck stands at each; when its door
    opens, its load is there as real parcels stacked on the trailer floor. A telescopic
    conveyor reaches into the trailer up to the stack, and an unloader takes the parcels
@@ -35,7 +36,10 @@ sound is generated in code.
    over the lanes.
    An empty truck leaves and a full one backs in. The video wall in the control room
    shows the wing, the lanes and the inbound trucks (it grew taller; the plan kept its
-   scale).
+   scale). On a first floor over the docks is the **canteen**: a steel mezzanine on
+   columns between the collectors, a room with a glass front looking out over the hall
+   (tables, a counter with coffee, a fridge, plants, people on their break), and a stair
+   up along the wing's east wall to a landing with the door.
 1. **Infeed (north-west).** Five lanes, 4 m apart, start at the collectors in
    the inbound wing, each through a scan tunnel, then a buffer (where parcels
    queue), sideways to its place, then up a ramp to loop height and, one
