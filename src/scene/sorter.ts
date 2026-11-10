@@ -3385,6 +3385,8 @@ export class Sorter implements Scene3D {
     const p = following ? this.follow : null;
     if (p && p.mode === 'fixed' && p.pathKind !== 'back') this.follow = null;
     const th = this.camMode === 'follow' ? this.followThing : null;
+    // (Set below when the camera has something to turn around: see `orbit`.)
+    this.orbitOn = null;
     if (th) {
       // A robot, forklift or person: behind it and a little to the side, looking where it goes.
       this.tour = null;
@@ -3398,7 +3400,9 @@ export class Sorter implements Scene3D {
       this.want.copy(c).addScaledVector(this.fwd, -back).addScaledVector(side, back * 0.45);
       this.want.y = clamp(c.y + back * 0.55, 1.2, HH - 0.8);
       this.wantLook.copy(c).addScaledVector(this.fwd, 1.5);
+      this.orbitOn = th.obj;
     } else if (p) {
+      this.orbitOn = p;
       // Back in fly mode, the tour starts afresh from wherever the camera is.
       this.tour = null;
       const c = this.p.copy(p.pos);
@@ -3420,9 +3424,15 @@ export class Sorter implements Scene3D {
     this.want.x = clamp(this.want.x, WX + 1.5, EX - 1.5);
     this.want.z = clamp(this.want.z, NZ + 1.5, HZ - 1.5);
     const k = this.first ? 1 : 1 - Math.exp(-dt * (p ? 2.6 : th ? 1.2 : this.camRate));
-    this.camera.position.lerp(this.want, k);
+    // The camera's own place is kept apart from the turn by hand, so a swipe goes round
+    // the target at once instead of waiting for the slow follow to catch up.
+    if (!this.orbitBase) this.orbitBase = this.camera.position.clone();
+    else if (!this.orbitOn && !this.orbitBusy()) this.orbitBase.copy(this.camera.position);
+    this.orbitBase.lerp(this.want, k);
+    this.camera.position.copy(this.orbitBase);
     this.look.lerp(this.wantLook, this.first ? 1 : 1 - Math.exp(-dt * 3.2));
     this.first = false;
+    this.orbit(dt);
     this.camera.lookAt(this.look);
     // Looking around by hand (a swipe or drag): turn the view; ten seconds after the last
     // swipe it eases back to where the camera itself looks.
@@ -3441,9 +3451,64 @@ export class Sorter implements Scene3D {
   private lookPitch = 0;
   private lookAt = -99;
 
-  /** Turn the view by hand (radians); it returns to the camera's own view after 10 s. */
+  /**
+   * Turning around a followed target by hand (a person, robot, forklift, parcel, or a
+   * moving stop such as the technician): what the camera follows (`orbitOn`, set every
+   * frame), the turn asked for (`orbitWant*`: yaw round the vertical, and height as an
+   * angle) and the turn shown, which eases after it. It stays until the target changes,
+   * then swings back to the camera's own view.
+   */
+  private orbitOn: unknown = null;
+  private orbitKey: unknown = null;
+  private orbitBase: THREE.Vector3 | null = null;
+  private orbitYaw = 0;
+  private orbitPitch = 0;
+  private orbitWantYaw = 0;
+  private orbitWantPitch = 0;
+  private readonly orbitV = new THREE.Vector3();
+
+  /** Still turned (or turning back) by hand. */
+  private orbitBusy(): boolean {
+    return Math.abs(this.orbitYaw) > 1e-3 || Math.abs(this.orbitPitch) > 1e-3;
+  }
+
+  /** Place the camera round the point it looks at, by the turn asked for by hand. */
+  private orbit(dt: number): void {
+    if (this.orbitOn !== this.orbitKey) {
+      this.orbitKey = this.orbitOn;
+      this.orbitWantYaw = 0;
+      this.orbitWantPitch = 0;
+    }
+    const e = 1 - Math.exp(-dt * 10);
+    this.orbitYaw += (this.orbitWantYaw - this.orbitYaw) * e;
+    this.orbitPitch += (this.orbitWantPitch - this.orbitPitch) * e;
+    if (!this.orbitBusy()) return;
+    const o = this.orbitV.subVectors(this.camera.position, this.look);
+    const r = o.length();
+    if (r < 1e-3) return;
+    o.applyAxisAngle(UP, this.orbitYaw);
+    // Height as an angle over the target: from just above the floor to almost straight down.
+    const el = clamp(Math.atan2(o.y, Math.hypot(o.x, o.z)) + this.orbitPitch, 0.12, 1.35);
+    const h = Math.hypot(o.x, o.z) || 1;
+    o.set((o.x / h) * Math.cos(el) * r, Math.sin(el) * r, (o.z / h) * Math.cos(el) * r);
+    const c = this.camera.position.copy(this.look).add(o);
+    c.y = clamp(c.y, 0.4, FLY_MAX_Y);
+    c.x = clamp(c.x, WX + 1.5, EX - 1.5);
+    c.z = clamp(c.z, NZ + 1.5, HZ - 1.5);
+  }
+
+  /**
+   * A swipe or drag on the hall. Following something: turn the camera around it (it stays
+   * turned until something else is followed). Otherwise turn the view; it returns to the
+   * camera's own view after 10 s.
+   */
   lookAround(dYaw: number, dPitch: number): void {
     if (this.camMode === 'walk') return;
+    if (this.orbitOn) {
+      this.orbitWantYaw -= dYaw * 1.4;
+      this.orbitWantPitch = clamp(this.orbitWantPitch + dPitch, -1.4, 1.4);
+      return;
+    }
     this.lookYaw = clamp(this.lookYaw - dYaw, -Math.PI, Math.PI);
     this.lookPitch = clamp(this.lookPitch - dPitch, -0.9, 0.9);
     this.lookAt = this.time;
@@ -5986,6 +6051,8 @@ export class Sorter implements Scene3D {
     if (hover === 'still' || hover === 'track') {
       // Hold the view the stop gives (following it if it moves).
       this.want.copy(pos);
+      // A moving stop (the technician, a robot, a forklift...): a swipe turns around it.
+      if (hover === 'track') this.orbitOn = poi;
       this.camRate = poi.rate ?? (hover === 'track' ? 4 : 1.2);
     } else {
       // Turn around what we look at: all the way round slowly, or a gentle swing to and fro.
