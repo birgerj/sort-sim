@@ -14,6 +14,7 @@ import { XMAS } from '../sim/season';
 import { buildHuman, type Human } from './people';
 import { gait, relaxArms, settle, sit, swingArms } from './motion';
 import { ANTICS, type ActKind } from './antics';
+import { Rng } from '../sim/rng';
 
 type V2 = [number, number];
 
@@ -405,8 +406,9 @@ export class Life {
    * both edges marked with black and yellow diagonal stripes. Day only (at night the inside of
    * the loop is the dance floor).
    */
-  addWalkway(x0: number, x1: number, z: number, w: number): void {
-    // The path itself: a dark green floor coating (green for the safe zone), a ring between the edges.
+  /** Lays the walkway; gives back its coating (the Sorter shows that in the realistic look only). */
+  addWalkway(x0: number, x1: number, z: number, w: number): THREE.Mesh {
+    // The path itself: a ring of coating between the edges.
     const ring = new THREE.Shape();
     const h = w / 2;
     ring.moveTo(x0 - h, -z - h);
@@ -421,7 +423,10 @@ export class Life {
     hole.lineTo(x1 - h, -z + h);
     hole.closePath();
     ring.holes.push(hole);
-    const coat = this.k.std(0x1a3626, 0.55, 0, 0x22573a);
+    // A floor coating only just greener than the concrete (the taped edges do the marking);
+    // a touch lighter than meant, as the wear map below is light grey where untouched.
+    const coat = this.k.std(0x2b302d, 0.6, 0, 0xccd8cd);
+    coat.map = walkwayWear(x0, x1, z, w);
     coat.polygonOffset = true;
     coat.polygonOffsetFactor = -1;
     coat.polygonOffsetUnits = -1;
@@ -453,6 +458,7 @@ export class Life {
       strip(xo0, -zo, xo0, zo);
       strip(xo1, -zo, xo1, zo);
     }
+    return c;
   }
 
   /** Someone walking a round along `pts` (metres per beat), for routes the scene knows best. */
@@ -751,6 +757,109 @@ function floorText(text: string, color: string): THREE.CanvasTexture {
 }
 
 /** Black and yellow diagonal stripes (floor tape), one repeat 0.6 m long. */
+/**
+ * Wear on the walkway's coating, one picture over the whole ring (UVs are the shape's metres):
+ * a lighter worn line where the manager walks (the middle, more at the corners), shoe scuffs,
+ * a few stains and drips, small chips and worn patches, a fine speckle. Light grey where
+ * untouched, so it can lighten as well as darken the coating. Seeded: the same every load.
+ */
+function walkwayWear(x0: number, x1: number, z: number, w: number): THREE.CanvasTexture {
+  const h = w / 2;
+  const X0 = x0 - h;
+  const Y0 = -z - h;
+  const W = x1 - x0 + w;
+  const D = 2 * z + w;
+  const S = 34;
+  const cw = Math.min(4096, Math.ceil(W * S));
+  const ch = Math.ceil(D * S);
+  const sx = cw / W;
+  const sy = ch / D;
+  const c = document.createElement('canvas');
+  c.width = cw;
+  c.height = ch;
+  const g = c.getContext('2d')!;
+  const r = new Rng(4711);
+  const px = (x: number) => (x - X0) * sx;
+  const py = (y: number) => (D - (y - Y0)) * sy;
+  g.fillStyle = '#e6e6e6';
+  g.fillRect(0, 0, cw, ch);
+  // A point somewhere on the ring, with how far it is across it (−1 … 1) and which way the path runs.
+  const onRing = (): { x: number; y: number; across: number; along: number } => {
+    const side = r.next() * (2 * (x1 - x0) + 4 * z);
+    const across = r.next() * 2 - 1;
+    if (side < 2 * (x1 - x0)) {
+      const top = side < x1 - x0;
+      return { x: x0 + (side % (x1 - x0)), y: (top ? z : -z) + across * h, across, along: 0 };
+    }
+    const t = side - 2 * (x1 - x0);
+    const left = t < 2 * z;
+    return { x: (left ? x0 : x1) + across * h, y: -z + (t % (2 * z)), across, along: Math.PI / 2 };
+  };
+  const blot = (x: number, y: number, rad: number, col: string, a: number) => {
+    const gr = g.createRadialGradient(px(x), py(y), 0, px(x), py(y), rad * sx);
+    gr.addColorStop(0, col.replace('A', String(a)));
+    gr.addColorStop(0.6, col.replace('A', String(a * 0.6)));
+    gr.addColorStop(1, col.replace('A', '0'));
+    g.fillStyle = gr;
+    g.beginPath();
+    g.ellipse(px(x), py(y), rad * sx, rad * sy * (0.6 + r.next() * 0.4), r.next() * Math.PI, 0, Math.PI * 2);
+    g.fill();
+  };
+  // The worn line along the middle: many soft patches, heavier where the walker turns.
+  for (let i = 0; i < 2600; i++) {
+    const p = onRing();
+    const nearCorner = Math.min(Math.abs(p.x - x0), Math.abs(p.x - x1)) < 3 && Math.abs(Math.abs(p.y) - z) < 3;
+    const off = p.across * 0.35;
+    const x = p.along ? p.x - p.across * h + off : p.x;
+    const y = p.along ? p.y : p.y - p.across * h + off;
+    blot(x, y, 0.25 + r.next() * 0.45, 'rgba(255,255,255,A)', (nearCorner ? 0.15 : 0.09) * (1 - Math.abs(p.across) * 0.6));
+  }
+  // Worn patches and chips, lighter (the coating thinned to the concrete).
+  for (let i = 0; i < 70; i++) {
+    const p = onRing();
+    blot(p.x, p.y, 0.1 + r.next() * 0.5, 'rgba(250,246,238,A)', 0.18 + r.next() * 0.16);
+  }
+  for (let i = 0; i < 260; i++) {
+    const p = onRing();
+    g.fillStyle = `rgba(248,244,236,${0.2 + r.next() * 0.3})`;
+    g.beginPath();
+    g.ellipse(px(p.x), py(p.y), 1 + r.next() * 3, 1 + r.next() * 2, r.next() * Math.PI, 0, Math.PI * 2);
+    g.fill();
+  }
+  // Stains: coffee, oil, a dried puddle; darker and soft, a few.
+  for (let i = 0; i < 26; i++) {
+    const p = onRing();
+    blot(p.x, p.y, 0.15 + r.next() * 0.6, r.next() < 0.5 ? 'rgba(40,30,18,A)' : 'rgba(10,12,12,A)', 0.1 + r.next() * 0.1);
+    // Drips beside some.
+    if (r.next() < 0.4) for (let j = 0; j < 4; j++) blot(p.x + (r.next() - 0.5) * 0.8, p.y + (r.next() - 0.5) * 0.8, 0.03 + r.next() * 0.05, 'rgba(30,24,16,A)', 0.15);
+  }
+  // Shoe and wheel scuffs: short dark strokes, mostly along the path.
+  g.lineCap = 'round';
+  for (let i = 0; i < 520; i++) {
+    const p = onRing();
+    const a = p.along + (r.next() - 0.5) * 0.9 + (r.next() < 0.5 ? 0 : Math.PI);
+    const len = 0.05 + r.next() * 0.3;
+    g.strokeStyle = `rgba(20,20,20,${0.08 + r.next() * 0.14})`;
+    g.lineWidth = 0.6 + r.next() * 1.6;
+    g.beginPath();
+    g.moveTo(px(p.x), py(p.y));
+    g.quadraticCurveTo(px(p.x + Math.cos(a) * len * 0.5) + (r.next() - 0.5) * 3, py(p.y + Math.sin(a) * len * 0.5), px(p.x + Math.cos(a) * len), py(p.y + Math.sin(a) * len));
+    g.stroke();
+  }
+  // A fine speckle all over.
+  for (let i = 0; i < 60000; i++) {
+    const p = onRing();
+    g.fillStyle = r.next() < 0.5 ? `rgba(255,255,255,${r.next() * 0.08})` : `rgba(0,0,0,${r.next() * 0.07})`;
+    g.fillRect(px(p.x), py(p.y), 1 + r.next() * 1.5, 1 + r.next() * 1.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  t.repeat.set(1 / W, 1 / D);
+  t.offset.set(-X0 / W, -Y0 / D);
+  return t;
+}
+
 function hazardStripes(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 96;

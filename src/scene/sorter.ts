@@ -28,7 +28,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
-import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z, TABLE as MANUAL_TABLE } from './floor';
+import { BOX_FULL, BOX_M3, DECK_Y, DROP, PROJ_LENS_Y, RobotFloor, STATION_START_Z, TABLE as MANUAL_TABLE } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
 import { FaultCrew, type FaultSite } from './faults';
 import { Inbound, TELESCOPE_BASE, TRAILER_PARCELS, type Stacked } from './inbound';
@@ -1251,6 +1251,12 @@ export class Sorter implements Scene3D {
   private ribbonMesh!: THREE.InstancedMesh;
   /** The dock projectors' postcodes, on the first three parcels banked up on each dock belt. */
   private dockCodes!: Labels;
+  private dockBeams!: THREE.InstancedMesh;
+  private dockBeamMat!: THREE.MeshBasicMaterial;
+  private readonly dbA = new THREE.Vector3();
+  private readonly dbB = new THREE.Vector3();
+  private readonly dbC = new THREE.Vector3();
+  private readonly dbUp = new THREE.Vector3(0, 1, 0);
   private dockCodeText: string[] = [];
   private nextId = 400000 + Math.floor(Math.random() * 500000);
   private queue: Parcel[] = [];
@@ -1577,7 +1583,8 @@ export class Sorter implements Scene3D {
       // (2.4 m wide; its outer edge 1.2 m inside the loop's.)
       const zi = LOOP_ZH - 2.4;
       const x0 = PLATFORM_X + 7.6;
-      this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4);
+      // (Its green coating only in Day: Minimal keeps the plain floor between the taped edges.)
+      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4));
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
@@ -3040,27 +3047,46 @@ export class Sorter implements Scene3D {
   private beltBack = new Map<Path, number>();
 
   /**
-   * The flow projector over each dock belt shows the postcodes of the first three parcels
-   * waiting at its end, flat on top of them; a parcel's code goes when the worker lifts it.
+   * The flow projector over each dock belt shows, on each of the first three parcels waiting at
+   * its end, the number of the roll cage it goes in (1–6, `Docks.cageNumber`; R: the return
+   * tote), with a soft beam from the lens to it; the number goes when the worker lifts the parcel.
    */
   private writeDockCodes(): void {
     const o = this.o;
+    const beams = this.dockBeams;
     let i = 0;
     for (const [chute] of this.dockOf) {
       const q = this.docks.queueOf(chute);
+      const lens = this.cages.get(chute);
       for (let n = 0; n < 3; n++, i++) {
         const p = q[n] as unknown as Parcel | undefined;
         if (!p || p.mode !== 'dock') {
           o.scale.set(0, 0, 0);
+          o.updateMatrix();
+          beams.setMatrixAt(i, o.matrix);
         } else {
-          const text = pcDigits(p.pc);
+          const cn = this.docks.cageNumber(chute, p.pc);
+          const text = cn ? String(cn) : 'R';
+          // The beam: a narrow cone from the lens, widening onto the parcel's top.
+          const top = this.dbA.set(p.pos.x, p.pos.y + p.h + 0.02, p.pos.z);
+          if (lens) {
+            const from = this.dbB.set(lens.x, PROJ_LENS_Y, lens.z);
+            const len = from.distanceTo(top);
+            o.position.lerpVectors(top, from, 0.5);
+            o.quaternion.setFromUnitVectors(this.dbUp, this.dbC.subVectors(from, top).normalize());
+            o.rotation.setFromQuaternion(o.quaternion);
+            const r = Math.min(p.w, p.d) * 0.45;
+            o.scale.set(r, len, r);
+          } else o.scale.set(0, 0, 0);
+          o.updateMatrix();
+          beams.setMatrixAt(i, o.matrix);
           if (this.dockCodeText[i] !== text) {
             this.dockCodeText[i] = text;
             this.dockCodes.set(i, text, null, { bg: 'rgba(23, 85, 254, 0.88)', fg: '#ffffff' });
           }
           o.position.set(p.pos.x, p.pos.y + p.h + 0.02, p.pos.z);
           o.rotation.set(-Math.PI / 2, 0, 0);
-          const sc = Math.min(1, (p.w * 0.9) / 0.5);
+          const sc = Math.min(1, (Math.min(p.w, p.d) * 0.8) / 0.32);
           o.scale.set(sc, sc, 1);
         }
         o.updateMatrix();
@@ -3068,7 +3094,17 @@ export class Sorter implements Scene3D {
       }
     }
     o.scale.set(1, 1, 1);
+    o.rotation.set(0, 0, 0);
     this.dockCodes.flush();
+    beams.instanceMatrix.needsUpdate = true;
+    const day = this.dayShown !== false;
+    if (this.dockBeamMat.userData.day !== day) {
+      // By day a pale, see-through cone; by night it adds light.
+      this.dockBeamMat.userData.day = day;
+      this.dockBeamMat.blending = day ? THREE.NormalBlending : THREE.AdditiveBlending;
+      this.dockBeamMat.opacity = day ? 0.16 : 0.22;
+      this.dockBeamMat.needsUpdate = true;
+    }
   }
 
   /** The parcel leaves its tray(s): they tilt and are free again. */
@@ -5254,9 +5290,17 @@ export class Sorter implements Scene3D {
     this.ribbonMesh.count = 0;
     this.ribbonMesh.userData.noInk = true;
     this.put(this.ribbonMesh);
-    this.dockCodes = new Labels(20 * 3, 0.5, 0.24, 128, 60, { transparent: true });
+    this.dockCodes = new Labels(20 * 3, 0.32, 0.32, 96, 96, { transparent: true });
     this.dockCodes.mesh.userData.noInk = true;
     this.put(this.dockCodes.mesh);
+    // The dock projectors' soft beams onto those parcels: a cone (unit radius at the bottom, a
+    // point at the top) per parcel.
+    this.dockBeamMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.75, 0.85, 1.3), transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide });
+    this.dockBeams = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 1, 1, 16, 1, true), this.dockBeamMat, 20 * 3);
+    this.dockBeams.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.dockBeams.frustumCulled = false;
+    this.dockBeams.userData.noInk = true;
+    this.put(this.dockBeams);
     this.labelMesh = new THREE.InstancedMesh(labelGeo, labelMat, MAX_PARCELS);
     this.labelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.labelMesh.frustumCulled = false;

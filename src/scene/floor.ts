@@ -58,6 +58,8 @@ export const cellZ = (j: number) => FLOOR.z0 + j * FLOOR.cs;
 const UP = new THREE.Vector3(0, 1, 0);
 const WHITE = new THREE.Color(1, 1, 1);
 const PROJ_Y = 6.4;
+/** Height of a projector's lens (its beams start there). */
+export const PROJ_LENS_Y = PROJ_Y - 0.48;
 const BEAMS = 4;
 const TOP_Y = 1.42;
 /** Height a parcel rests at on a robot's deck: the pickup tables and the manual drop are level with it. */

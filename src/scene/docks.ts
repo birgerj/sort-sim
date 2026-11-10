@@ -328,6 +328,17 @@ export class Docks {
     d.queue.push(p);
   }
 
+  /**
+   * The roll cage a parcel goes in, as the projector numbers them: 1–6, from the cage beside the
+   * belt's end on its west side, clockwise seen from above (up the west side, back down the east).
+   * 0: none of this dock's cages (a missort, for the return tote).
+   */
+  cageNumber(chute: number, pc: number): number {
+    const d = this.docks.find((x) => x.chute === chute);
+    if (!d) return 0;
+    return rangeOf(d.cages.map((c) => c.range), pc) + 1;
+  }
+
   /** The parcels banked up at the end of a dock's belt, front first (by chute). */
   queueOf(chute: number): readonly DockParcel[] {
     return this.docks.find((x) => x.chute === chute)?.queue ?? [];
@@ -1032,9 +1043,9 @@ export class Docks {
     const cages: Cage[] = cageAt.map(([at, ry], i) => this.buildCage(at, ry, ranges[i]!));
     const n0 = this.docks.length * CAGES;
     cages.forEach((c, i) => {
-      // A coloured card about A4 size, black print: postcodes and city.
+      // A coloured card about A4 size, black print: postcodes, and the cage's number (as the projector shows it) and city.
       const bg = CARD_COLS[i % CARD_COLS.length]!;
-      for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), NORTH_CITIES[city]!.name, { bg, fg: '#111111', sub: '#111111', border: '#111111' });
+      for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), `${i + 1} · ${NORTH_CITIES[city]!.name}`, { bg, fg: '#111111', sub: '#111111', border: '#111111' });
     });
     // The return tote for parcels sent here by mistake.
     k.box('tote', k.std(0x1f3f80, 0.6, 0.1, 0x2c62c8), x + 0.9, 0.22, E - 0.4, 0.6, 0.44, 0.42);
