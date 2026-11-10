@@ -4,7 +4,7 @@
  * URL parameters (all optional):
  *   time=day|night         time of day (fixed: it does not change by itself)
  *   look=minimal|real      the day's look: a clean drawing, or lit like a photo
- *   camera=auto|fly|follow|walk camera mode
+ *   camera=fly|follow|walk camera mode (auto: fly)
  *   dept=<id>              start at a department (see Sorter.departments())
  *   mute=1                 no start screen, no sound
  *   ui=0                   no controls, no start screen (for recordings and screenshots)

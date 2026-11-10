@@ -1221,7 +1221,7 @@ function animAt(an: Anim, bt: number): number {
 }
 
 /** auto: switch fly/follow every 8 bars; fly: random tour; follow: a parcel; visit: hover at one department. */
-type CamMode = 'auto' | 'fly' | 'follow' | 'visit' | 'walk';
+type CamMode = 'fly' | 'follow' | 'visit' | 'walk';
 const CAM_KEY = 'sortsim.cam';
 
 export class Sorter implements Scene3D {
@@ -1419,12 +1419,13 @@ export class Sorter implements Scene3D {
   private cageLine!: THREE.LineBasicMaterial;
 
   // Camera.
-  private camMode: CamMode = 'auto';
+  private camMode: CamMode = 'fly';
   private follow: Parcel | null = null;
   /** Something else being followed (after a click): a robot, a forklift or a person. */
   private followThing: { obj: THREE.Object3D; h: number; kind: 'robot' | 'forklift' | 'person'; name: string; last: THREE.Vector3 } | null = null;
   private autoFollow = false;
-  private lastShotBar = -1;
+  /** On the fly tour, following a parcel for a while (instead of a stop) until this beat. */
+  private followUntil = 0;
   /** Fly mode: a random tour past points of interest. */
   private tour: Tour | null = null;
   private recent: number[] = [];
@@ -1502,7 +1503,9 @@ export class Sorter implements Scene3D {
     this.composer.addPass(new OutputPass());
     try {
       const saved = localStorage.getItem(CAM_KEY);
-      if (saved === 'auto' || saved === 'fly' || saved === 'follow') this.camMode = saved;
+      // ("auto", from before the tour took in parcels itself, is the tour now.)
+      if (saved === 'auto' || saved === 'fly') this.camMode = 'fly';
+      else if (saved === 'follow') this.camMode = saved;
     } catch {
       /* no storage */
     }
@@ -1866,7 +1869,7 @@ export class Sorter implements Scene3D {
     if (this.camMode === 'follow' && this.followThing) return `Following ${this.followThing.name}`;
     if (this.camMode === 'walk') return this.walk.alt > 0.01 ? 'Flying' : 'Walking';
     const f = this.follow;
-    if (!f || this.camMode === 'fly' || (this.camMode === 'auto' && !this.autoFollow)) return '';
+    if (!f || (this.camMode === 'fly' && !this.autoFollow)) return '';
     if (f.mode === 'dock') return `Parcel ${f.id} · at truck dock ${DOCK_X.indexOf(this.dockOf.get(f.dest) ?? 0) + 1}`;
     if (f.mode === 'table') return `Parcel ${f.id} · waiting for a robot`;
     if (f.mode === 'robot') {
@@ -1891,9 +1894,8 @@ export class Sorter implements Scene3D {
   controls(): SceneControl[] {
     return [
       {
-        kind: 'choice', id: 'cam', label: 'Camera', title: 'Fly around the hall, follow a parcel, or switch every 8 bars', value: this.camMode,
+        kind: 'choice', id: 'cam', label: 'Camera', title: 'Fly round the hall (now and then following a parcel), or follow a parcel', value: this.camMode,
         options: [
-          { value: 'auto', label: 'Auto' },
           { value: 'fly', label: 'Fly' },
           { value: 'follow', label: 'Follow' },
         ],
@@ -1910,7 +1912,7 @@ export class Sorter implements Scene3D {
     if (id === 'cam' && value === 'walk') {
       this.startWalk();
     } else if (id === 'cam' && (value === 'auto' || value === 'fly' || value === 'follow')) {
-      this.camMode = value;
+      this.camMode = value === 'auto' ? 'fly' : value;
       this.follow = null;
       this.followThing = null;
       this.autoFollow = false;
@@ -4041,17 +4043,14 @@ export class Sorter implements Scene3D {
       this.updateWalk(dt);
       return;
     }
-    const shot = Math.floor(bar / 8);
-    if (this.camMode === 'auto' && shot !== this.lastShotBar && !(this.dwellFor && !this.autoFollow && this.lingering())) {
-      this.lastShotBar = shot;
-      this.autoFollow = !this.autoFollow;
-      if (this.autoFollow) this.pickFollow();
+    void bar;
+    // The tour's parcel follow ends after its time (or when the parcel is gone): on to a stop.
+    if (this.camMode === 'fly' && this.autoFollow && (this.bt >= this.followUntil || !this.follow)) {
+      this.autoFollow = false;
+      this.follow = null;
     }
-    const following = this.camMode === 'follow' || (this.camMode === 'auto' && this.autoFollow);
-    if (following && !this.follow) {
-      if (this.camMode === 'follow' || bar - shot * 8 < 6) this.pickFollow();
-      if (!this.follow && this.camMode === 'auto') this.autoFollow = false;
-    }
+    const following = this.camMode === 'follow' || (this.camMode === 'fly' && this.autoFollow);
+    if (following && !this.follow && this.camMode === 'follow') this.pickFollow();
     const p = following ? this.follow : null;
     if (p && p.mode === 'fixed' && p.pathKind !== 'back') this.follow = null;
     const th = this.camMode === 'follow' ? this.followThing : null;
@@ -4191,7 +4190,7 @@ export class Sorter implements Scene3D {
   /** The tour camera is on its way to, or at, a stop that may leave the hall (above the roof). */
   private freeStop(): boolean {
     const t = this.tour;
-    return !this.follow && !!t && !!this.pois[t.poi]?.free && (this.camMode === 'visit' || this.camMode === 'fly' || this.camMode === 'auto');
+    return !this.follow && !!t && !!this.pois[t.poi]?.free && (this.camMode === 'visit' || this.camMode === 'fly');
   }
 
   /**
@@ -6986,7 +6985,7 @@ export class Sorter implements Scene3D {
     this.followThing = null;
     // (Not one resting in the store rack: the camera would only stand there.)
     if (p.mode === 'fixed' || p.mode === 'held') return;
-    if (this.camMode !== 'follow' && this.camMode !== 'auto') this.camMode = 'follow';
+    if (this.camMode !== 'follow') this.camMode = 'follow';
     this.follow = p;
     this.autoFollow = true;
   }
@@ -7227,7 +7226,7 @@ export class Sorter implements Scene3D {
    */
   tourStop(): { name: string; since: number; dwell: number; held: boolean } | null {
     const t = this.tour;
-    const touring = this.camMode === 'fly' || this.camMode === 'visit' || (this.camMode === 'auto' && !this.autoFollow);
+    const touring = (this.camMode === 'fly' && !this.autoFollow) || this.camMode === 'visit';
     if (!t || !touring || t.s < t.len) return null;
     const now = this.tourHeldAt ?? this.bt;
     return { name: this.pois[t.poi]!.name, since: now - t.arrivedAt, dwell: this.camMode === 'visit' ? Infinity : t.dwell, held: this.tourHeldAt !== null };
@@ -7273,6 +7272,17 @@ export class Sorter implements Scene3D {
       || (this.camMode === 'visit' && t.poi !== this.visitPoi)
       || (this.tourHeldAt === null && (staying ? t.s >= t.len && !!this.pois[t.poi]!.next?.(since) : t.s >= t.len && since > t.dwell));
     if (moveOn) {
+      // Now and then (one stop in six) the tour follows a parcel for 8 bars instead, then flies on
+      // to the next stop (not with product info on: that tour keeps to its stops).
+      if (this.camMode === 'fly' && t && !this.dwellFor && Math.random() < 1 / 6) {
+        this.pickFollow();
+        if (this.follow) {
+          this.autoFollow = true;
+          this.followUntil = this.bt + 32;
+          this.tour = null;
+          return;
+        }
+      }
       this.planTour(t);
       return this.flyTour(dt, travel);
     }

@@ -343,8 +343,7 @@ export class Hud {
     const cam = this.section('camera');
     const cams = el('div', 'cams');
     for (const [id, label, sub, key] of [
-      ['auto', 'Auto', 'Switches every 8 bars', 'A'],
-      ['fly', 'Fly', 'A tour of the hall', 'F'],
+      ['fly', 'Fly', 'A tour of the hall, now and then with a parcel', 'F'],
       ['follow', 'Follow', 'Ride along with a parcel', 'P'],
       ['walk', 'Walk', 'On foot: WASD, or thumbs', 'V'],
     ] as const) {
@@ -355,10 +354,13 @@ export class Hud {
       cams.append(b);
       this.camBtns.set(id, b);
     }
-    const next = el('button', 'wide', 'Next parcel');
+    // (In the grid with the three: two by two.)
+    const next = el('button', 'cam');
     next.title = 'Key P';
+    next.append(el('b', '', 'Next parcel'), el('span', '', 'Follow another one'));
     next.onclick = () => this.scene.setControl('next', true);
-    cam.append(cams, next, el('p', 'set-help', 'Click or tap a robot, forklift or person in the hall to follow it; a parcel to see its label.'));
+    cams.append(next);
+    cam.append(cams, el('p', 'set-help', 'Click or tap a robot, forklift or person in the hall to follow it; a parcel to see its label.'));
 
     // Hub: how busy, how fast, cleardown and figures.
     const hub = this.section('hub');
@@ -853,8 +855,8 @@ export class Hud {
       if (/^[0-9]$/.test(k)) {
         const d = depts[(Number(k) + 9) % 10];
         if (d) this.scene.visit(d.id);
-      } else if (k === 'a') this.scene.setControl('cam', 'auto');
-      else if (k === 'v') this.scene.setControl('cam', this.scene.cameraMode() === 'walk' ? 'auto' : 'walk');
+      } else if (k === 'a') this.scene.setControl('cam', 'fly');
+      else if (k === 'v') this.scene.setControl('cam', this.scene.cameraMode() === 'walk' ? 'fly' : 'walk');
       else if (k === 'f') this.scene.setControl('cam', 'fly');
       else if (k === 'p') this.scene.setControl('next', true);
       // D: to the day, or between Minimal and Day while it is day.

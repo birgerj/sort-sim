@@ -60,7 +60,7 @@ export class WalkControls {
       if (k === 'escape') {
         // (An open menu panel takes Esc first; see the HUD.)
         if (document.querySelector('.sheet.show, .hud .panel')) return;
-        this.scene.setControl('cam', 'auto');
+        this.scene.setControl('cam', 'fly');
         return;
       }
       if (['w', 'a', 's', 'd', 'e', 'q', 'pageup', 'pagedown', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(k)) {
@@ -147,7 +147,7 @@ export class WalkControls {
     stop.title = 'Stop walking (Esc)';
     stop.innerHTML = svg('<path d="M6 6l12 12M18 6L6 18"/>');
     stop.append('Stop');
-    stop.onclick = () => this.scene.setControl('cam', 'auto');
+    stop.onclick = () => this.scene.setControl('cam', 'fly');
     const seg = el('div', 'walk-seg');
     this.walkBtn.type = this.flyBtn.type = 'button';
     this.walkBtn.title = 'Land and walk (Q down to the floor)';
