@@ -22,12 +22,14 @@ import { loadBakedBodies, startLaterWork } from './scene/people';
 import { NIGHT_PRESETS, normalizeNightFx } from './scene/nightFx';
 import { Hud, loadSettings, saveSettings, type Settings, type TimeMode } from './ui/hud';
 import { startCard } from './ui/startCard';
-import { Pwa } from './ui/pwa';
+import { Pwa, checkForUpdates } from './ui/pwa';
 import { WalkControls } from './ui/walk';
 import { GameUi } from './ui/game';
 import { ANTICS } from './scene/antics';
 
 const q = new URLSearchParams(location.search);
+// First of all: is there a new version? (Offered at the top of the start card as soon as it is found.)
+void checkForUpdates();
 
 // When something goes wrong, say so on screen (phones have no console to look in): a script error,
 // or the graphics chip dropping the WebGL context (usually out of memory), which leaves a black canvas.

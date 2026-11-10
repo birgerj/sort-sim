@@ -1655,8 +1655,26 @@ input[type='range'] {
 .start .sound-toggle[hidden] {
   display: none;
 }
-.start .update {
+/* A waiting new version: the first choice, at the top of the card. */
+.start .card > button.update {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  font-size: 16px;
+  background: var(--teal-l);
   border-color: var(--teal-l);
+  color: #0d2a24;
+}
+.start .card > button.update[hidden] {
+  display: none;
+}
+.start .card > button.update svg {
+  width: 18px;
+  height: 18px;
 }
 .start select.country {
   flex: 1;

@@ -21,10 +21,16 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
  * Where a waiting new version is offered: on the start card while it is up (next to sound and
  * country), otherwise as a toast. The card can be up before the hall (and this class) exists.
  */
-const update: { apply: (() => void) | null; card: ((apply: () => void) => void) | null; toast: ((apply: () => void) => void) | null } = {
+const update: {
+  apply: (() => void) | null;
+  card: ((apply: () => void) => void) | null;
+  toast: ((apply: () => void) => void) | null;
+  say: ((text: string) => void) | null;
+} = {
   apply: null,
   card: null,
   toast: null,
+  say: null,
 };
 function offerUpdate(apply: () => void): void {
   update.apply = apply;
@@ -38,6 +44,46 @@ export function updateOnCard(show: (apply: () => void) => void): () => void {
     update.card = null;
     if (update.apply) update.toast?.(update.apply);
   };
+}
+
+/**
+ * The service worker: offline use, and updates. Called first thing at start-up (before the
+ * start card and long before the hall is built), so a new version is looked for at once and
+ * offered on the start card. Reopening the installed app (it comes back to the front) looks
+ * again. A new version waits until the visitor says "Update".
+ */
+export async function checkForUpdates(): Promise<void> {
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+    const offer = (w: ServiceWorker) => offerUpdate(() => w.postMessage('skip-waiting'));
+    const watch = (w: ServiceWorker | null) =>
+      w?.addEventListener('statechange', () => {
+        if (w.state !== 'installed') return;
+        if (navigator.serviceWorker.controller) offer(w);
+        else update.say?.('Ready to work offline.');
+      });
+    if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+    watch(reg.installing);
+    reg.addEventListener('updatefound', () => watch(reg.installing));
+    // Reload only when a new version takes over from an old one (not on the very first install).
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading || !hadController) return;
+      reloading = true;
+      location.reload();
+    });
+    // Look now, whenever the app comes back to the front, and now and then while it stays open.
+    const look = () => void reg.update().catch(() => {});
+    look();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') look();
+    });
+    setInterval(look, 60 * 60 * 1000);
+  } catch {
+    /* no service worker (private mode, file://) */
+  }
 }
 
 export class Pwa {
@@ -93,7 +139,10 @@ export class Pwa {
     void this.keepAwake();
 
     this.mediaSession();
-    if (import.meta.env.PROD) void this.registerWorker();
+    // A new version found before the hall was ready, with the start card already gone: the toast.
+    update.toast = (apply) => this.say('A new version of Sort sim is ready.', 0, 'Update', apply);
+    update.say = (text) => this.say(text);
+    if (update.apply && !update.card) update.toast(update.apply);
   }
 
   /** Running as an installed app (not in a browser tab). */
@@ -151,36 +200,6 @@ export class Pwa {
       this.music.setMuted(true);
       ms.playbackState = 'paused';
     });
-  }
-
-  /** The service worker: offline use; a new version waits until the visitor says "Update". */
-  private async registerWorker(): Promise<void> {
-    if (!('serviceWorker' in navigator)) return;
-    try {
-      const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-      update.toast = (apply) => this.say('A new version of Sort sim is ready.', 0, 'Update', apply);
-      const offer = (w: ServiceWorker) => offerUpdate(() => w.postMessage('skip-waiting'));
-      if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        w?.addEventListener('statechange', () => {
-          if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w);
-          if (w.state === 'installed' && !navigator.serviceWorker.controller) this.say('Ready to work offline.');
-        });
-      });
-      // Reload only when a new version takes over from an old one (not on the very first install).
-      const hadController = !!navigator.serviceWorker.controller;
-      let reloading = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloading || !hadController) return;
-        reloading = true;
-        location.reload();
-      });
-      // Look for a new version now and then (an installed app may stay open for hours).
-      setInterval(() => void reg.update(), 60 * 60 * 1000);
-    } catch {
-      /* no service worker (private mode, file://) */
-    }
   }
 
   /** A short message at the top; with an action button, it stays until used or closed. */

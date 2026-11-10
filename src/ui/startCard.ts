@@ -64,19 +64,21 @@ export function startCard(onStart: (sound: boolean) => void): void {
     location.reload();
   };
 
-  // Update: only when a new version is waiting; it reloads into the new one.
-  const upd = el('button', 'sound-toggle update');
+  // Update: only when a new version is waiting. It is then the first choice, at the top of the
+  // card (and has the focus); it reloads into the new version.
+  const upd = el('button', 'primary update');
   upd.type = 'button';
   upd.hidden = true;
   upd.title = 'A new version of Sort sim is ready';
   // (Icons are this file's own constant SVG markup.)
-  upd.innerHTML = `${REFRESH}<span>Update</span>`;
+  upd.innerHTML = `${REFRESH}<span>Update to the new version</span>`;
   const release = updateOnCard((apply) => {
     upd.hidden = false;
     upd.onclick = () => {
       upd.disabled = true;
       apply();
     };
+    upd.focus({ preventScroll: true });
   });
 
   const go = el('button', 'primary', 'Start');
@@ -88,9 +90,10 @@ export function startCard(onStart: (sound: boolean) => void): void {
   };
 
   const row = el('div', 'row');
-  row.append(snd, country, upd);
+  row.append(snd, country);
+  card.prepend(upd);
   card.append(row, go);
   wrap.append(card);
   document.body.append(wrap);
-  go.focus({ preventScroll: true });
+  if (upd.hidden) go.focus({ preventScroll: true });
 }
