@@ -52,6 +52,9 @@ export function loadSettings(): Settings {
   }
   // (The day ↔ night cycle is gone: a saved cycle starts by day.)
   if (s.time !== 'day' && s.time !== 'night') s.time = 'day';
+  // (There used to be an Ultra above High: it is High now.)
+  if ((s.quality as string) === 'ultra') s.quality = 'high';
+  if (!['low', 'normal', 'high'].includes(s.quality)) s.quality = 'normal';
   return s;
 }
 
@@ -464,13 +467,12 @@ export class Hud {
     };
     mb.classList.add('inline');
     mb.append(this.soundBtn, vol);
-    const qb = this.row(sec, 'Graphics quality', 'Low is fastest; High and Ultra add shadows, ambient occlusion and sharper lines.');
-    qb.classList.add('cols4');
+    const qb = this.row(sec, 'Graphics quality', 'Low is for phones; High adds shadows, ambient occlusion and sharper lines.');
+    qb.classList.add('cols3');
     for (const [id, label, title] of [
-      ['low', 'Low', 'Fastest: pixel ratio 1'],
+      ['low', 'Low', 'For phones: pixel ratio 1, simpler far away, outlines nearby only'],
       ['normal', 'Normal', 'Outlines, flat shading, contact shadows'],
-      ['high', 'High', 'Also ambient occlusion, sun shadows, glossy night floor, depth of field'],
-      ['ultra', 'Ultra', 'For laptops and desktops: 2× supersampling, finer and wider shadows, more ambient occlusion'],
+      ['high', 'High', 'For laptops and desktops: sharper, more detail far away, ambient occlusion, sun shadows, glossy night floor'],
     ] as const) {
       const b = el('button', '', label);
       b.title = title;

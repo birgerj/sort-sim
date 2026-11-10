@@ -78,6 +78,16 @@ export class InkPass extends Pass {
   /** Objects hidden while normals are drawn (lights, lines, particles, glass, shadows). */
   private skip: THREE.Object3D[] | null = null;
   strength = 1;
+  /**
+   * Single meshes further than this (metres) get no lines of their own: they are left out of the
+   * normals, which saves their draw calls here. What lies behind them still outlines them where
+   * they meet it, so far off only their inner creases go (lines fade into the haze there anyway).
+   */
+  maxDist = Infinity;
+  /** How far the camera is from what it looks at: nothing that close is ever left out. */
+  focus = 0;
+  /** Single meshes that may be left out by distance, with their world bounding spheres. */
+  private far: { o: THREE.Mesh; s: THREE.Sphere }[] | null = null;
 
   constructor(
     private scene: THREE.Scene,
@@ -119,6 +129,22 @@ export class InkPass extends Pass {
   refresh(): void {
     this.skip = null;
     this.masked = null;
+    this.far = null;
+  }
+
+  private collectFar(skip: Set<THREE.Object3D>): { o: THREE.Mesh; s: THREE.Sphere }[] {
+    const out: { o: THREE.Mesh; s: THREE.Sphere }[] = [];
+    this.scene.updateMatrixWorld(true);
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || skip.has(m) || (m as THREE.InstancedMesh).isInstancedMesh || (m as THREE.SkinnedMesh).isSkinnedMesh) return;
+      // (Only what stands still: a moving part's sphere would go stale.)
+      if (!m.userData.merged && !m.userData.static && m.parent !== this.scene) return;
+      const g = m.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      out.push({ o: m, s: g.boundingSphere!.clone().applyMatrix4(m.matrixWorld) });
+    });
+    return out;
   }
 
   private collect(): THREE.Object3D[] {
@@ -140,6 +166,19 @@ export class InkPass extends Pass {
     if (!this.skip) this.skip = this.collect();
     const was = this.skip.map((o) => o.visible);
     for (const o of this.skip) o.visible = false;
+    // Far single meshes: out of the normals for this frame.
+    const hidden: THREE.Object3D[] = [];
+    const reach = Math.max(this.maxDist, this.focus * 1.3);
+    if (reach < Infinity) {
+      if (!this.far) this.far = this.collectFar(new Set(this.skip));
+      const cam = this.camera.position;
+      for (const { o, s } of this.far) {
+        if (o.visible && s.center.distanceTo(cam) - s.radius > reach) {
+          o.visible = false;
+          hidden.push(o);
+        }
+      }
+    }
     const bg = this.scene.background;
     const fog = this.scene.fog;
     this.scene.background = null;
@@ -173,6 +212,7 @@ export class InkPass extends Pass {
     this.scene.background = bg;
     this.scene.fog = fog;
     this.skip.forEach((o, k) => (o.visible = was[k]!));
+    for (const o of hidden) o.visible = true;
     const u = this.mat.uniforms;
     u.tColor!.value = readBuffer.texture;
     u.uNear!.value = this.camera.near;

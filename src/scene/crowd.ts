@@ -13,6 +13,10 @@ export interface CrowdInput {
   energy: number;
   cols: THREE.Color[];
   dayShown: boolean;
+  /** The camera: dancers out of its view are left out, far ones drawn plain. */
+  camera: THREE.Camera;
+  /** Metres beyond which a dancer is drawn plain. */
+  far: number;
 }
 
 interface Dancer {
@@ -23,7 +27,14 @@ interface Dancer {
   /** 0 bounce, 1 arms up pumping, 2 sway, 3 glow stick wave. */
   style: number;
   size: number;
+  cloth: THREE.Color;
+  trousers: THREE.Color;
+  skin: THREE.Color;
+  hair: THREE.Color;
+  shoes: THREE.Color;
 }
+
+type PartName = 'body' | 'legs' | 'head' | 'armL' | 'armR' | 'stick' | 'hair' | 'face' | 'shoes' | 'handL' | 'handR';
 
 const SKIN = [0xf3d3b5, 0xd9a77e, 0xc68e64, 0x8d5a3b, 0x5c3a24];
 const HAIR = [0x2a1d14, 0x4a3221, 0x7a5a3a, 0xc9a26a, 0x1b1b1d, 0xd6339a, 0x8f8f8f];
@@ -33,7 +44,12 @@ export class Crowd {
   /** Everything of the crowd (dancers and LED floor); hidden when the night has no crowd. */
   readonly group = new THREE.Group();
   private dancers: Dancer[] = [];
-  private parts: Record<'body' | 'legs' | 'head' | 'armL' | 'armR' | 'stick' | 'hair' | 'face' | 'shoes' | 'handL' | 'handR', THREE.InstancedMesh>;
+  private parts: Record<PartName, THREE.InstancedMesh>;
+  /** The same dancers far away: fewer segments, no face or hands (a few pixels each there). */
+  private farParts: Partial<Record<PartName, THREE.InstancedMesh>>;
+  private readonly frustum = new THREE.Frustum();
+  private readonly pv = new THREE.Matrix4();
+  private readonly sphere = new THREE.Sphere(new THREE.Vector3(), 1.6);
   private tiles: THREE.InstancedMesh;
   private tileXY: [number, number][] = [];
   private lastBeat = -1;
@@ -80,25 +96,37 @@ export class Crowd {
       handL: mk(new THREE.SphereGeometry(0.055, 8, 6).translate(0, -0.6, 0)),
       handR: mk(new THREE.SphereGeometry(0.055, 8, 6).translate(0, -0.6, 0)),
     };
+    const farLegs = new THREE.CapsuleGeometry(0.085, 0.62, 1, 4);
+    this.farParts = {
+      body: mk(new THREE.CapsuleGeometry(0.2, 0.36, 1, 6).scale(1.15, 1, 0.75).translate(0, 1.2, 0)),
+      legs: mk(mergeTwo(farLegs.clone().translate(-0.1, 0.42, 0), farLegs.clone().translate(0.1, 0.42, 0))),
+      head: mk(new THREE.SphereGeometry(0.14, 6, 4).translate(0, 1.68, 0)),
+      armL: mk(new THREE.CapsuleGeometry(0.055, 0.5, 1, 4).translate(0, -0.3, 0)),
+      armR: mk(new THREE.CapsuleGeometry(0.055, 0.5, 1, 4).translate(0, -0.3, 0)),
+      stick: mk(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 4).translate(0, -0.65, 0), this.parts.stick.material as THREE.Material),
+      hair: mk(new THREE.SphereGeometry(0.146, 6, 4, Math.PI, Math.PI, 0, Math.PI * 0.62).scale(1, 1.08, 1.04).translate(0, 1.69, -0.006)),
+      shoes: mk(new THREE.BoxGeometry(0.33, 0.09, 0.26).translate(0, 0.045, 0.04)),
+    };
+    for (const im of [...Object.values(this.parts), ...Object.values(this.farParts)]) im.count = 0;
     for (let i = 0; i < count; i++) {
       // Packed most densely in the middle of the floor.
       const u = Math.random();
       const x = x0 + 1 + (x1 - x0 - 2) * (0.5 + (u - 0.5) * (0.6 + 0.4 * Math.random()));
       const z = z0 + 0.8 + Math.random() * (z1 - z0 - 1.6);
-      const d: Dancer = { x, z, yaw: Math.random() * Math.PI * 2, phase: Math.random(), style: Math.floor(Math.random() * 4), size: 0.9 + Math.random() * 0.2 };
-      this.dancers.push(d);
-      const cloth = this.c.setHex(CLOTHES[i % CLOTHES.length]!);
-      this.parts.body.setColorAt(i, cloth);
-      this.parts.armL.setColorAt(i, cloth);
-      this.parts.armR.setColorAt(i, cloth);
-      this.parts.legs.setColorAt(i, this.c.setHex([0x22283f, 0x1d1d1f, 0x3d4b8f, 0x6b7280][i % 4]!));
-      this.parts.head.setColorAt(i, this.c.setHex(SKIN[i % SKIN.length]!));
-      this.parts.handL.setColorAt(i, this.c);
-      this.parts.handR.setColorAt(i, this.c);
-      this.parts.hair.setColorAt(i, this.c.setHex(HAIR[(i * 7) % HAIR.length]!));
-      this.parts.shoes.setColorAt(i, this.c.setHex([0xf3f4f6, 0x1d1d1f, 0xe2231a, 0x1755fe, 0x1d1d1f][i % 5]!));
+      this.dancers.push({
+        x,
+        z,
+        yaw: Math.random() * Math.PI * 2,
+        phase: Math.random(),
+        style: Math.floor(Math.random() * 4),
+        size: 0.9 + Math.random() * 0.2,
+        cloth: new THREE.Color(CLOTHES[i % CLOTHES.length]!),
+        trousers: new THREE.Color([0x22283f, 0x1d1d1f, 0x3d4b8f, 0x6b7280][i % 4]!),
+        skin: new THREE.Color(SKIN[i % SKIN.length]!),
+        hair: new THREE.Color(HAIR[(i * 7) % HAIR.length]!),
+        shoes: new THREE.Color([0xf3f4f6, 0x1d1d1f, 0xe2231a, 0x1755fe, 0x1d1d1f][i % 5]!),
+      });
     }
-    for (const im of Object.values(this.parts)) if (im.instanceColor) im.instanceColor.needsUpdate = true;
     // LED dance floor tiles.
     const T = 1.6;
     for (let x = x0 + T / 2; x < x1; x += T) for (let z = z0 + T / 2; z < z1; z += T) this.tileXY.push([x, z]);
@@ -115,7 +143,7 @@ export class Crowd {
     });
     this.tiles.frustumCulled = false;
     this.group.add(this.tiles);
-    for (const im of [...Object.values(this.parts), this.tiles]) im.userData.noInk = true;
+    for (const im of [...Object.values(this.parts), ...Object.values(this.farParts), this.tiles]) im.userData.noInk = true;
     // Fourteen dancers from all over the floor join the conga line when it starts.
     for (let n = 0; n < 14; n++) this.conga.push(Math.floor(((n + 0.5) / 14) * count));
   }
@@ -168,7 +196,31 @@ export class Crowd {
     }
     (this.tiles.material as THREE.MeshBasicMaterial).opacity = (0.25 + 0.5 * (1 - ph) ** 2) * hype;
     const o = this.o;
+    // Only the dancers in view are drawn (packed to the front of the instance buffers, so the
+    // rest cost nothing), near ones in full, far ones plain.
+    this.pv.multiplyMatrices(s.camera.projectionMatrix, s.camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.pv);
+    const cam = s.camera.position;
+    const far2 = s.far * s.far;
+    let nNear = 0;
+    let nFar = 0;
     this.dancers.forEach((d, i) => {
+      this.sphere.center.set(d.x, 1, d.z);
+      // (Conga dancers wander: give them room.)
+      this.sphere.radius = this.conga.includes(i) ? 30 : 1.6;
+      if (!this.frustum.intersectsSphere(this.sphere)) return;
+      const isFar = (d.x - cam.x) ** 2 + (d.z - cam.z) ** 2 + (1 - cam.y) ** 2 > far2;
+      const P = (isFar ? this.farParts : this.parts) as Partial<Record<PartName, THREE.InstancedMesh>>;
+      const j = isFar ? nFar++ : nNear++;
+      P.body!.setColorAt(j, d.cloth);
+      P.armL!.setColorAt(j, d.cloth);
+      P.armR!.setColorAt(j, d.cloth);
+      P.legs!.setColorAt(j, d.trousers);
+      P.head!.setColorAt(j, d.skin);
+      P.handL?.setColorAt(j, d.skin);
+      P.handR?.setColorAt(j, d.skin);
+      P.hair!.setColorAt(j, d.hair);
+      P.shoes!.setColorAt(j, d.shoes);
       const t = bt + d.phase * 0.25;
       const bounce = Math.abs(Math.sin(t * Math.PI)) * 0.1 * hype + s.kick * 0.04;
       const sway = Math.sin(t * Math.PI * 0.5) * (d.style === 2 ? 0.35 : 0.12);
@@ -189,12 +241,12 @@ export class Crowd {
       o.scale.setScalar(d.size);
       o.updateMatrix();
       this.m.copy(o.matrix);
-      this.parts.body.setMatrixAt(i, this.m);
-      this.parts.legs.setMatrixAt(i, this.m);
-      this.parts.head.setMatrixAt(i, this.m);
-      this.parts.hair.setMatrixAt(i, this.m);
-      this.parts.face.setMatrixAt(i, this.m);
-      this.parts.shoes.setMatrixAt(i, this.m);
+      P.body?.setMatrixAt(j, this.m);
+      P.legs?.setMatrixAt(j, this.m);
+      P.head?.setMatrixAt(j, this.m);
+      P.hair?.setMatrixAt(j, this.m);
+      P.face?.setMatrixAt(j, this.m);
+      P.shoes?.setMatrixAt(j, this.m);
       // Arms: down and swinging, pumping up on the beat, or waving.
       let l = 0.3 * Math.sin(t * Math.PI);
       let r = -l;
@@ -212,24 +264,29 @@ export class Crowd {
       }
       const wave = d.style === 3 && !cg ? Math.sin(t * Math.PI) * 0.6 : 0;
       this.a.makeTranslation(-0.3, 1.46, 0).multiply(new THREE.Matrix4().makeRotationX(l));
-      this.parts.armL.setMatrixAt(i, this.a.premultiply(this.m));
-      this.parts.handL.setMatrixAt(i, this.a);
+      P.armL?.setMatrixAt(j, this.a.premultiply(this.m));
+      P.handL?.setMatrixAt(j, this.a);
       this.a.makeTranslation(0.3, 1.46, 0).multiply(new THREE.Matrix4().makeRotationZ(wave)).multiply(new THREE.Matrix4().makeRotationX(r));
       this.a.premultiply(this.m);
-      this.parts.armR.setMatrixAt(i, this.a);
-      this.parts.handR.setMatrixAt(i, this.a);
+      P.armR?.setMatrixAt(j, this.a);
+      P.handR?.setMatrixAt(j, this.a);
       // Glow sticks for the wavers.
       if (d.style === 3 && !cg) {
-        this.parts.stick.setMatrixAt(i, this.a);
-        this.parts.stick.setColorAt(i, this.c.copy(s.cols[i % s.cols.length]!).multiplyScalar(1.5 + s.hat));
+        P.stick?.setMatrixAt(j, this.a);
+        P.stick!.setColorAt(j, this.c.copy(s.cols[i % s.cols.length]!).multiplyScalar(1.5 + s.hat));
       } else {
         o.scale.setScalar(0);
         o.updateMatrix();
-        this.parts.stick.setMatrixAt(i, o.matrix);
+        P.stick?.setMatrixAt(j, o.matrix);
       }
     });
-    for (const im of Object.values(this.parts)) im.instanceMatrix.needsUpdate = true;
-    if (this.parts.stick.instanceColor) this.parts.stick.instanceColor.needsUpdate = true;
+    for (const [set, n] of [[this.parts, nNear], [this.farParts, nFar]] as const) {
+      for (const im of Object.values(set) as THREE.InstancedMesh[]) {
+        im.count = n;
+        im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      }
+    }
   }
 }
 

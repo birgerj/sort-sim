@@ -36,15 +36,16 @@ export class StackLights {
   /** Room for `max` towers; `shell` is the material of the pale body. */
   constructor(max: number, shell: THREE.Material) {
     // One lens ring: an open cylinder with ribs (vertex colours), 1 unit across, 1 unit high.
-    const lens = new THREE.CylinderGeometry(0.5, 0.5, 1, 24, 10, true).toNonIndexed();
+    // (16 sides and 6 rows: a tower is a few centimetres across, and there are over a hundred.)
+    const lens = new THREE.CylinderGeometry(0.5, 0.5, 1, 16, 6, true).toNonIndexed();
     const p = lens.attributes.position!;
     const col = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i++) {
       const y = p.getY(i) + 0.5;
       const a = Math.atan2(p.getZ(i), p.getX(i));
       // Horizontal ribs, finer vertical facets, and a brighter band in the middle (the bulb).
-      const rib = 0.8 + 0.2 * (0.5 + 0.5 * Math.cos(y * Math.PI * 18));
-      const facet = 0.92 + 0.08 * Math.cos(a * 24);
+      const rib = 0.8 + 0.2 * (0.5 + 0.5 * Math.cos(y * Math.PI * 6));
+      const facet = 0.92 + 0.08 * Math.cos(a * 16);
       const core = 0.85 + 0.3 * Math.sin(y * Math.PI);
       const v = rib * facet * core;
       col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = v;
@@ -58,13 +59,13 @@ export class StackLights {
     // below the lamps, the thin white rings between them, and the cap.
     const R = 0.09;
     const parts = [
-      new THREE.CylinderGeometry(0.11, 0.12, 0.03, 20).translate(0, 0.015, 0), // foot
-      new THREE.CylinderGeometry(0.045, 0.045, 0.06, 12).translate(0, 0.06, 0), // neck
-      new THREE.CylinderGeometry(0.06, 0.06, 0.09, 16).rotateZ(Math.PI / 2).translate(0, 0.12, 0), // swivel
-      new THREE.CylinderGeometry(R, R, 0.2, 20).translate(0, 0.27, 0), // body
-      ...[0.37, 0.56, 0.75].map((y) => new THREE.CylinderGeometry(R + 0.004, R + 0.004, 0.018, 20).translate(0, y + 0.009, 0)),
-      new THREE.CylinderGeometry(R + 0.004, R + 0.004, 0.04, 20).translate(0, 0.96, 0), // cap
-      new THREE.SphereGeometry(R + 0.004, 20, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.25, 1).translate(0, 0.98, 0),
+      new THREE.CylinderGeometry(0.11, 0.12, 0.03, 12).translate(0, 0.015, 0), // foot
+      new THREE.CylinderGeometry(0.045, 0.045, 0.06, 8).translate(0, 0.06, 0), // neck
+      new THREE.CylinderGeometry(0.06, 0.06, 0.09, 10).rotateZ(Math.PI / 2).translate(0, 0.12, 0), // swivel
+      new THREE.CylinderGeometry(R, R, 0.2, 12).translate(0, 0.27, 0), // body
+      ...[0.37, 0.56, 0.75].map((y) => new THREE.CylinderGeometry(R + 0.004, R + 0.004, 0.018, 12).translate(0, y + 0.009, 0)),
+      new THREE.CylinderGeometry(R + 0.004, R + 0.004, 0.04, 12).translate(0, 0.96, 0), // cap
+      new THREE.SphereGeometry(R + 0.004, 12, 3, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.25, 1).translate(0, 0.98, 0),
     ].map((g) => g.toNonIndexed());
     const shellGeo = mergeGeometries(parts)!;
     this.shells = new THREE.InstancedMesh(shellGeo, shell, max);

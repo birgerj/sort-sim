@@ -36,7 +36,7 @@ import { Canteen, canteenOpenings, canteenStairFoot } from './canteen';
 import { FAULT_TEXT, FaultPlan } from '../sim/faults';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
-import { buildHuman } from './people';
+import { buildHuman, setPeopleLod } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
 import { StackLights } from './stackLights';
 import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper, lightPools, parcelWear } from './realDay';
@@ -48,6 +48,7 @@ import { XMAS } from '../sim/season';
 import { Party } from './party';
 import { Roof, ceilingWithLights, roofLights } from './roof';
 import { Crowd } from './crowd';
+import { StaticMerge } from './merge';
 import { ANTICS } from './antics';
 import { Eggs } from './eggs';
 import { RIGS } from './people';
@@ -199,11 +200,17 @@ const REJECT = 40;
 const REJECT_X = 105.1;
 const FIRST_STATION_S = 176;
 /**
- * Render quality. low: pixel ratio 1, no extras. normal: outlines, toon shading and
- * contact shadows (always on). high: also ambient occlusion, sun shadows around the
- * camera, a glossy floor at night and depth of field when following a parcel.
+ * Render quality. All three have outlines, toon shading and contact shadows.
+ * low (phones): pixel ratio 1, simpler versions of people, parcels and dancers sooner
+ * (`LOD_SCALE`), outlines only to 55 m. normal: pixel ratio 1.5, outlines to 90 m.
+ * high: pixel ratio 2, detail kept further out, ambient occlusion, sun shadows around
+ * the camera, a glossy floor at night. (An old 'ultra' setting reads as high.)
  */
-export type Quality = 'low' | 'normal' | 'high' | 'ultra';
+export type Quality = 'low' | 'normal' | 'high';
+/** How far out each quality keeps the detailed versions (× the base switch distances). */
+export const LOD_SCALE: Record<Quality, number> = { low: 0.6, normal: 1, high: 1.4 };
+/** How far out the outlines are drawn (they have faded into the haze by about 90 m anyway). */
+const INK_DIST: Record<Quality, number> = { low: 55, normal: 90, high: Infinity };
 /** x of the wall columns (south wall; the north ones stand 2.4 m further east). */
 const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }, (_, k) => WX + 19 + 24 * k);
 
@@ -1258,7 +1265,13 @@ export class Sorter implements Scene3D {
   // Parcels.
   private parcels: Parcel[] = [];
   /** Parcels by shape (0 box, 1 polybag, 2 tube, 3 duck): one instanced mesh and glow buffer each. */
-  private shapes: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute }[] = [];
+  /** Parcel meshes per shape; `far` is a plain version drawn beyond `parcelFar()` metres (none for the duck). */
+  private shapes: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute; far?: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute } }[] = [];
+  /** Level-of-detail distance factor for the quality (low draws simple versions sooner). */
+  private lodScale = 1;
+  private readonly frustum = new THREE.Frustum();
+  private readonly projView = new THREE.Matrix4();
+  private readonly sphere = new THREE.Sphere();
   private labelMesh!: THREE.InstancedMesh;
   /** Displays on the scan tunnels. */
   private scanLabels!: Labels;
@@ -1461,6 +1474,7 @@ export class Sorter implements Scene3D {
     }
     this.composer.addPass(this.gtao);
     this.ink = new InkPass(this.scene, this.camera, INK_MASK_LAYER);
+    this.ink.maxDist = INK_DIST[this.quality];
     this.composer.addPass(this.ink);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.55, 0.6);
     this.composer.addPass(this.bloom);
@@ -1722,8 +1736,13 @@ export class Sorter implements Scene3D {
         if (mat instanceof THREE.MeshBasicMaterial) return;
         return;
       }
-      m.castShadow = true;
       m.receiveShadow = true;
+      // Small single parts (bolts, lamps, handles) cast shadows too small to see but are drawn
+      // once more for them: they only catch shadows. (Instanced parts are judged as a set.)
+      const g = m.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      const r = (g.boundingSphere?.radius ?? 1) * m.getWorldScale(this.t).x;
+      m.castShadow = (m as THREE.InstancedMesh).isInstancedMesh || r > 0.12;
     });
   }
 
@@ -1839,6 +1858,7 @@ export class Sorter implements Scene3D {
       this.keyLight.position.copy(this.look).add(this.t.set(25, 45, 30));
       this.keyLight.target.position.copy(this.look);
     }
+    this.ink.focus = this.camera.position.distanceTo(this.look);
     this.batcher.update();
     this.composer.render(dt);
   }
@@ -1940,7 +1960,7 @@ export class Sorter implements Scene3D {
     this.crew?.update(dt, bt);
     this.updateFaultShows();
     this.xmas?.update(bt, 1 - this.day, this.kick);
-    this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown });
+    this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown, camera: this.camera, far: 18 * this.lodScale });
     this.roof.update(bt, this.day, this.camera);
     this.party.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
     const bots = this.floor.fleet.bots;
@@ -1970,6 +1990,13 @@ export class Sorter implements Scene3D {
     this.bokeh.enabled = false;
     this.bloom.strength = (0.75 + this.kick * 0.35 + this.snare * 0.15) * (1 - this.day);
     this.bloom.enabled = this.day < 0.98 && this.fx.bloom;
+    if (this.merger.check(this.time)) {
+      // A merged mesh turned out to move: its group was taken apart; lists built from the scene are stale.
+      this.ink.refresh();
+      this.forgetHigh();
+      this.nextBake = 0;
+    }
+    this.ink.focus = this.camera.position.distanceTo(this.look);
     this.batcher.update();
     this.composer.render(dt);
   }
@@ -2093,10 +2120,12 @@ export class Sorter implements Scene3D {
 
   setQuality(q: Quality): void {
     if (q === this.quality) return;
-    const hq = q === 'high' || q === 'ultra';
+    const hq = q === 'high';
     this.gtao.enabled = hq;
-    const ultra = q === 'ultra';
-    this.gtao.updateGtaoMaterial({ samples: ultra ? 24 : 12, radius: ultra ? 0.5 : 0.35 });
+    this.gtao.updateGtaoMaterial({ samples: 16, radius: 0.4 });
+    this.lodScale = LOD_SCALE[q];
+    setPeopleLod(this.lodScale);
+    this.ink.maxDist = INK_DIST[q];
     this.quality = q;
     this.shadowMode = null; // re-decide the shadows for this quality
     this.dayShown = null; // re-apply the look (mirror floor, shadows)
@@ -2118,7 +2147,7 @@ export class Sorter implements Scene3D {
 
   private updateShadows(): void {
     const q = this.quality;
-    const hq = q === 'high' || q === 'ultra';
+    const hq = q === 'high';
     const mode = this.real && this.dayShown === true ? (q === 'low' ? 'off' : 'baked') : hq ? 'live' : 'off';
     if (mode === this.shadowMode) return;
     const on = mode !== 'off';
@@ -2150,12 +2179,11 @@ export class Sorter implements Scene3D {
       for (const m of this.movers ?? []) m.castShadow = false;
       if (!this.movers) this.watchMovers();
     } else {
-      const ultra = q === 'ultra';
-      sc.left = sc.bottom = ultra ? -55 : -36;
-      sc.right = sc.top = ultra ? 55 : 36;
+      sc.left = sc.bottom = -40;
+      sc.right = sc.top = 40;
       sc.near = 1;
       sc.far = 140;
-      sun.shadow.mapSize.setScalar(ultra ? 4096 : 2048);
+      sun.shadow.mapSize.setScalar(2048);
       sun.shadow.normalBias = 0.03;
       sun.shadow.bias = -0.0006;
       this.renderer.shadowMap.autoUpdate = true;
@@ -3406,16 +3434,29 @@ export class Sorter implements Scene3D {
     const kick = 0.55 + this.kick * 0.8;
     const o = this.o;
     const counts = [0, 0, 0, 0];
+    const farCounts = [0, 0, 0, 0];
+    // Parcels outside the view (with a margin, for shadows and the night mirror) are not
+    // drawn at all; far ones are drawn plain and without label or tape.
+    const cam = this.camera.position;
+    this.projView.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.projView);
+    const far2 = this.parcelFar() ** 2;
     let labels = 0;
     let tapes = 0;
     let ribbons = 0;
     let hull = 0;
     for (const p of this.parcels) {
-      const set = this.shapes[p.shape]!;
-      const k = counts[p.shape]!;
+      const shape = this.shapes[p.shape]!;
+      this.sphere.center.copy(p.pos);
+      this.sphere.radius = Math.max(p.w, p.h, p.d) + 2;
+      if (p !== this.follow && !this.frustum.intersectsSphere(this.sphere)) continue;
+      const isFar = !!shape.far && p !== this.follow && p.pos.distanceToSquared(cam) > far2;
+      const set = isFar ? shape.far! : shape;
+      const cnt = isFar ? farCounts : counts;
+      const k = cnt[p.shape]!;
       if (k >= (p.shape === 3 ? 16 : MAX_PARCELS)) continue;
-      counts[p.shape]!++;
-      this.instParcels[p.shape]![k] = p;
+      cnt[p.shape]!++;
+      (isFar ? this.instFar : this.instParcels)[p.shape]![k] = p;
       this.n.set(0, 1, 0).applyQuaternion(p.q);
       o.position.copy(p.pos).addScaledVector(this.n, p.h / 2);
       o.quaternion.copy(p.q);
@@ -3452,7 +3493,7 @@ export class Sorter implements Scene3D {
       glow[k * 3 + 1] = this.c.g + p.flash * 0.6;
       glow[k * 3 + 2] = this.c.b + p.flash * 0.6;
       // Shipping label on top (tubes have theirs wrapped round, not drawn; a duck has none).
-      if (p.shape >= 2) continue;
+      if (p.shape >= 2 || isFar) continue;
       // Boxes get a strip of tape along the top first.
       if (p.gift) {
         // A present: a ribbon both ways round the top.
@@ -3483,11 +3524,15 @@ export class Sorter implements Scene3D {
       this.labelCellAttr.setX(labels, p.labelCell ?? 0);
       this.labelMesh.setMatrixAt(labels++, o.matrix);
     }
-    this.shapes.forEach((set, k) => {
-      set.mesh.count = counts[k]!;
+    const done = (set: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute }, n: number) => {
+      set.mesh.count = n;
       set.mesh.instanceMatrix.needsUpdate = true;
       if (set.mesh.instanceColor) set.mesh.instanceColor.needsUpdate = true;
       set.glow.needsUpdate = true;
+    };
+    this.shapes.forEach((set, k) => {
+      done(set, counts[k]!);
+      if (set.far) done(set.far, farCounts[k]!);
     });
     if (this.scanDirty) {
       this.scanLabels.flush();
@@ -4394,6 +4439,7 @@ export class Sorter implements Scene3D {
 
   /** Compile the shaders of what is on show now, without blocking where the browser allows it. */
   async warmUp(tod = 0): Promise<void> {
+    this.mergeStatic();
     try {
       // Put the look in place first (lights, shadows, materials), so the shaders compiled now
       // are the ones the first frame needs, not compiled once more on it.
@@ -4408,6 +4454,41 @@ export class Sorter implements Scene3D {
     } catch {
       /* the first frame compiles them instead */
     }
+  }
+
+  /** The hall's fixed meshes, merged (merge.ts). */
+  private readonly merger = new StaticMerge();
+
+  /**
+   * Merge the meshes that stand still. Meshes the scene's own fields point at (directly, in a list,
+   * or one level down in a part such as the docks) are left alone: their code moves or hides them.
+   */
+  private mergeStatic(): void {
+    const skip = new Set<THREE.Object3D>();
+    // (Parts hold the scene itself as their kit: seen from the start, so it is not scanned again.)
+    const seen = new Set<unknown>([this]);
+    const scan = (v: unknown, depth: number): void => {
+      if (!v || typeof v !== 'object' || seen.has(v) || depth > 3) return;
+      seen.add(v);
+      if ((v as THREE.Object3D).isObject3D) {
+        // (Not the scene itself, nor a whole part's group: only what a field names.)
+        if ((v as THREE.Mesh).isMesh) skip.add(v as THREE.Object3D);
+        return;
+      }
+      if (v instanceof THREE.Material || v instanceof THREE.BufferGeometry || v instanceof THREE.Texture || ArrayBuffer.isView(v)) return;
+      const vals = Array.isArray(v) ? v : v instanceof Map ? [...v.values()] : Object.values(v);
+      for (const x of vals) scan(x, depth + 1);
+    };
+    for (const [k, v] of Object.entries(this)) if (k !== 'scene' && k !== 'merger') scan(v, 0);
+    const box = new THREE.Box3();
+    this.merger.merge(this.scene, {
+      skip,
+      extraKey: (m) => {
+        if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+        return box.copy(m.geometry.boundingBox!).applyMatrix4(m.matrixWorld).min.y >= HIGH_Y ? 'high' : '';
+      },
+    });
+    this.ink.refresh();
   }
 
   isRealistic(): boolean {
@@ -4495,7 +4576,7 @@ export class Sorter implements Scene3D {
     this.updateShadows();
     this.scene.environment = show ? (this.real ? this.dayEnv : null) : this.nightEnv;
     // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
-    const hq = this.quality === 'high' || this.quality === 'ultra';
+    const hq = this.quality === 'high';
     if (!show && hq && !this.mirror) this.mirror = this.buildMirror();
     if (this.mirror) this.mirror.visible = !show && hq;
     // Flat, bright colours for the drawn day; filmic tone mapping for the photo-like day and the club.
@@ -5571,17 +5652,31 @@ export class Sorter implements Scene3D {
     duckMat.roughness = 0.25;
     duckMat.onBeforeCompile = mat.onBeforeCompile;
     duckMat.customProgramCacheKey = () => 'parcel-duck';
-    geos.forEach((geo, k) => {
-      const glow = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS * 3), 3);
+    // Far away a parcel is a few pixels: plain boxes and a six-sided tube look the same there
+    // (a polybag pillow alone is 1,452 triangles, a plain box 12).
+    const farGeos: (THREE.BufferGeometry | null)[] = [
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.CylinderGeometry(0.5, 0.5, 1, 6).rotateX(Math.PI / 2),
+      null,
+    ];
+    const make = (geo: THREE.BufferGeometry, m: THREE.Material, n: number) => {
+      const glow = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
       glow.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aGlow', glow);
-      const mesh = new THREE.InstancedMesh(geo, k === 1 ? plastic : k === 3 ? duckMat : mat, k === 3 ? 16 : MAX_PARCELS);
+      const mesh = new THREE.InstancedMesh(geo, m, n);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.setColorAt(0, this.white);
       mesh.frustumCulled = false;
       mesh.count = 0;
       this.put(mesh);
-      this.shapes.push({ mesh, glow });
+      return { mesh, glow };
+    };
+    geos.forEach((geo, k) => {
+      const m = k === 1 ? plastic : k === 3 ? duckMat : mat;
+      const near = make(geo, m, k === 3 ? 16 : MAX_PARCELS);
+      const fg = farGeos[k];
+      this.shapes.push(fg ? { ...near, far: make(fg, m, MAX_PARCELS) } : near);
     });
     this.hull = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }), MAX_PARCELS);
     this.hull.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -6605,14 +6700,17 @@ export class Sorter implements Scene3D {
     this.ray.setFromCamera(this.ndc, this.camera);
     let best: Parcel | null = null;
     let bd = Infinity;
-    this.shapes.forEach((set, k) => {
-      // (Instances move every frame: the bounds are worked out afresh.)
-      set.mesh.boundingSphere = null;
-      for (const hit of this.ray.intersectObject(set.mesh, false)) {
-        const p = hit.instanceId !== undefined ? this.instParcels[k]![hit.instanceId] : undefined;
-        if (p && !p.dead && hit.distance < bd) {
-          bd = hit.distance;
-          best = p;
+    this.shapes.forEach((shape, k) => {
+      for (const [set, inst] of [[shape, this.instParcels[k]!], [shape.far, this.instFar[k]!]] as const) {
+        if (!set) continue;
+        // (Instances move every frame: the bounds are worked out afresh.)
+        set.mesh.boundingSphere = null;
+        for (const hit of this.ray.intersectObject(set.mesh, false)) {
+          const p = hit.instanceId !== undefined ? inst[hit.instanceId] : undefined;
+          if (p && !p.dead && hit.distance < bd) {
+            bd = hit.distance;
+            best = p;
+          }
         }
       }
     });
@@ -6782,6 +6880,12 @@ export class Sorter implements Scene3D {
   private readonly ray = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
   private readonly instParcels: Parcel[][] = [[], [], [], []];
+  private readonly instFar: Parcel[][] = [[], [], [], []];
+
+  /** Metres beyond which parcels are drawn plain. */
+  private parcelFar(): number {
+    return 22 * this.lodScale;
+  }
 
   setRate(perMin: number): void {
     this.rate = clamp(perMin, 0, Sorter.MAX_RATE);

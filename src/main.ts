@@ -11,7 +11,7 @@
  *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
  *   night=party|calm|dark  what the night shows (Night effects panel; remembered otherwise)
  *   game=NL-7KQ2M0         play that night (with plan=…&reserve=…: the player's door plan)
- *   quality=low|normal|high|ultra  render quality (high: ambient occlusion, sun shadows,
+ *   quality=low|normal|high  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
 import './ui/style.css';
@@ -126,11 +126,11 @@ const pwa = new Pwa(hud.root, music);
 hud.appGroup.prepend(pwa.install, pwa.fullscreen);
 
 const ql = q.get('quality');
-if (ql === 'low' || ql === 'normal' || ql === 'high' || ql === 'ultra') settings.quality = ql;
+if (ql === 'low' || ql === 'normal' || ql === 'high') settings.quality = ql;
+else if (ql === 'ultra') settings.quality = 'high'; // (old links)
 const resize = () => {
   const dpr = window.devicePixelRatio || 1;
-  // Ultra renders at least at 2× (supersampling on ordinary screens) for crisp lines.
-  const ratio = settings.quality === 'ultra' ? Math.min(3, Math.max(2, dpr)) : Math.min(dpr, { low: 1, normal: 1.5, high: 2 }[settings.quality]);
+  const ratio = Math.min(dpr, { low: 1, normal: 1.5, high: 2 }[settings.quality]);
   scene.resize(window.innerWidth, window.innerHeight, ratio);
 };
 scene.setQuality(settings.quality);

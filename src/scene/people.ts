@@ -122,6 +122,19 @@ const LEVELS: Record<BodyLevel, { head: [number, number]; hair: [number, number]
   far: { head: [18, 13], hair: [24, 7], helmet: [20, 6, 1] },
 };
 export const LOD_DIST: Record<BodyLevel, number> = { fine: 0, coarse: 6, far: 20 };
+/** Every person's LOD, so the quality setting can move the switch distances (`setPeopleLod`). */
+const ALL_LODS: THREE.LOD[] = [];
+let lodScale = 1;
+
+/** Scale the people's detail switch distances (quality: low switches to simpler people sooner). */
+export function setPeopleLod(scale: number): void {
+  lodScale = scale;
+  for (const lod of ALL_LODS) applyLod(lod);
+}
+
+function applyLod(lod: THREE.LOD): void {
+  for (const l of lod.levels) l.distance = LOD_DIST[l.object.userData.level as BodyLevel] * lodScale;
+}
 const LEVEL_NAMES: BodyLevel[] = ['fine', 'coarse', 'far'];
 
 /**
@@ -186,30 +199,38 @@ function shapes(level: BodyLevel): Record<string, THREE.BufferGeometry> {
   const cached = geoCache[level];
   if (cached) return cached;
   const L = LEVELS[level];
-  const cap = (r: number, len: number, y: number, seg = 10) => new THREE.CapsuleGeometry(r, len, 4, seg).translate(0, y, 0);
-  const ball = (r: number, x: number, y: number, z: number, seg = 10) => new THREE.SphereGeometry(r, seg, Math.max(6, seg - 2)).translate(x, y, z);
+  // Far away (> LOD_DIST.far, a person a few dozen pixels tall) the small parts get half
+  // their segments: they were the bulk of a far person's triangles.
+  const far = level === 'far';
+  const sg = (n: number, min = 3) => (far ? Math.max(min, Math.round(n / 2)) : n);
+  const cap = (r: number, len: number, y: number, seg = 10) => new THREE.CapsuleGeometry(r, len, sg(4, 2), sg(seg)).translate(0, y, 0);
+  const ball = (r: number, x: number, y: number, z: number, seg = 10) => new THREE.SphereGeometry(r, sg(seg, 4), sg(Math.max(6, seg - 2))).translate(x, y, z);
   const box = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
   // A body of revolution from a (radius, height) profile, squashed front to back.
   const lathe = (prof: [number, number][], depth: number, y = 0, seg = 18) =>
-    new THREE.LatheGeometry(prof.map(([r, h]) => new THREE.Vector2(r, h)), seg).scale(1, 1, depth).translate(0, y, 0);
-  const ell = (rx: number, ry: number, rz: number, x: number, y: number, z: number, seg = 14) => new THREE.SphereGeometry(1, seg, Math.max(8, seg - 4)).scale(rx, ry, rz).translate(x, y, z);
+    new THREE.LatheGeometry(prof.map(([r, h]) => new THREE.Vector2(r, h)), sg(seg)).scale(1, 1, depth).translate(0, y, 0);
+  const ell = (rx: number, ry: number, rz: number, x: number, y: number, z: number, seg = 14) => new THREE.SphereGeometry(1, sg(seg, 4), sg(Math.max(8, seg - 4))).scale(rx, ry, rz).translate(x, y, z);
   const geo: Record<string, THREE.BufferGeometry> = {
     // Safety boot (ankle joint at the top): rounded upper, toe cap, and a thick dark sole (the sole is its own part).
-    boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)).translate(0, KNEE + ANKLE, 0),
+    boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, far ? 1 : 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)).translate(0, KNEE + ANKLE, 0),
     sole: box(0.12, 0.03, 0.27, 0, -0.905, 0.04).translate(0, KNEE + ANKLE, 0),
     // A collar round the base of the neck (where the neck skin meets the shirt).
-    collar: new THREE.TorusGeometry(0.06, 0.013, 6, 18).rotateX(Math.PI / 2).scale(1, 1, 0.92).translate(0, 0.548, 0.006),
+    collar: new THREE.TorusGeometry(0.06, 0.013, sg(6), sg(18)).rotateX(Math.PI / 2).scale(1, 1, 0.92).translate(0, 0.548, 0.006),
     buckle: box(0.05, 0.035, 0.015, 0, 0.06, 0.1),
     // Hand: palm, four fingers slightly curled, and the thumb forward.
     // (Wrist joint at the top.)
-    hand: merge(
+    hand: far ? merge(
+      box(0.055, 0.065, 0.026, 0, -0.3, 0),
+      box(0.05, 0.04, 0.018, 0, -0.35, 0.006),
+      box(0.014, 0.03, 0.014, -0.028, -0.3, 0.016),
+    ).translate(0, WRIST, 0) : merge(
       new RoundedBoxGeometry(0.055, 0.065, 0.026, 2, 0.01).translate(0, -0.3, 0),
       ...[-0.019, -0.006, 0.007, 0.019].map((x, i) => new THREE.CapsuleGeometry(0.0068, 0.04 - Math.abs(i - 1.5) * 0.006, 2, 6).rotateX(0.25).translate(x, -0.355, 0.006)),
       new THREE.CapsuleGeometry(0.008, 0.03, 2, 6).rotateZ(0.5).rotateX(-0.4).translate(-0.028, -0.3, 0.016),
     ).translate(0, WRIST, 0),
     radio: merge(box(0.05, 0.1, 0.03, 0.12, 0.08, 0.09), box(0.008, 0.06, 0.008, 0.135, 0.16, 0.09)),
     // Staff: a lanyard round the neck and a badge on the chest; a row of shirt buttons.
-    lanyard: new THREE.TorusGeometry(0.075, 0.004, 4, 16, Math.PI).rotateZ(Math.PI).scale(0.9, 1.9, 1).translate(0, 0.53, 0.105),
+    lanyard: new THREE.TorusGeometry(0.075, 0.004, sg(4), sg(16), Math.PI).rotateZ(Math.PI).scale(0.9, 1.9, 1).translate(0, 0.53, 0.105),
     badge: box(0.05, 0.07, 0.006, 0, 0.375, 0.112),
     buttons: merge(...[0.27, 0.34, 0.41, 0.48].map((y) => ball(0.006, 0, y, 0.106 - (y - 0.27) * 0.05, 5))),
     // Suit: the white shirt front showing in the jacket's V, lapels, a tie, and jacket buttons.
@@ -246,22 +267,22 @@ function shapes(level: BodyLevel): Record<string, THREE.BufferGeometry> {
     hairLongT: hairShell(1, true, L.hair),
     hairTailT: hairShell(2, true, L.hair),
     // The tail itself hangs from its own joint (TAIL), so it can swing.
-    tail: new THREE.CapsuleGeometry(0.026, 0.12, 3, 8).rotateX(0.35).translate(0, -0.08, -0.03),
+    tail: new THREE.CapsuleGeometry(0.026, 0.12, sg(3, 1), sg(8)).rotateX(0.35).translate(0, -0.08, -0.03),
     helmet: helmetGeometry(L.helmet),
     // The helmet's headband, seen under the rim.
-    band: new THREE.CylinderGeometry(0.097, 0.097, 0.011, 24, 1, true).scale(1, 1, 1.13).translate(0, 0.8, -0.006),
-    cap: new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.3).scale(0.104, 0.1, 0.112).translate(0, 0.79, 0),
-    peak: new THREE.CylinderGeometry(0.08, 0.08, 0.012, 14, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 1.15).translate(0, 0.8, 0.09),
+    band: new THREE.CylinderGeometry(0.097, 0.097, 0.011, sg(24), 1, true).scale(1, 1, 1.13).translate(0, 0.8, -0.006),
+    cap: new THREE.SphereGeometry(1, sg(16), sg(8), 0, Math.PI * 2, 0, Math.PI / 2.3).scale(0.104, 0.1, 0.112).translate(0, 0.79, 0),
+    peak: new THREE.CylinderGeometry(0.08, 0.08, 0.012, sg(14), 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 1.15).translate(0, 0.8, 0.09),
     // Christmas: a red hat that flops back (over the helmet for workers), its white brim and bobble.
     hat: santaHat(0.108, 0.8),
     hatH: santaHat(0.135, 0.86),
-    brimS: new THREE.TorusGeometry(0.106, 0.026, 6, 18).rotateX(Math.PI / 2).translate(0, 0.805, 0),
-    brimH: new THREE.TorusGeometry(0.133, 0.028, 6, 18).rotateX(Math.PI / 2).translate(0, 0.865, 0),
+    brimS: new THREE.TorusGeometry(0.106, 0.026, sg(6), sg(18)).rotateX(Math.PI / 2).translate(0, 0.805, 0),
+    brimH: new THREE.TorusGeometry(0.133, 0.028, sg(6), sg(18)).rotateX(Math.PI / 2).translate(0, 0.865, 0),
     // Father Christmas: a full white beard and moustache, and a sack over his shoulder.
     beard: merge(ell(0.085, 0.1, 0.06, 0, 0.66, 0.06, 12), ell(0.05, 0.018, 0.02, 0, 0.715, 0.1, 8)),
     // Headphones: a band from ear to ear over the head (wider over a helmet) and the ear cups.
-    phonesBand: new THREE.TorusGeometry(0.112, 0.012, 6, 18, Math.PI).translate(0, 0.75, 0),
-    phonesBandH: new THREE.TorusGeometry(0.152, 0.012, 6, 18, Math.PI).translate(0, 0.75, 0),
+    phonesBand: new THREE.TorusGeometry(0.112, 0.012, sg(6), sg(18), Math.PI).translate(0, 0.75, 0),
+    phonesBandH: new THREE.TorusGeometry(0.152, 0.012, sg(6), sg(18), Math.PI).translate(0, 0.75, 0),
     phonesCups: merge(ell(0.03, 0.045, 0.04, -0.11, 0.745, 0, 10), ell(0.03, 0.045, 0.04, 0.11, 0.745, 0, 10)),
     phonesCupsH: merge(ell(0.03, 0.045, 0.04, -0.125, 0.745, 0, 10), ell(0.03, 0.045, 0.04, 0.125, 0.745, 0, 10)),
     sack: ell(0.2, 0.26, 0.17, 0.06, 0.48, -0.24, 12),
@@ -1017,6 +1038,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const skeleton = new THREE.Skeleton(bones as THREE.Bone[]);
   const lod = new THREE.LOD();
   root.add(lod);
+  ALL_LODS.push(lod);
   const meshes: THREE.SkinnedMesh[] = [];
   for (const b of bones) restOf(b);
   let coarseGear: THREE.BufferGeometry | null = null;
@@ -1036,7 +1058,8 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
       m.layers.enable(INK_MASK_LAYER);
       meshes.push(m);
     }
-    lod.addLevel(group, LOD_DIST[level], 0.1);
+    group.userData.level = level;
+    lod.addLevel(group, LOD_DIST[level] * lodScale, 0.1);
     lod.levels.sort((a, b) => a.distance - b.distance);
     if (level === 'fine') queueFine(width, belly, bodyMesh);
   }

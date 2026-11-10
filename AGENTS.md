@@ -49,6 +49,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/sim/postcodes.ts` | The 36 destinations of the chosen country with their postcode ranges (north doors shared out by volume with `planDoors` → `DOORS_PER_CITY`, `DOCK_CITY`; the next 20 south); `split` into cage/box ranges; `randomPostcode(rnd, south)` (the sorter asks about 12% south, less while the pickup tables fill up). |
 | `src/scene/labels.ts` | `Labels`: many signs with different text in one draw call (canvas atlas + instanced planes): cage boards, door screens, projected postcodes. Each atlas layout needs its own shader cache key. |
 | `src/scene/batch.ts` | `Batcher`: models are built from proxy objects; one `InstancedMesh` per geometry+material, matrices copied every frame (`kit.batch`). Robots, forklifts, cages and trailers use it (people are skinned meshes, see `people.ts`). |
+| `src/scene/merge.ts` | `StaticMerge`: merges the hall's fixed single meshes (per parent, material, flags, 24 m patch) after the build, keeps the originals and takes a group apart again when one of them turns out to move or hide (see Quality / Static merging). |
 | `src/scene/trucks.ts` | `Trucks`: a trailer behind every dock door, and a screen above it. Full (2 cages / 4 boxes) or by hand (`cleardown`) → cleardown (amber lamp flashes; waits while `hold()` says the workers are still loading) → door down → truck leaves → new empty truck → door up. |
 | `src/scene/manualSort.ts` | `ManualSort`: robots tip envelopes into a hopper west of row 2; a roller belt takes them to the table; a worker puts them in pigeonholes and empties full ones into the crates. Day only, few parcels. |
 | `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
@@ -161,11 +162,28 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   before it first compiles; people use 0.45).
 - **Contact shadows:** `blob(x, z, w, d)` (static, batched) and
   `blobUnder(object, w, d)` (moves with it).
-- **Quality** (`setQuality`, HUD, `?quality=`): `low` (pixel ratio 1),
-  `normal` (1.5), `high` (2, plus GTAO, sun shadows from `keyLight` with a
-  shadow box that follows the camera, an additive mirror floor at night and
-  depth of field while following a parcel). `ultra` (laptops/desktops): at least 2× pixel ratio (supersampling), 4096 shadow map over a ±55 m box, more GTAO samples. The ink pass scales its line width with the pixel ratio. Shadow casting is set once for
-  all standard-material meshes in `setupShadows()`.
+- **Quality** (`setQuality`, HUD, `?quality=`), three steps: `low` (phones:
+  pixel ratio 1, `LOD_SCALE` 0.6, outlines on single meshes to 55 m), `normal`
+  (1.5, LOD 1, outlines to 90 m), `high` (2, LOD 1.4, outlines everywhere,
+  GTAO, sun shadows from `keyLight` in a ±40 m box that follows the camera, an
+  additive mirror floor at night). An old `ultra` (setting or link) reads as
+  `high`. The ink pass scales its line width with the pixel ratio. Shadow
+  casting is set once in `setupShadows()`: standard-material meshes, except
+  single parts under 12 cm (they only receive).
+- **Level of detail and culling** (measure with `scripts/measure.mjs`):
+  people switch at `LOD_DIST` × `LOD_SCALE` (`setPeopleLod`; the far level
+  has half-segment small parts); parcels beyond 22 m × `LOD_SCALE` are plain
+  boxes/tubes without label or tape, and parcels out of view are not written
+  at all (`writeParcels`); night dancers out of view are left out and those
+  beyond 18 m × `LOD_SCALE` drawn plain (`Crowd.farParts`). Instanced meshes
+  are not frustum-culled by three.js, so anything new and numerous should do
+  the same: pack the visible instances to the front and set `count`.
+- **Static merging** (`merge.ts`, `Sorter.mergeStatic` in `warmUp`): plain
+  opaque meshes that no scene field points at are merged per parent,
+  material, flags and 24 m floor patch. The originals are kept and checked
+  once a second; if one is moved, hidden or given another material its group
+  is taken apart again. Something you animate from a closure still works, but
+  give it a field (or `userData` with an object in it) to keep it out.
 
 ## Theme (day / night)
 
@@ -276,11 +294,13 @@ the simulation:
   `InstancedMesh` for anything repeated (20 docks × 3 cages, 40 boxes, 20
   robots). Watch draw calls: every `inkify` mesh adds a line object.
 - **Budget:** aim for 60 fps on a mid-range laptop at quality normal.
-  Measured per frame (headless): about 2,600 draw calls by day (scene plus
-  the ink pass's normal render), 1,300 by night, about 5,500 at high
-  (adds GTAO and the shadow map). Biggest cost: per-robot and per-person
-  meshes; instancing them is the next win. Check with
-  `sortsim.scene.renderer.info` (set `info.autoReset = false` around a frame).
+  Measured per frame (headless, `scripts/measure.mjs`, normal, after the LOD
+  and merging pass): Minimal 780–2,200 draw calls (scene plus the ink pass's
+  normal render) and 1.0–1.8 M triangles; Day and Night 400–1,250 calls and
+  0.5–1.0 M triangles. High adds the shadow map (about 1,000 calls) and GTAO
+  (one more scene render). Most triangles now sit in people and the batched
+  machines; most calls in single meshes that move or have a material of
+  their own. Check a change with `node scripts/measure.mjs` before and after.
 - Keep the day look's flat colours with black outlines; detail comes from
   shape (bevels, ribs, rollers, bolts, labels), not from noise.
 
