@@ -1022,6 +1022,10 @@ interface Tunnel {
   read: boolean;
   /** Its display (index into scanLabels; two faces). */
   screen: number;
+  /** When it last scanned a parcel (seconds, `Sorter.time`), for its blink on the video wall. */
+  scannedAt?: number;
+  /** Where it stands on the floor (x, z) and which way the belt runs there (angle in plan), for the video wall. */
+  at?: [number, number, number];
 }
 
 interface Chute {
@@ -2878,6 +2882,7 @@ export class Sorter implements Scene3D {
     p.scanned = true;
     p.flash = 1;
     t.flash = 1;
+    t.scannedAt = this.time;
     // Now and then a label cannot be read (a red line); the next scanner gets it.
     t.read = Math.random() > 0.02;
     t.col.copy(p.glow);
@@ -4671,11 +4676,33 @@ export class Sorter implements Scene3D {
     const robots = this.floor.robots.map((r, k) => ({ x: r.g.position.x, z: r.g.position.z, busy: this.floor.fleet.bots[k]!.state !== 'idle' }));
     const boxes = this.floor.bins.map((b) => ({ x: b.x, z: b.z, fill: Math.min(1, Math.max(b.vol / BOX_M3, b.n / BOX_FULL)), away: b.g.position.distanceToSquared(this.t.set(b.x, 0, b.z)) > 0.5 }));
     const parcels: [number, number][] = [];
+    // Parcels on the infeed: telescopes, collectors and lanes (with their buffers).
+    const infeedParcels: [number, number][] = [];
     let recirculating = 0;
     for (const p of this.parcels) {
       if (p.mode === 'loop') parcels.push([p.pos.x, p.pos.z]);
+      else if (p.mode === 'path' && (p.pathKind === 'lane' || p.pathKind === 'feed')) infeedParcels.push([p.pos.x, p.pos.z]);
       if ((p.laps ?? 0) > 0 && p.mode === 'loop') recirculating++;
     }
+    // Every scanner (the lanes' tunnels and the two on the loop): how long since it last scanned, and whether it read.
+    if (!this.lanes[0]?.tunnel.at) {
+      for (const lane of this.lanes) {
+        lane.path.at(lane.tunnelS + 0.5, this.t);
+        lane.path.at(lane.tunnelS, this.p);
+        lane.tunnel.at = [this.p.x, this.p.z, Math.atan2(this.t.z - this.p.z, this.t.x - this.p.x)];
+      }
+      for (const lt of this.loopTunnels) {
+        loopAt(lt.s, this.p, this.t);
+        lt.t.at = [this.p.x, this.p.z, Math.atan2(this.t.z, this.t.x)];
+      }
+    }
+    const scanners = [...this.lanes.map((l) => l.tunnel), ...this.loopTunnels.map((l) => l.t)].map((t) => ({
+      x: t.at![0],
+      z: t.at![1],
+      dir: t.at![2],
+      age: t.scannedAt === undefined ? Infinity : this.time - t.scannedAt,
+      read: t.read,
+    }));
     // The hall with its inbound wing, the collectors and lanes (once), and the inbound trucks.
     if (!this.mapInfeed) {
       this.mapInfeed = [];
@@ -4691,7 +4718,7 @@ export class Sorter implements Scene3D {
     }
     const outline: [number, number][] = [[LX - 12, HZ], [LX - 12, NZ], [WING.x0, NZ], [WING.x0, WING.z0], [WING.x1, WING.z0], [WING.x1, NZ], [LX + STRAIGHT + 12, NZ], [LX + STRAIGHT + 12, HZ]];
     // (The plan shows the sorter, the docks, the robot floor and the inbound wing: the store end is cropped.)
-    return { hall: [LX - 12, LX + STRAIGHT + 12, WING.z0 - 3, HZ + 1], outline, infeed: this.mapInfeed, inbound: this.wing.list(), loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
+    return { hall: [LX - 12, LX + STRAIGHT + 12, WING.z0 - 3, HZ + 1], outline, infeed: this.mapInfeed, inbound: this.wing.list(), loop: this.mapLoop, chutes, doors, robots, boxes, parcels, infeedParcels, scanners, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
   }
 
   /**

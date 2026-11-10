@@ -34,6 +34,10 @@ export interface HubMap {
   boxes: { x: number; z: number; fill: number; away: boolean }[];
   /** Parcels on the loop (positions), and how many go round again. */
   parcels: [number, number][];
+  /** Parcels on the infeed (telescopes, collectors, lanes). */
+  infeedParcels?: [number, number][];
+  /** The scanners (lane tunnels and loop scanners): seconds since their last scan, and whether it read. */
+  scanners?: { x: number; z: number; dir: number; age: number; read: boolean }[];
   recirculating: number;
   /** Parcels waiting at the infeed (on the lanes and outside). */
   queue: number;
@@ -47,6 +51,8 @@ const PURPLE = '#6b3fd1';
 const MAGENTA = '#d6339a';
 const TEAL = '#2fa58f';
 const INK = '#1d1d1f';
+/** How long a scanner stays lit on the video wall after a scan (seconds). */
+const SCAN_BLINK = 0.5;
 
 export class Screens {
   readonly dash: THREE.CanvasTexture;
@@ -114,6 +120,8 @@ export class Screens {
     const sz = (H - top - pad) / (z1 - z0);
     const X = (x: number) => pad + (x - x0) * sx;
     const Z = (z: number) => top + (z - z0) * sz;
+    // (Text is left-aligned throughout; the fault marks centre theirs.)
+    g.textAlign = 'left';
     g.fillStyle = '#12131a';
     g.fillRect(0, 0, W, H);
     // Title bar with the main numbers.
@@ -165,6 +173,31 @@ export class Screens {
     g.stroke();
     g.fillStyle = '#e0b882';
     for (const [x, z] of m.parcels) g.fillRect(X(x) - 3, Z(z) - 3, 6, 6);
+    // Parcels on the infeed belts.
+    for (const [x, z] of m.infeedParcels ?? []) g.fillRect(X(x) - 2.5, Z(z) - 2.5, 5, 5);
+    // Scanners: a dim bracket across the belt that lights up for a moment on each scan
+    // (green on a read, red on a no-read), with a glow that fades.
+    for (const sc of m.scanners ?? []) {
+      const f = Math.max(0, 1 - sc.age / SCAN_BLINK);
+      const cx = X(sc.x);
+      const cz = Z(sc.z);
+      if (f > 0) {
+        const col = sc.read ? '91, 224, 160' : '255, 90, 74';
+        const r = 10 + 8 * f;
+        const glow = g.createRadialGradient(cx, cz, 0, cx, cz, r);
+        glow.addColorStop(0, `rgba(${col}, ${0.85 * f})`);
+        glow.addColorStop(1, `rgba(${col}, 0)`);
+        g.fillStyle = glow;
+        g.fillRect(cx - r, cz - r, 2 * r, 2 * r);
+      }
+      // (The bracket lies across the belt: `dir` is the belt's direction in plan.)
+      g.save();
+      g.translate(cx, cz);
+      g.rotate(Math.atan2(Math.sin(sc.dir) * sz, Math.cos(sc.dir) * sx));
+      g.fillStyle = f > 0 ? (sc.read ? '#5be0a0' : '#ff5a4a') : '#8a5a10';
+      g.fillRect(-3, -8, 6, 16);
+      g.restore();
+    }
     // Chutes: a bar each, green → amber → red as they fill.
     for (const c of m.chutes) {
       const col = c.fill >= 1 ? '#e2231a' : c.fill > 0.6 ? '#f2a51a' : '#22cc66';
