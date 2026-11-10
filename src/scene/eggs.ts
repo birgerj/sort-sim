@@ -47,7 +47,7 @@ const CAT_SPOTS: Spot[] = [
   // On the lid of a wheelie bin.
   { at: v(-60.85, 1.24, -1.5), from: [-59.9, -1.5], ry: 2.6 },
   // On the floor in front of the vending machine (no jump).
-  { at: v(-43.1, 0, 30.6), from: [-43.1, 30.6], ry: 0.2 },
+  { at: v(-46.9, 0, 30.6), from: [-46.9, 30.6], ry: 0.2 },
 ];
 /** The way between the west wall spots and the break area. */
 const CAT_X = -58.6;
@@ -63,7 +63,7 @@ const PHONER: V2 = [-35.4, 28.9];
 const PEEKER: V2 = [107.6, 25.3];
 const SHELF_MID = v(109, 1.3, 24.7);
 
-const COFFEE_MACHINE = v(-41.5, 1.2, 31.4);
+const COFFEE_MACHINE = v(-48.4, 1.2, 31.4);
 
 export interface EggLinks {
   life: Life;

@@ -35,7 +35,7 @@ import { Inbound, TELESCOPE_BASE, TRAILER_PARCELS, type Stacked } from './inboun
 import { Canteen, canteenOpenings, canteenStairFoot } from './canteen';
 import { BreakCrew } from './breaks';
 import { FAULT_TEXT, FaultPlan } from '../sim/faults';
-import { BoxYard, DOORS } from './boxYard';
+import { AISLE_Z, BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman, setPeopleLod } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
@@ -218,6 +218,9 @@ export const LOD_SCALE: Record<Quality, number> = { low: 0.6, normal: 1, high: 1
 /** How far out the outlines are drawn (they have faded into the haze by about 90 m anyway). */
 const INK_DIST: Record<Quality, number> = { low: 55, normal: 90, high: Infinity };
 /** x of the wall columns (south wall; the north ones stand 2.4 m further east). */
+/** x of the staff door in the south wall (east of the column at x −43), and of the walkway to it. */
+const SDX = -41.7;
+const SDW = 0.85;
 const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }, (_, k) => WX + 19 + 24 * k);
 
 /**
@@ -1664,7 +1667,17 @@ export class Sorter implements Scene3D {
         ]),
         this.life.addFloorPath(ax0, bx1, bz0, bz1, [
           [ax1, bz0, bx1, bz0],
-          [ax0, bz1, bx1, bz1],
+          // (Open where the walkway to the staff door turns off south.)
+          [ax0, bz1, SDX - SDW, bz1],
+          [SDX + SDW, bz1, bx1, bz1],
+        ]),
+        // South past the control room to the staff door in the south wall, over the forklift
+        // aisle on a zebra crossing (the tape stops there: the crossing's own stripes mark it).
+        this.life.addFloorPath(SDX - SDW, SDX + SDW, bz1, HZ - 0.05, [
+          [SDX - SDW, bz1, SDX - SDW, AISLE_Z - 2.45],
+          [SDX + SDW, bz1, SDX + SDW, AISLE_Z - 2.45],
+          [SDX - SDW, AISLE_Z + 2.25, SDX - SDW, HZ - 0.05],
+          [SDX + SDW, AISLE_Z + 2.25, SDX + SDW, HZ - 0.05],
         ]),
         // (Its west end turns south, under the loop, onto the loop's walkway.)
         this.life.addFloorPath(-20, 100, -34.6, -32.2, [
@@ -1677,6 +1690,8 @@ export class Sorter implements Scene3D {
           [-18, -32.2, -18, -LOOP_ZH + 1.2],
         ]),
       );
+      this.life.addCrossing(SDX - SDW, SDX + SDW, AISLE_Z - 2.3, AISLE_Z + 2.1);
+      this.life.addStaffDoor(SDX, HZ);
     }
     this.buildCrew();
     // The canteen behind the west wall, with its windows and door in the wall and a stair down inside.
@@ -6224,7 +6239,7 @@ export class Sorter implements Scene3D {
     this.person(EX - 8, 18, Math.PI * 0.8);
     this.trolley(-58.5, 16);
     this.trolley(-56, -29.5);
-    this.trolley(-40, 18);
+    this.trolley(-49.5, 26.5);
 
     // Hanging signs, as the labels in the illustration.
     this.sign('Scanning', '#e8960c', -44.2, 6.4, -27, 0, (g) => {

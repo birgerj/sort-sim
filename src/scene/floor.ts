@@ -1037,7 +1037,8 @@ export class RobotFloor {
     const k = this.kit;
     // Bollards and rails at the corners of the robot floor.
     const bollard = k.std(0x8a6e00, 0.5, 0.3, 0xf2c200);
-    const xa = cellX(0) - 1.6;
+    // (The west ones close in: the walkway to the staff door runs past there.)
+    const xa = cellX(0) - 0.5;
     const xb = cellX(FLOOR.ni - 1) + 1.6;
     const za = cellZ(0) - 0.9;
     const zb = cellZ(FLOOR.nj - 1) + 1.2;

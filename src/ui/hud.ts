@@ -148,9 +148,12 @@ export class Hud {
     this.buildBar();
     if (opts.showStart) this.root.append(this.startScreen());
     this.bindKeys();
-    // Mouse movement brings the dock back (on touch screens it never goes).
+    // Mouse movement, a tap or a key brings the dock back (on touch screens too).
     const wake = () => this.wake();
-    window.addEventListener('pointermove', wake);
+    // (A finger dragging round the hall to look about is not asking for the controls.)
+    window.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'mouse') wake();
+    });
     window.addEventListener('pointerdown', wake);
     this.wake();
     this.bindLook();
@@ -906,7 +909,8 @@ export class Hud {
         this.openTab(null);
         return;
       }
-      tap = { x: e.clientX, y: e.clientY, t: performance.now() };
+      // On a touch screen, a tap while the dock is hidden only brings it back (it picks nothing).
+      tap = this.hidden && e.pointerType === 'touch' ? null : { x: e.clientX, y: e.clientY, t: performance.now() };
       if (this.scene.cameraMode() === 'walk') return;
       if (e.pointerType === 'touch') {
         fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1076,7 +1080,7 @@ export class Hud {
     this.scene.followParcel(p);
   }
 
-  /** Show the dock, and dim it again after three quiet seconds (not on touch screens, nor with a panel open). */
+  /** Show the dock, and hide it again after a few quiet seconds (not with a panel open). */
   private wake(): void {
     if (this.hidden) {
       this.hidden = false;
@@ -1088,11 +1092,11 @@ export class Hud {
     // Any movement, tap or key brings it back.
     this.hideTimer = window.setTimeout(() => {
       if (this.bar.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement) return this.wake();
-      // Keep the controls up while a panel is open, and always on touch screens.
-      if (this.panel || this.stats || this.open || this.touch) return;
+      // Keep the controls up while a panel is open.
+      if (this.panel || this.stats || this.open) return;
       this.hidden = true;
       this.root.classList.add('idle');
       (document.activeElement as HTMLElement | null)?.blur?.();
-    }, 3000);
+    }, this.touch ? 4000 : 3000);
   }
 }

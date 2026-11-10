@@ -215,16 +215,16 @@ export class Life {
   /** Coffee! Up to three walkers nearby wander over to the coffee machine, have a sip, and go back. */
   coffee(): number {
     if (!this.group.visible) return 0;
-    const at: V2 = [-41.5, 31.0];
-    const spots: V2[] = [[-41.5, 30.55], [-40.6, 30.25], [-42.4, 30.25]];
+    const at: V2 = [-48.4, 31.0];
+    const spots: V2[] = [[-48.4, 30.55], [-47.5, 30.25], [-49.3, 30.25]];
     const ws = this.free()
       .map((w) => ({ w, d: Math.hypot(w.x - at[0], w.z - at[1]) }))
       .filter((x) => x.d < 45)
       .sort((a, b) => a.d - b.d)
       .slice(0, 3);
     ws.forEach(({ w }, i) => {
-      // (Round the east side of the control room, then up to the machine.)
-      const via: V2[] = w.z < 22 ? [[-42.3, 18.6], [-42.3, 28.6]] : [];
+      // (Round the east side of the control room, down the walkway to the staff door, then over to the machine.)
+      const via: V2[] = w.z < 22 ? [[-41.7, 14.6], [-41.7, 28.6]] : [];
       this.send(w, [...via.map((to) => ({ to, speed: 1.1 })), { to: spots[i]!, speed: 0.9, face: at, wait: 1 + i }, { act: 'drink', face: at, wait: 5 }]);
     });
     return ws.length;
@@ -494,6 +494,41 @@ export class Life {
     return c;
   }
 
+  /**
+   * A zebra crossing over a forklift aisle: white bars across the walkway (x0–x1), one every
+   * metre from z0 to z1, painted on the floor (in every look).
+   */
+  addCrossing(x0: number, x1: number, z0: number, z1: number): void {
+    const white = this.k.std(0x8a8f96, 0.8, 0, 0xffffff);
+    // (Over the walkway's coating, which lies a hair above the floor.)
+    white.polygonOffset = true;
+    white.polygonOffsetFactor = -4;
+    white.polygonOffsetUnits = -4;
+    const n = Math.max(1, Math.round((z1 - z0) / 1.0));
+    const step = (z1 - z0) / n;
+    for (let i = 0; i < n; i++) this.k.box('zebra', white, (x0 + x1) / 2, 0.013, z0 + (i + 0.5) * step, x1 - x0, 0.01, step * 0.55);
+  }
+
+  /**
+   * A door for people in a wall at z = wallZ (the hall on the −z side): frame, leaf with a small
+   * window and a push bar, a green sign over it (lit, so it shows at night too).
+   */
+  addStaffDoor(x: number, wallZ: number): void {
+    const k = this.k;
+    const frame = k.std(0x2a2c31, 0.5, 0.4, 0x6b7078);
+    const leaf = k.std(0x3a3d44, 0.6, 0.3, 0xd9dde2);
+    const z = wallZ - 0.05;
+    k.box('sdframe', frame, x, 1.08, z, 1.2, 2.2, 0.08);
+    k.box('sdleaf', leaf, x, 1.04, z - 0.03, 1.0, 2.06, 0.04);
+    k.box('sdwin', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.72, 0.85) }), x, 1.55, z - 0.055, 0.3, 0.5, 0.01);
+    k.box('sdbar', k.std(0x9aa0a8, 0.4, 0.8, 0xc9ced4), x, 1.0, z - 0.1, 0.8, 0.05, 0.05);
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.24, 0.04), new THREE.MeshBasicMaterial({ map: exitTex() }));
+    sign.position.set(x, 2.45, z - 0.02);
+    sign.rotation.y = Math.PI;
+    sign.userData.noInk = true;
+    k.put(sign);
+  }
+
   /** A strip of black/yellow floor tape from a to b (12 cm wide; by day, in both day looks). */
   private tape(ax: number, az: number, bx: number, bz: number): void {
     const len = Math.hypot(bx - ax, bz - az);
@@ -627,7 +662,7 @@ export class Life {
       g.add(s);
     };
     for (const x of L.columnsNorth) ext(x + 0.55, L.nz + 0.45, 1);
-    for (const x of L.columnsSouth) ext(x + 0.55, L.hz - 0.45, -1);
+    for (const x of L.columnsSouth) ext(x - 0.55, L.hz - 0.45, -1);
     // First aid box beside the control room door.
     const [cx, cz] = L.controlRoom;
     k.box('firstaid', new THREE.MeshBasicMaterial({ map: firstAidTex() }), cx + 2.9, 1.6, cz - 0.05, 0.5, 0.5, 0.12);
@@ -637,8 +672,12 @@ export class Life {
     k.box('walkway', paint, -43, 0.011, 13.1, 34, 0.01, 1.6);
     for (const dz of [-0.85, 0.85]) k.box('walkedge', white, -43, 0.012, 13.1 + dz, 34, 0.01, 0.1);
     const rail = k.std(0x8a6e00, 0.5, 0.3, 0xf2c200);
-    for (let x = -60; x <= -26; x += 2) k.box('wrail', rail, x, 0.5, 14.1, 0.06, 1.0, 0.06);
-    for (const y of [0.5, 1.0]) k.box('wrail', rail, -43, y, 14.1, 34, 0.05, 0.05);
+    // (Open where the walkway to the staff door turns off south, x −42.4 … −40.4.)
+    for (let x = -60; x <= -26; x += 2) if (x < -42.6 || x > -40.2) k.box('wrail', rail, x, 0.5, 14.1, 0.06, 1.0, 0.06);
+    for (const y of [0.5, 1.0]) {
+      k.box('wrail', rail, -51.3, y, 14.1, 17.4, 0.05, 0.05);
+      k.box('wrail', rail, -33.2, y, 14.1, 14.4, 0.05, 0.05);
+    }
   }
 
   /** Odds and ends of a working hall: cardboard baler, waste bins, empty pallets, a vending machine. */
@@ -675,12 +714,13 @@ export class Life {
       k.blob(px, pz, 1.8, 1.6);
     }
     // Vending machine next to the coffee machine.
-    k.box('vend', k.std(0x2a2c31, 0.4, 0.3, 0x2fa58f), -43.1, 0.95, 31.6, 0.9, 1.9, 0.75);
-    k.box('vendwin', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.75, 0.85, 0.95) }), -43.25, 1.15, 31.21, 0.55, 1.1, 0.02);
+    // (West of the walkway to the staff door.)
+    k.box('vend', k.std(0x2a2c31, 0.4, 0.3, 0x2fa58f), -46.9, 0.95, 31.6, 0.9, 1.9, 0.75);
+    k.box('vendwin', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.75, 0.85, 0.95) }), -47.05, 1.15, 31.21, 0.55, 1.1, 0.02);
     for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
-      k.box('venditem', k.std(0x444444, 0.6, 0, [0xe2231a, 0xf2c200, 0x1755fe, 0xd6339a][(r + c) % 4]!), -43.45 + c * 0.13, 0.75 + r * 0.26, 31.24, 0.08, 0.12, 0.04);
+      k.box('venditem', k.std(0x444444, 0.6, 0, [0xe2231a, 0xf2c200, 0x1755fe, 0xd6339a][(r + c) % 4]!), -47.25 + c * 0.13, 0.75 + r * 0.26, 31.24, 0.08, 0.12, 0.04);
     }
-    k.box('vendpad', dark, -42.8, 1.2, 31.21, 0.16, 0.35, 0.02);
+    k.box('vendpad', dark, -46.6, 1.2, 31.21, 0.16, 0.35, 0.02);
   }
 
   /**
@@ -689,9 +729,9 @@ export class Life {
    */
   private buildBreakArea(): void {
     const k = this.k;
-    k.box('coffee', k.std(0x1d1d1f, 0.4, 0.4, 0x1d1d1f), -41.5, 0.9, 31.6, 0.7, 1.8, 0.6);
-    k.box('coffeescreen', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 0.8, 1.2) }), -41.5, 1.3, 31.28, 0.4, 0.25, 0.02);
-    k.blob(-41.5, 31.6, 1.2, 1.0);
+    k.box('coffee', k.std(0x1d1d1f, 0.4, 0.4, 0x1d1d1f), -48.4, 0.9, 31.6, 0.7, 1.8, 0.6);
+    k.box('coffeescreen', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 0.8, 1.2) }), -48.4, 1.3, 31.28, 0.4, 0.25, 0.02);
+    k.blob(-48.4, 31.6, 1.2, 1.0);
   }
 
   private buildFloorNames(): void {

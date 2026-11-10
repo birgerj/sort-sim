@@ -73,7 +73,9 @@ export class BoxYard {
     const paint = kit.std(0x8a6e00, 0.8, 0, 0xf2c200);
     const x0 = floor.bins[0]!.x - 3;
     const x1 = floor.bins[floor.bins.length - 1]!.x + 3;
-    for (const z of [AISLE_Z - 2.4, AISLE_Z + 2.2]) kit.box('aisle', paint, (x0 + x1) / 2, 0.012, z, x1 - x0, 0.01, 0.1);
+    // (The lines run on west, past the zebra crossing where the walkway to the staff door crosses.)
+    const px0 = Math.min(x0, -45.2);
+    for (const z of [AISLE_Z - 2.4, AISLE_Z + 2.2]) kit.box('aisle', paint, (px0 + x1) / 2, 0.012, z, x1 - px0, 0.01, 0.1);
     for (let k = 0; k < LIFTS; k++) {
       const m = buildForklift(kit, null);
       const lx0 = x0 + ((x1 - x0) * k) / LIFTS;
