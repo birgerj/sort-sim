@@ -90,7 +90,8 @@ sound is generated in code.
    maintenance platform, rides a stand-up scooter along the inside of the
    loop, ducks under it beside the chute and works on the photo eye with his
    toolbox for a few bars; then the towers flash green and the chute runs
-   again. He takes faults one after the other, oldest first.
+   again. He takes faults one after the other, oldest first. **Go to → Technician**
+   rides along behind him (the fly tour only stops there while a chute is down).
 9. At night: a crowd of 520 dancing inside the loop on an LED dance floor, a DJ on the mezzanine, laser fans, mirror-ball spots, dancing
    dock workers and confetti when the groove drops in.
 

@@ -127,6 +127,16 @@ export class FaultCrew {
     return this.h.root;
   }
 
+  /** Which way he faces (for the camera). */
+  get heading(): number {
+    return this.yaw;
+  }
+
+  /** What he is doing now (for the camera): at the bench, walking, riding, or repairing. */
+  get doing(): Task['pose'] {
+    return this.task?.pose ?? 'bench';
+  }
+
   /** What he is doing, for the chute displays: on the way, or at work on it. */
   status(chute: number): 'waiting' | 'coming' | 'working' {
     if (this.on?.chute !== chute) return this.queue.some((f) => f.chute === chute) ? 'waiting' : 'coming';

@@ -985,6 +985,8 @@ interface Poi {
   next?: (since: number) => boolean;
   /** Beats to stay on the fly tour (default 6–11). */
   dwell?: number;
+  /** The fly tour leaves it out while this says so (nothing to see there now). */
+  skip?: () => boolean;
 }
 
 interface Tour {
@@ -5279,6 +5281,7 @@ export class Sorter implements Scene3D {
       },
     });
     const tmp = new THREE.Vector3();
+    const techFwd = new THREE.Vector3();
     const tan = new THREE.Vector3();
     const nrm = new THREE.Vector3();
     /** The loop position nearest to the camera, so a ride starts where we are. */
@@ -5563,6 +5566,31 @@ export class Sorter implements Scene3D {
           this.floor.robotTop(botK, tmp);
           tmp.y = 0.9;
           this.chase(tmp, 3, 1.6, 0.3, 2, p, l);
+          return true;
+        },
+      },
+      {
+        // Behind the technician: at his bench, on his scooter to a chute that is down, at work on its photo eye.
+        name: 'technician',
+        dept: 'Technician',
+        hover: 'track',
+        rate: 3,
+        dwell: 32,
+        // (On the fly tour only while there is a fault to fix: idle at the bench he is not much to watch.)
+        skip: () => !this.crew || (this.crew.doing === 'bench' && this.faults.down.size === 0),
+        pick: () => {
+          const c = this.crew;
+          if (c) this.chaseStart(c.root.position, c.heading);
+        },
+        at: (p, l) => {
+          const c = this.crew;
+          if (!c) return false;
+          tmp.copy(c.root.position).setY(1.2);
+          // Standing still (bench, repair): swing round behind him, to look over his shoulder at his hands.
+          const still = c.doing === 'bench' || c.doing === 'repair';
+          if (still) this.chaseFwd.lerp(techFwd.set(Math.sin(c.heading), 0, Math.cos(c.heading)), 1 - Math.exp(-this.chaseDt * 2)).normalize();
+          // (Kept low: the bench is under the maintenance platform and the chutes under the loop.)
+          this.chase(tmp, still ? 2.2 : 3.4, 0.8, 0.35, 2, p, l);
           return true;
         },
       },
@@ -5935,8 +5963,8 @@ export class Sorter implements Scene3D {
       // Only stops that belong to the look on screen (no empty DJ booth by day).
       const night = this.isNight();
       const ok = this.pois.map((_, i) => i).filter((i) => {
-        const w = this.pois[i]!.when;
-        return !w || (w === 'night') === night;
+        const { when: w, skip } = this.pois[i]!;
+        return (!w || (w === 'night') === night) && !skip?.();
       });
       const fresh = ok.filter((i) => !this.recent.includes(i));
       k = pick(fresh.length ? fresh : ok);
