@@ -66,6 +66,8 @@ interface Bay {
   cols: Stacked[][];
   /** A truck just backed in (or the first one): the Sorter is to stack its load. */
   needLoad: boolean;
+  /** The lane's buffer belt is full: the unloaders wait. */
+  held: boolean;
   trailer: THREE.Object3D;
   door: THREE.Object3D;
   sections: THREE.Object3D[];
@@ -178,7 +180,7 @@ export class Inbound {
         k.put(h.root);
         return { h, side, ux: x + side * 1.25, uz: wallZ + 1.4, yaw: Math.PI, carry: [] };
       });
-      const bay: Bay = { x, number: lay.firstNumber + i, state: 'open', t0: 0, left: 0, full: 0, cols: [], needLoad: true, trailer, door: panel, sections, noseBar: nose, nose: wallZ, crew };
+      const bay: Bay = { x, number: lay.firstNumber + i, state: 'open', t0: 0, left: 0, full: 0, cols: [], needLoad: true, held: false, trailer, door: panel, sections, noseBar: nose, nose: wallZ, crew };
       this.bays.push(bay);
       bay.nose = this.noseFor(bay);
       for (const u of crew) {
@@ -193,11 +195,16 @@ export class Inbound {
     return this.bays.flatMap((b, d) => b.crew.map((u, n) => ({ d, n, h: u.h })));
   }
 
-  /** Unloader n of door d is at work: carrying a parcel, or at a load he is to unload. */
+  /** Unloader n of door d is at work: carrying a parcel, or at a load he is to unload (and may put on the belt). */
   busy(d: number, n: number): boolean {
     const b = this.bays[d]!;
     const u = b.crew[n]!;
-    return u.carry.length > 0 || (b.state === 'open' && b.left > 0 && (n === 0 || this.crewSize === 2));
+    return u.carry.length > 0 || (b.state === 'open' && b.left > 0 && !b.held && (n === 0 || this.crewSize === 2));
+  }
+
+  /** The lane door d feeds is full (true): its unloaders stop and wait. */
+  hold(d: number, held: boolean): void {
+    this.bays[d]!.held = held;
   }
 
   /** Unloaders per truck: 1 or 2 (the second only comes when the rate needs it). */
@@ -388,7 +395,7 @@ export class Inbound {
       const kk = Math.min(1, dt * 14);
       reach(h, 'L', c.clone().addScaledVector(right, -0.22), kk, 1);
       reach(h, 'R', c.addScaledVector(right, 0.22), kk, 1);
-    } else if (inTruck && !walking) {
+    } else if (inTruck && !walking && !b.held) {
       // Hands up to the wall, sizing up the next one (on the beat).
       const face = this.faceZ(b);
       const y = 1.1 + 0.25 * Math.sin(bt * Math.PI * 0.5 + b.number + n * 2);

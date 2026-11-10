@@ -150,8 +150,6 @@ const PLATFORM_Y = 2.4;
 const HOLD_S = 18;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
 const LANE_QUEUE = 7;
-/** Parcels on their way from the trucks to one lane at most (the feed path is long: a lane needs several in flight to run full). */
-const FEED_MAX = 10;
 /** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
 const ROBOT_SHARE = 0.12;
 /** Rounds on the sorter before a parcel whose chute stays full is put aside (overflow). */
@@ -1271,6 +1269,14 @@ export class Sorter implements Scene3D {
   private wing!: Inbound;
   /** Parcels on their way from a trailer to the start of each lane; when each door may give its next; when the last one reaches each lane. */
   private feeding = INDUCT.map(() => 0);
+  /**
+   * Each lane is a buffer belt from its collector to the hold point: the metres of it its queue
+   * takes now (recounted every frame), and the metres kept for the parcels on their way to it.
+   * The unloaders only put a parcel on the telescope when it will fit; so the buffer fills right
+   * up to the collector, then they wait, and no parcel ever has to leave a belt.
+   */
+  private laneUse = INDUCT.map(() => 0);
+  private feedLen = INDUCT.map(() => 0);
   private doorNext = INBOUND_DOORS.map(() => 0);
   private feedArrive = INDUCT.map(() => 0);
   private readonly fa = new THREE.Vector3();
@@ -1784,6 +1790,11 @@ export class Sorter implements Scene3D {
     // One unloader per truck while that keeps up with the rate (about UNLOAD_PER_HOUR each), else two.
     this.wing.crewSize = (this.rate * 60) / INBOUND_DOORS.length > UNLOAD_PER_HOUR ? 2 : 1;
     for (let d = 0; d < INBOUND_DOORS.length; d++) if (this.wing.needsLoad(d)) this.loadTruck(d);
+    // A lane's buffer full: its unloaders wait until there is room again.
+    LANE_DOORS.forEach((ds, k) => {
+      const full = !this.laneRoom(k);
+      for (const d of ds) this.wing.hold(d, full);
+    });
     this.wing.update(dt, bt);
     this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
@@ -1861,7 +1872,7 @@ export class Sorter implements Scene3D {
   /** The lane with the fewest parcels waiting, if one has room for another (−1 if all are full). */
   private quietestLane(): number {
     let best = -1;
-    const n = (k: number) => this.waiting[k]! + this.feeding[k]!;
+    const n = (k: number) => this.laneUse[k]! + this.feedLen[k]!;
     // (Only lanes with a truck at one of their doors that has parcels left.)
     for (let k = 0; k < this.lanes.length; k++) if (this.feedable(k) && (best < 0 || n(k) < n(best))) best = k;
     return best;
@@ -2333,11 +2344,16 @@ export class Sorter implements Scene3D {
    */
   /** Lane k can take another parcel from its trucks: room in its queue and on its way, and a truck with parcels. */
   private feedable(k: number): boolean {
-    return this.feeding[k]! < FEED_MAX && this.waiting[k]! + this.feeding[k]! < LANE_QUEUE + FEED_MAX && this.feedDoor(k) >= 0;
+    return this.laneRoom(k) && this.feedDoor(k) >= 0;
+  }
+
+  /** Room on lane k's buffer belt for one more parcel (the longest a parcel is, with its gap). */
+  private laneRoom(k: number): boolean {
+    return this.laneUse[k]! + this.feedLen[k]! + 1.06 <= HOLD_S - 0.2;
   }
 
   private feed(k: number, color: RGB | null, lead: boolean): boolean {
-    if (this.feeding[k]! >= FEED_MAX || this.waiting[k]! + this.feeding[k]! >= LANE_QUEUE + FEED_MAX) return false;
+    if (!this.laneRoom(k)) return false;
     const d = this.feedDoor(k);
     if (d < 0) return false;
     const t = this.wing.take(d, this.fb);
@@ -2372,6 +2388,7 @@ export class Sorter implements Scene3D {
     p.pos.copy(this.fa);
     this.onPath(p, path, 'feed', t0, t0 + run, 0);
     this.feeding[k]!++;
+    this.feedLen[k]! += p.d + GAP;
     this.wing.carrying(d, who, p, this.fa.distanceTo(this.fb));
     return true;
   }
@@ -2443,7 +2460,7 @@ export class Sorter implements Scene3D {
   }
 
   /** Onto lane k at its start, now, with a tray kept for it at the loop. */
-  private toLane(k: number, p: Parcel, color: RGB | null, lead: boolean): boolean {
+  private toLane(k: number, p: Parcel, color: RGB | null, lead: boolean, keep = false): boolean {
     const lane = this.lanes[k]!;
     const bt = this.ct;
     let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M) + LANE_PHASE[k]!, lane.lastArrive + 1);
@@ -2452,9 +2469,11 @@ export class Sorter implements Scene3D {
     const behind = (t: number) => (t - 1 + TRAYS) % TRAYS;
     const free = (t: number) => !this.trayOwner[t] && (!long || !this.trayOwner[behind(t)]);
     let tries = 0;
-    while (!free(trayAt(INDUCT[k]!, arrive)) && tries++ < 6) arrive++;
+    // (A parcel already on a belt looks a whole lap ahead for its tray; it is never taken off.)
+    while (!free(trayAt(INDUCT[k]!, arrive)) && tries++ < (keep ? LOOP_LEN : 6)) arrive++;
     const tray = trayAt(INDUCT[k]!, arrive);
     if (!free(tray)) {
+      if (keep) return false;
       p.dead = true;
       p.recycled = true;
       return false;
@@ -2526,6 +2545,7 @@ export class Sorter implements Scene3D {
         at += p.d + GAP;
       });
       this.waiting[k] = q.length;
+      this.laneUse[k] = at;
     });
     // Pickup tables: nose to tail by length.
     for (const q of this.stationQueue) {
@@ -2762,11 +2782,13 @@ export class Sorter implements Scene3D {
   private pathEnd(p: Parcel): void {
     switch (p.pathKind) {
       case 'feed': {
-        // Off the collector into the lane.
-        this.feeding[p.lane] = Math.max(0, this.feeding[p.lane]! - 1);
+        // Off the collector into the lane (its room on the buffer was kept for it). Without a
+        // tray for it within a lap it waits where it is and tries again next frame.
         const color = this.feedColor.get(p) ?? null;
+        if (!this.toLane(p.lane, p, color, p.lead, true)) break;
         this.feedColor.delete(p);
-        if (!this.toLane(p.lane, p, color, p.lead)) this.backlog++;
+        this.feeding[p.lane] = Math.max(0, this.feeding[p.lane]! - 1);
+        this.feedLen[p.lane] = Math.max(0, this.feedLen[p.lane]! - p.d - GAP);
         break;
       }
       case 'lane':
