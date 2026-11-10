@@ -174,7 +174,7 @@ Sort sim is a progressive web app: install it from the browser (the **Install ap
 
 ## Controls
 
-The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go to**, **Camera**, **Hub**, **Night** (only while the night look is on) and **More**. Tapping a tab opens its panel above the dock; tap it again, the ✕, the hall or `Esc` to close it. **Go to** lists the departments in groups, in the order a parcel goes: Overview, Inbound, Sorting, North · roll cages, South · robots, Office & staff, Ride along, and Night (only at night); the keys `1`–`9`, `0` follow that order.
+The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go to**, **Camera**, **Hub**, **Night** (only while the night look is on) and **More**. Tapping a tab opens its panel above the dock; tap it again, the ✕, the hall or `Esc` to close it. In the control room, tap a scanner (or its panel), a chute or a dock door on the video wall's plan to fly there, or a robot to follow it. **Go to** lists the departments in groups, in the order a parcel goes: Overview, Inbound, Sorting, North · roll cages, South · robots, Office & staff, Ride along, and Night (only at night); the keys `1`–`9`, `0` follow that order.
 
 | Control | Keys |
 |---|---|

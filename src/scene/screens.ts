@@ -57,7 +57,13 @@ const INK = '#1d1d1f';
 /** How long a scanner stays lit on the video wall after a scan (seconds). */
 const SCAN_BLINK = 0.5;
 
+/** Something on the video wall's plan under a point: a scanner, chute, dock door or robot, by its index in `HubMap`. */
+export type MapHit = { kind: 'scanner' | 'chute' | 'door' | 'robot'; i: number };
+
 export class Screens {
+  /** Where the last plan put things (canvas pixels), for `hitMap`. */
+  private spots: (MapHit & { x: number; y: number; r: number })[] = [];
+  private panelRects: { x: number; y: number; w: number; h: number }[] = [];
   readonly dash: THREE.CanvasTexture;
   readonly board: THREE.CanvasTexture;
   readonly clock: THREE.CanvasTexture;
@@ -123,6 +129,14 @@ export class Screens {
     const sz = (H - top - pad) / (z1 - z0);
     const X = (x: number) => pad + (x - x0) * sx;
     const Z = (z: number) => top + (z - z0) * sz;
+    // What can be clicked, and where it is drawn (centre and how far a click may miss).
+    this.spots = [
+      ...(m.scanners ?? []).map((c, i) => ({ kind: 'scanner' as const, i, x: X(c.x), y: Z(c.z), r: 16 })),
+      ...m.chutes.map((c, i) => ({ kind: 'chute' as const, i, x: X(c.x), y: c.dock ? Z(c.z) - 20 : Z(c.z) + 20, r: 22 })),
+      ...m.doors.map((d, i) => ({ kind: 'door' as const, i, x: X(d.x), y: d.z < 0 ? Z(d.z) + 8 : Z(d.z) - 8, r: 18 })),
+      ...m.robots.map((r, i) => ({ kind: 'robot' as const, i, x: X(r.x), y: Z(r.z), r: 14 })),
+    ];
+    this.panelRects = [];
     // (Text is left-aligned throughout; the fault marks centre theirs.)
     g.textAlign = 'left';
     g.fillStyle = '#12131a';
@@ -283,6 +297,7 @@ export class Screens {
     };
     panels.forEach((pn, i) => {
       const x = x0 + i * (w + gap);
+      this.panelRects[i] = { x, y: y0, w, h };
       const f = Math.max(0, 1 - pn.age / SCAN_BLINK);
       const last = pn.last;
       const ok = !last || last.read;
@@ -334,6 +349,25 @@ export class Screens {
         g.fillText(fit(`${last.size} · ${last.kg.toFixed(1)} kg`, w - 24), x + 12, y0 + 95);
       }
     });
+  }
+
+  /**
+   * What on the video wall's plan is at this canvas pixel (0…1600, 0…688): a scanner, chute, dock
+   * door or robot (the nearest within reach of where it is drawn), or a scanner's status panel.
+   */
+  hitMap(px: number, py: number): MapHit | null {
+    const k = this.panelRects.findIndex((r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
+    if (k >= 0) return { kind: 'scanner', i: k };
+    let best: MapHit | null = null;
+    let bd = Infinity;
+    for (const s of this.spots) {
+      const d = Math.hypot(s.x - px, s.y - py) / s.r;
+      if (d < 1 && d < bd) {
+        bd = d;
+        best = { kind: s.kind, i: s.i };
+      }
+    }
+    return best;
   }
 
   private rate(): number {

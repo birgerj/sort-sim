@@ -930,6 +930,8 @@ export class Hud {
         this.wake();
         return;
       }
+      // The control room's video wall: a tap on its plan goes to (or follows) what it shows.
+      if (this.scene.tapWall(e.clientX, e.clientY)) return;
       const p = this.scene.pickParcel(e.clientX, e.clientY);
       if (p) {
         this.scene.pokeParcel(p);

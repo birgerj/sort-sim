@@ -1778,7 +1778,7 @@ export class Sorter implements Scene3D {
   }
 
   caption(): string {
-    if (this.camMode === 'visit') return this.pois[this.visitPoi]!.dept ?? '';
+    if (this.camMode === 'visit') return this.pois[this.visitPoi]!.name === 'spot' ? this.spotName : (this.pois[this.visitPoi]!.dept ?? '');
     if (this.camMode === 'follow' && this.followThing) return `Following ${this.followThing.name}`;
     if (this.camMode === 'walk') return this.walk.alt > 0.01 ? 'Flying' : 'Walking';
     const f = this.follow;
@@ -6097,6 +6097,7 @@ export class Sorter implements Scene3D {
     const sc = new THREE.Mesh(new THREE.PlaneGeometry(5.1, 2.2), new THREE.MeshBasicMaterial({ map: this.screens.map }));
     sc.position.z = 0.065;
     vw.add(sc);
+    this.mapScreen = sc;
     for (const ox of [-2.2, 2.2]) this.box('mwallpost', ink, dx + ox, 0.9, dz + 1.0, 0.1, 1.8, 0.1);
     // A small screen on the desk with the numbers.
     const small = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.35), new THREE.MeshBasicMaterial({ map: this.screens.dash }));
@@ -6400,6 +6401,17 @@ export class Sorter implements Scene3D {
       },
       // Square on to the rack (the lift is in the middle of it).
       { ...fixed('store', v(LIFT_X - 12, 5.5, 0), v(RACK_X0, 5, 0), 'Storage'), hover: 'still' },
+      // Wherever the video wall sent the camera (`goSpot`): not on the tour.
+      {
+        name: 'spot',
+        hover: 'still',
+        skip: () => true,
+        at: (p, l) => {
+          p.copy(this.spotEye);
+          l.copy(this.spotLook);
+          return true;
+        },
+      },
       {
         // The pickup table with the longest queue.
         name: 'pickup stations',
@@ -6783,6 +6795,74 @@ export class Sorter implements Scene3D {
       }
     }
     return best;
+  }
+
+  /** The control room's video wall (for taps on its plan). */
+  private mapScreen: THREE.Mesh | null = null;
+  private readonly spotEye = new THREE.Vector3();
+  private readonly spotLook = new THREE.Vector3();
+  private spotName = '';
+
+  /** Fly to a place and stay there, looking at `look` (the caption says `name`). */
+  private goSpot(eye: V3, look: V3, name: string): void {
+    this.spotEye.copy(eye);
+    this.spotLook.copy(look);
+    this.spotName = name;
+    this.visit('spot');
+  }
+
+  /**
+   * A tap on the control room's video wall: a scanner (or its status panel), chute or dock door
+   * on the plan flies the camera there; a robot is followed. False when the tap missed the wall
+   * (too far off to read it) or hit nothing on it.
+   */
+  tapWall(clientX: number, clientY: number): boolean {
+    const sc = this.mapScreen;
+    if (!sc || !sc.parent) return false;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    this.ray.setFromCamera(this.ndc, this.camera);
+    const hit = this.ray.intersectObject(sc, false)[0];
+    if (!hit?.uv || hit.distance > 30) return false;
+    const h = this.screens.hitMap(hit.uv.x * 1600, (1 - hit.uv.y) * 688);
+    if (!h) return false;
+    if (h.kind === 'robot') {
+      const r = this.floor.robots[h.i];
+      if (!r) return false;
+      this.followObject({ obj: r.g, h: 0.6, kind: 'robot', name: `robot ${r.num}` });
+      return true;
+    }
+    if (h.kind === 'scanner') {
+      const lane = h.i < this.lanes.length;
+      const t = lane ? this.lanes[h.i]!.tunnel : this.loopTunnels[h.i - this.lanes.length]?.t;
+      if (!t?.at) return false;
+      // (From the hall side, as the Scanning stop looks at them.)
+      const l = v(t.at[0], 1.2, t.at[1]);
+      this.goSpot(l.clone().add(v(10, 3.2, 8)), l, lane ? `Scanner ${h.i + 1}` : 'Loop scanner');
+      return true;
+    }
+    if (h.kind === 'chute') {
+      const path = this.chutes[h.i]?.path;
+      if (!path) return false;
+      // As the Chutes stop looks at one: beside its end, looking up the chute.
+      const a = path.pts[0]!;
+      const b = path.pts[path.pts.length - 1]!;
+      const d = v(b.x - a.x, 0, b.z - a.z).normalize();
+      const l = new THREE.Vector3().lerpVectors(a, b, 0.55);
+      l.y = Math.max(1.4, l.y);
+      const p = b.clone().addScaledVector(d, 7);
+      p.x += -d.z * 4;
+      p.z += d.x * 4;
+      p.y = 5;
+      this.goSpot(p, l, `Chute ${h.i + 1}`);
+      return true;
+    }
+    const d = this.trucks.docks[h.i];
+    if (!d) return false;
+    // From inside the hall, as the Docks stop looks at one: its door, worker and cages or boxes.
+    const s = d.wallZ < 0 ? 1 : -1;
+    this.goSpot(v(d.x + 2, 3.8, d.wallZ + s * 18), v(d.x, 1.2, d.wallZ + s * 9), `Dock door ${d.number}`);
+    return true;
   }
 
   /** Follow a robot, forklift or person with the camera. */
