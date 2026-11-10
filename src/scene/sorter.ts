@@ -3931,6 +3931,9 @@ export class Sorter implements Scene3D {
     this.camera.position.copy(this.orbitBase);
     this.look.lerp(this.wantLook, this.first ? 1 : 1 - Math.exp(-dt * 3.2));
     this.first = false;
+    // Top down, once there: straight down from where the camera is, north up (zooming and
+    // panning move the camera, and the view must not turn while it catches up).
+    if (this.topDown() && this.tour && this.tour.s >= this.tour.len) this.look.set(this.camera.position.x, 0, this.camera.position.z - 0.01 * this.topHeight());
     this.orbit(dt);
     this.camera.lookAt(this.look);
     // Looking around by hand (a swipe or drag): turn the view; ten seconds after the last
@@ -4024,6 +4027,64 @@ export class Sorter implements Scene3D {
    * turned until something else is followed). Otherwise turn the view; it returns to the
    * camera's own view after 10 s.
    */
+  // ---------- the top-down view: zoom (wheel, pinch) and pan (drag) ----------
+  /** How far zoomed in on the top-down view (1: the whole floor), and where its middle has moved to (x, z). */
+  private topZoom = 1;
+  private topPan = new THREE.Vector3();
+
+  /** Height that shows the whole floor top-down at this screen's shape. */
+  private topHeight(): number {
+    const tv = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    return 1.06 * Math.max((HZ - WING.z0) / 2 / tv, (EX - WX) / 2 / (tv * this.camera.aspect));
+  }
+
+  /** The top-down view is what the camera is showing now. */
+  topDown(): boolean {
+    return this.camMode === 'visit' && this.pois[this.visitPoi]?.name === 'top down';
+  }
+
+  /** Floor metres per screen pixel in the top-down view (at the zoom asked for). */
+  private topMetresPerPx(): number {
+    const tv = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    return (2 * this.topHeight() * this.topZoom * tv) / Math.max(1, this.canvas.clientHeight);
+  }
+
+  /** Zoom the top-down view by `f` (below 1: closer), keeping the floor under the pointer where it is. */
+  zoomTop(f: number, clientX: number, clientY: number): void {
+    if (!this.topDown()) return;
+    const was = this.topZoom;
+    // (Not closer than about 8 m above the floor.)
+    const minZoom = Math.min(1, 8 / this.topHeight());
+    this.topZoom = clamp(was * f, minZoom, 1);
+    const r = this.canvas.getBoundingClientRect();
+    const mpp = this.topMetresPerPx() / this.topZoom * was;
+    // The pointer's offset from the middle of the screen, on the floor (north is up).
+    const ox = (clientX - r.left - r.width / 2) * mpp;
+    const oz = (clientY - r.top - r.height / 2) * mpp;
+    const k = 1 - this.topZoom / was;
+    this.topPan.x += ox * k;
+    this.topPan.z += oz * k;
+    this.clampTopPan();
+  }
+
+  /** Drag the top-down view by screen pixels (the floor follows the pointer). */
+  panTop(dx: number, dy: number): void {
+    if (!this.topDown()) return;
+    const mpp = this.topMetresPerPx();
+    this.topPan.x -= dx * mpp;
+    this.topPan.z -= dy * mpp;
+    this.clampTopPan();
+  }
+
+  /** Keep the view over the floor: zoomed right out it is centred, zoomed in it can reach the edges. */
+  private clampTopPan(): void {
+    const free = 1 - this.topZoom;
+    const hx = ((EX - WX) / 2) * free;
+    const hz = ((HZ - WING.z0) / 2) * free;
+    this.topPan.x = clamp(this.topPan.x, -hx, hx);
+    this.topPan.z = clamp(this.topPan.z, -hz, hz);
+  }
+
   lookAround(dYaw: number, dPitch: number): void {
     if (this.camMode === 'walk') return;
     if (this.orbitOn) {
@@ -6128,11 +6189,12 @@ export class Sorter implements Scene3D {
         hover: 'still',
         free: true,
         skip: () => true,
+        // (Zoomed in with the wheel or a pinch, it follows `topZoom` and `topPan` closely.)
+        rate: 6,
         at: (p, l) => {
-          const tv = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-          const h = 1.06 * Math.max((HZ - WING.z0) / 2 / tv, (EX - WX) / 2 / (tv * this.camera.aspect));
-          const cx = (WX + EX) / 2;
-          const cz = (WING.z0 + HZ) / 2;
+          const h = this.topHeight() * this.topZoom;
+          const cx = (WX + EX) / 2 + this.topPan.x;
+          const cz = (WING.z0 + HZ) / 2 + this.topPan.z;
           p.set(cx, h, cz);
           l.set(cx, 0, cz - 0.01 * h);
           return true;
@@ -6735,6 +6797,11 @@ export class Sorter implements Scene3D {
   visit(id: string, jump = false): void {
     const k = this.pois.findIndex((p) => p.name === id);
     if (k < 0) return;
+    // The top-down view always opens on the whole floor.
+    if (id === 'top down') {
+      this.topZoom = 1;
+      this.topPan.set(0, 0, 0);
+    }
     this.visitPoi = k;
     const poi = this.pois[k]!;
     if (jump) {

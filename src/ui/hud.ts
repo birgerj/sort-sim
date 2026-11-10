@@ -865,6 +865,12 @@ export class Hud {
     target.addEventListener(
       'wheel',
       (e: WheelEvent) => {
+        if (this.scene.topDown()) {
+          // Top down: zoom in and out on the floor under the pointer.
+          e.preventDefault();
+          this.scene.zoomTop(Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)), e.clientX, e.clientY);
+          return;
+        }
         if (this.scene.cameraMode() === 'walk' || !this.scene.following()) return;
         e.preventDefault();
         this.scene.zoomFollow(Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)));
@@ -929,12 +935,25 @@ export class Hud {
         f.y = e.clientY;
         if (fingers.size === 2) {
           const s = spreadNow();
-          if (spread > 0 && s > 0 && this.scene.following()) this.scene.zoomFollow(spread / s);
+          if (spread > 0 && s > 0) {
+            if (this.scene.topDown()) {
+              // Top down: zoom on the floor between the two fingers.
+              const [a, b] = [...fingers.values()];
+              this.scene.zoomTop(spread / s, (a!.x + b!.x) / 2, (a!.y + b!.y) / 2);
+            } else if (this.scene.following()) this.scene.zoomFollow(spread / s);
+          }
           spread = s;
           return;
         }
       }
       if (!drag || drag.id !== e.pointerId) return;
+      if (this.scene.topDown()) {
+        // Top down: drag the floor along (when zoomed in).
+        this.scene.panTop(e.clientX - drag.x, e.clientY - drag.y);
+        drag.x = e.clientX;
+        drag.y = e.clientY;
+        return;
+      }
       const k = 0.005;
       this.scene.lookAround((e.clientX - drag.x) * k, (e.clientY - drag.y) * k);
       drag.x = e.clientX;
