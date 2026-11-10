@@ -1453,6 +1453,12 @@ input[type='range'] {
   width: 18px;
   height: 18px;
 }
+.start .sound-toggle[hidden] {
+  display: none;
+}
+.start .update {
+  border-color: var(--teal-l);
+}
 .start select.country {
   flex: 1;
   min-width: 160px;
