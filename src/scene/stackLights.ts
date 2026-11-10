@@ -19,12 +19,12 @@ export interface TowerState {
 }
 
 const LAMPS = [
-  new THREE.Color(0.1, 1.0, 0.25), // green, at the bottom
-  new THREE.Color(1.0, 0.55, 0.05), // amber
-  new THREE.Color(1.0, 0.06, 0.04), // red, at the top
+  new THREE.Color(0.0, 0.85, 0.12), // green, at the bottom
+  new THREE.Color(1.0, 0.45, 0.0), // amber
+  new THREE.Color(0.95, 0.02, 0.01), // red, at the top
 ];
 /** How a lamp looks when it is off: its coloured lens, unlit. */
-const OFF = 0.18;
+const OFF = 0.12;
 
 export class StackLights {
   readonly group = new THREE.Group();
