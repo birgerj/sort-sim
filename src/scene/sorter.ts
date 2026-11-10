@@ -65,7 +65,7 @@ import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIE
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
-import { brushed, cardboardNormal, cardboardSide, checkerPlate, claddingNormal, dayFloor, dayWall, floorJointNormal, roofDeckNormal, sectionalDoor, stretchFilm, stretchFilmNormal, wireMesh } from './textures';
+import { brushed, canvasTexture, cardboardNormal, cardboardSide, checkerPlate, claddingNormal, dayFloor, dayWall, floorJointNormal, roofDeckNormal, sectionalDoor, stretchFilm, stretchFilmNormal, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { FLOOR, type FleetEvent } from '../sim/robotFleet';
 
@@ -1462,6 +1462,7 @@ export class Sorter implements Scene3D {
     }
     this.buildEnv();
     this.buildHall();
+    this.buildYard();
     this.buildConveyors();
     this.buildStore();
     this.buildParcels();
@@ -1588,7 +1589,7 @@ export class Sorter implements Scene3D {
       const zi = LOOP_ZH - 2.4;
       const x0 = PLATFORM_X + 7.6;
       // (Its green coating only in Day: Minimal keeps the plain floor between the taped edges.)
-      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4));
+      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4, [-20, -18]));
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
@@ -1614,9 +1615,15 @@ export class Sorter implements Scene3D {
           [ax1, bz0, bx1, bz0],
           [ax0, bz1, bx1, bz1],
         ]),
-        this.life.addFloorPath(-14, 100, -34.6, -32.2, [
-          [-14, -34.6, 100, -34.6],
-          [-14, -32.2, 100, -32.2],
+        // (Its west end turns south, under the loop, onto the loop's walkway.)
+        this.life.addFloorPath(-20, 100, -34.6, -32.2, [
+          [-20, -34.6, 100, -34.6],
+          [-20, -34.6, -20, -32.2],
+          [-18, -32.2, 100, -32.2],
+        ]),
+        this.life.addFloorPath(-20, -18, -32.2, -LOOP_ZH + 1.2, [
+          [-20, -32.2, -20, -LOOP_ZH + 1.2],
+          [-18, -32.2, -18, -LOOP_ZH + 1.2],
         ]),
       );
     }
@@ -4384,6 +4391,63 @@ export class Sorter implements Scene3D {
     drawBelt(this.beltTex, show, this.real);
   }
 
+  /**
+   * Outside: asphalt round the hall, where the trucks stand and drive (a ring with the hall's
+   * L-shaped floor cut out, so the two never overlap), with a fine grain and a few patches.
+   */
+  private buildYard(): void {
+    const M = 80;
+    const sh = new THREE.Shape();
+    sh.moveTo(WX - M, -(HZ + M));
+    sh.lineTo(EX + M, -(HZ + M));
+    sh.lineTo(EX + M, -(WING.z0 - M));
+    sh.lineTo(WX - M, -(WING.z0 - M));
+    sh.closePath();
+    // The hall's footprint (shape y is −z): the main hall and the wing north of it.
+    const hole = new THREE.Path();
+    hole.moveTo(WX, -HZ);
+    hole.lineTo(EX, -HZ);
+    hole.lineTo(EX, -NZ);
+    hole.lineTo(WING.x1, -NZ);
+    hole.lineTo(WING.x1, -WING.z0);
+    hole.lineTo(WING.x0, -WING.z0);
+    hole.closePath();
+    sh.holes.push(hole);
+    const geo = new THREE.ShapeGeometry(sh);
+    geo.rotateX(-Math.PI / 2);
+    // (UVs: the shape's metres, a 6 m tile.)
+    const uv = geo.getAttribute('uv') as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 6, uv.getY(i) / 6);
+    const map = canvasTexture('asphalt', 512, 512, (g) => {
+      g.fillStyle = '#c4c4c4';
+      g.fillRect(0, 0, 512, 512);
+      let seed = 7;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      for (let i = 0; i < 26000; i++) {
+        const c = Math.floor(150 + rnd() * 100);
+        g.fillStyle = `rgba(${c},${c},${c},${0.25 + rnd() * 0.4})`;
+        g.fillRect(rnd() * 512, rnd() * 512, 1 + rnd() * 2, 1 + rnd() * 2);
+      }
+      for (let i = 0; i < 6; i++) {
+        const x = rnd() * 512;
+        const y = rnd() * 512;
+        const r = 30 + rnd() * 90;
+        const gr = g.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, `rgba(0,0,0,${0.06 + rnd() * 0.06})`);
+        gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gr;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+    });
+    const mat = this.std(0x1c1d20, 0.95, 0, 0x6a6d72);
+    mat.map = map;
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = -0.01;
+    m.userData.noInk = true;
+    m.receiveShadow = true;
+    this.put(m);
+  }
+
   private buildHall(): void {
     const concrete = canvasTex(256, 256, (g) => {
       noise(g, 256, 256, 120, 40);
@@ -4555,7 +4619,8 @@ export class Sorter implements Scene3D {
     // (Not where the infeed lanes come in through the north wall, x −52 … −35.)
     // (Not where the wing opens the north wall: the infeeds' collectors and lanes are there now.)
     for (let x = WING.x1 + 1.2; x < -17; x += 1.6) if (Math.random() < 0.65) stack(x, NZ + 1.4);
-    for (let k = 0; k < 12; k++) stack(rnd(-27, -21), rnd(-24, -14));
+    // Spare pallets in a tidy block (clear of the walkway from the dock aisle to the loop, east of it).
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) if (i + j < 4 || Math.random() < 0.6) stack(-27.6 + i * 1.4, -21.2 + j * 1.2);
     // (South wall west of the box doors: the break area.)
   }
 

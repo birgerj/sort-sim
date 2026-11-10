@@ -12,6 +12,30 @@ import { checkerPlate, checkerPlateNormal, sectionalDoor, sectionalDoorNormal } 
 
 export type Cargo = 'cage' | 'box';
 
+/**
+ * A trailer's rear doors (at local z `end`, the door end, facing `dir`): two leaves, shut across
+ * the opening, or swung right round and lying flat against the sides (when it stands at a dock).
+ * `shut(true)` closes them for the road.
+ */
+export function trailerDoors(k: FloorKit, trailer: THREE.Object3D, end: number, dir: number, w: number, h: number, mat: THREE.Material, color: number): (shut: boolean) => void {
+  const leafG = new THREE.BoxGeometry(w / 2, h, 0.05);
+  const shut: THREE.Object3D[] = [];
+  const open: THREE.Object3D[] = [];
+  for (const sx of [-1, 1]) {
+    const a = k.batch(leafG, mat, trailer, color);
+    a.position.set((sx * w) / 4, h / 2 + 0.04, end + dir * 0.06);
+    shut.push(a);
+    const b = k.batch(leafG, mat, trailer, color);
+    b.position.set(sx * (w / 2 + 0.08), h / 2 + 0.04, end - (dir * w) / 4);
+    b.rotation.y = Math.PI / 2;
+    open.push(b);
+  }
+  return (s: boolean) => {
+    for (const o of shut) o.visible = s;
+    for (const o of open) o.visible = !s;
+  };
+}
+
 export interface TruckDoor {
   x: number;
   /** z of the wall, and which way the hall is (+1: hall at +z of the wall). */
@@ -45,6 +69,8 @@ interface Dock extends TruckDoor {
   door: THREE.Object3D;
   trailer: THREE.Group;
   slots: THREE.Object3D[];
+  /** Its rear doors: shut on the road, open against the sides at the dock. */
+  doorsShut: (shut: boolean) => void;
   /** What the screen shows now (redrawn when it changes). */
   shown: string;
 }
@@ -144,10 +170,13 @@ export class Trucks {
       k.batch(lampG, lamp, trailer).position.y = H - 0.12;
       // Outside: the trailer's skin (open at the door end), wheels, and the tractor in front.
       k.batch(d.dir > 0 ? skinN : skinS, skinM, trailer, TRUCK_COLS[(d.number * 5) % TRUCK_COLS.length]).position.y = H / 2;
-      for (const zz of [L / 2 - 1.6, L / 2 - 2.8]) for (const sx of [-1, 1]) {
+      // (A semi-trailer's axles are at the back, by the doors; its front rests on the tractor.)
+      for (const zz of [L / 2 - 2.2, L / 2 - 3.3]) for (const sx of [-1, 1]) {
         const w = k.batch(wheelG, wheelM, trailer);
-        w.position.set(sx * (W / 2 + 0.22), 0.5, -d.dir * zz);
+        w.position.set(sx * (W / 2 + 0.22), 0.5, d.dir * zz);
       }
+      const doorsShut = trailerDoors(k, trailer, (d.dir * L) / 2, d.dir, W + 0.08, H, skinM, TRUCK_COLS[(d.number * 5) % TRUCK_COLS.length]!);
+      doorsShut(false);
       const cab = new THREE.Group();
       cab.position.set(0, 0, -d.dir * (L / 2 + 1.7));
       if (d.dir < 0) cab.rotation.y = Math.PI;
@@ -173,7 +202,7 @@ export class Trucks {
       k.put(door);
       const panel = k.batch(doorG, doorM, door);
       panel.scale.y = 0.6;
-      this.docks.push({ ...d, state: 'open', t0: 0, load: 0, vol: 0, kg: 0, cutoff: 0, full: false, reserved: 0, door: panel, trailer, slots, shown: '' });
+      this.docks.push({ ...d, state: 'open', t0: 0, load: 0, vol: 0, kg: 0, cutoff: 0, full: false, reserved: 0, door: panel, trailer, slots, shown: '', doorsShut });
     }
     this.screens = new Labels(doors.length, 3.4, 1.0, 340, 100);
     const sm = new THREE.Matrix4();
@@ -302,6 +331,7 @@ export class Trucks {
       const out = d.state === 'leaving' ? ease(f) : d.state === 'away' ? 1 : d.state === 'arriving' ? 1 - ease(f) : 0;
       d.trailer.position.z = d.wallZ - d.dir * (L / 2 + 0.02 + out * 16);
       d.trailer.visible = d.state !== 'away';
+      d.doorsShut(d.state === 'leaving');
       // The warning lamp flashes on the half beat during cleardown and while the door comes down.
       const warn = d.state === 'cleardown' || d.state === 'closing';
       const on = warn && bt * 2 - Math.floor(bt * 2) < 0.5;

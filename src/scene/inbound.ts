@@ -14,6 +14,7 @@ import { buildDockDoor } from './docks';
 import { buildHuman, type Human } from './people';
 import { crouch, gait, reach, relaxArms, settle, swingArms } from './motion';
 import { checkerPlate, sectionalDoor } from './textures';
+import { trailerDoors } from './trucks';
 
 export interface InboundLayout {
   /** z of the wing's north wall (the hall is at +z of it). */
@@ -69,6 +70,8 @@ interface Bay {
   /** The lane's buffer belt is full: the unloaders wait. */
   held: boolean;
   trailer: THREE.Object3D;
+  /** Its rear doors: shut on the road, open against the sides at the dock. */
+  doorsShut: (shut: boolean) => void;
   door: THREE.Object3D;
   sections: THREE.Object3D[];
   noseBar: THREE.Object3D;
@@ -155,9 +158,13 @@ export class Inbound {
       k.batch(floorG, floorM, trailer).position.y = 0.02;
       k.batch(lampG, lamp, trailer).position.y = H - 0.12;
       k.batch(skin, skinM, trailer, TRUCK_COLS[(i * 5 + 2) % TRUCK_COLS.length]).position.y = H / 2;
-      for (const zz of [-(L / 2 - 1.6), -(L / 2 - 2.8)]) for (const sx of [-1, 1]) k.batch(wheelG, wheelM, trailer).position.set(sx * (W / 2 + 0.22), 0.5, zz);
+      // (The trailer's axles at the back, by the doors; its front rests on the tractor, which has wheels of its own.)
+      for (const zz of [L / 2 - 2.2, L / 2 - 3.3]) for (const sx of [-1, 1]) k.batch(wheelG, wheelM, trailer).position.set(sx * (W / 2 + 0.22), 0.5, zz);
       const cab = k.batch(cabG, skinM, trailer, TRUCK_COLS[(i * 3 + 1) % TRUCK_COLS.length]);
       cab.position.set(0, 0, -(L / 2 + 1.7));
+      for (const sx of [-1, 1]) for (const zz of [-0.6, 0.9]) k.batch(wheelG, wheelM, trailer).position.set(sx * 1.1, 0.5, -(L / 2 + 1.7) + zz);
+      const doorsShut = trailerDoors(k, trailer, L / 2, 1, W + 0.08, H, skinM, TRUCK_COLS[(i * 5 + 2) % TRUCK_COLS.length]!);
+      doorsShut(false);
       const door = new THREE.Group();
       door.position.set(x, DOOR_H, wallZ + 0.12);
       k.put(door);
@@ -180,7 +187,7 @@ export class Inbound {
         k.put(h.root);
         return { h, side, ux: x + side * 1.25, uz: wallZ + 1.4, yaw: Math.PI, carry: [] };
       });
-      const bay: Bay = { x, number: lay.firstNumber + i, state: 'open', t0: 0, left: 0, full: 0, cols: [], needLoad: true, held: false, trailer, door: panel, sections, noseBar: nose, nose: wallZ, crew };
+      const bay: Bay = { x, number: lay.firstNumber + i, state: 'open', t0: 0, left: 0, full: 0, cols: [], needLoad: true, held: false, trailer, doorsShut, door: panel, sections, noseBar: nose, nose: wallZ, crew };
       this.bays.push(bay);
       bay.nose = this.noseFor(bay);
       for (const u of crew) {
@@ -323,6 +330,7 @@ export class Inbound {
     const out = b.state === 'leaving' ? ease(f) : b.state === 'away' ? 1 : b.state === 'arriving' ? 1 - ease(f) : 0;
     b.trailer.position.z = this.lay.wallZ - (L / 2 + 0.02) - out * 30;
     b.trailer.visible = b.state !== 'away';
+    b.doorsShut(b.state === 'leaving');
   }
 
   /** z of the front of the load (towards the door); the back of the trailer when it is empty. */
