@@ -20,7 +20,8 @@ import { Music } from './audio/music';
 import { Sorter } from './scene/sorter';
 import { loadBakedBodies, startLaterWork } from './scene/people';
 import { NIGHT_PRESETS, normalizeNightFx } from './scene/nightFx';
-import { Hud, loadSettings, type TimeMode } from './ui/hud';
+import { Hud, loadSettings, saveSettings, type Settings, type TimeMode } from './ui/hud';
+import { startCard } from './ui/startCard';
 import { Pwa } from './ui/pwa';
 import { WalkControls } from './ui/walk';
 import { GameUi } from './ui/game';
@@ -52,6 +53,27 @@ const loadingSay = (text: string) => {
   if (m) m.textContent = text;
 };
 const nextPaint = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+// The music exists before the hall, so Start (a tap, which browsers need for sound) can start it
+// even while the hall is still being built.
+const music = new Music();
+const showUi = q.get('ui') !== '0';
+const mute = q.get('mute') === '1' || !showUi;
+// The start card goes up at once; the loading screen behind it stays quiet until Start is
+// pressed (and only shows if the hall is not ready by then).
+/** The settings the HUD works with, once they are loaded (Start may come before or after). */
+let liveSettings: Settings | null = null;
+if (showUi && !mute) {
+  loading?.classList.add('quiet');
+  startCard((sound) => {
+    const st = loadSettings();
+    st.muted = !sound;
+    saveSettings(st);
+    if (liveSettings) liveSettings.muted = !sound;
+    music.setMuted(!sound);
+    if (sound) void music.start();
+    loading?.classList.remove('quiet');
+  });
+}
 await nextPaint();
 // The people's bodies, made at build time (a few hundred kB), while the loading screen is up.
 await loadBakedBodies();
@@ -63,8 +85,8 @@ scene.canvas.addEventListener('webglcontextlost', (e) => {
 });
 scene.canvas.addEventListener('webglcontextrestored', () => location.reload());
 const walk = new WalkControls(scene, scene.canvas);
-const music = new Music();
 const settings = loadSettings();
+liveSettings = settings;
 
 const time = q.get('time');
 if (time === 'day' || time === 'night' || time === 'cycle') settings.time = time as TimeMode;
@@ -82,13 +104,11 @@ const nightFx = night === 'party' || night === 'calm' || night === 'dark' ? { ..
 scene.setNightFx(nightFx);
 const rate = Number(q.get('rate'));
 if (rate > 0) settings.rate = rate;
-const showUi = q.get('ui') !== '0';
-const mute = q.get('mute') === '1' || !showUi;
 music.setVolume(settings.volume);
 music.setMuted(settings.muted);
 
 let hudQuality = () => {};
-const hud = new Hud(scene, music, settings, { showStart: showUi && !mute, showUi, onQuality: () => hudQuality(), onGame: () => game?.openBriefing() });
+const hud = new Hud(scene, music, settings, { showStart: false, showUi, onQuality: () => hudQuality(), onGame: () => game?.openBriefing() });
 document.body.append(hud.root);
 // The night-shift game: its own dock at the top of the screen (see ui/game.ts).
 const game = showUi ? new GameUi(music, scene) : null;
