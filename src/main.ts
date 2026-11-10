@@ -42,7 +42,12 @@ function showProblem(title: string, detail: string): void {
   }
   box.textContent = `${title}\n${detail}\n\nTry ?quality=low or ?look=minimal in the address, or reload.`;
 }
-window.addEventListener('error', (e) => showProblem('Something went wrong', `${e.message}\n${e.filename?.split('/').pop() ?? ''}:${e.lineno}:${e.colno}`));
+window.addEventListener('error', (e) => {
+  // "Script error." without a file comes from a script of another origin (the browser's page
+  // translation, an extension): nothing of ours, and nothing to show.
+  if (!e.filename && (!e.message || e.message === 'Script error.')) return;
+  showProblem('Something went wrong', `${e.message}\n${e.filename?.split('/').pop() ?? ''}:${e.lineno}:${e.colno}`);
+});
 window.addEventListener('unhandledrejection', (e) => showProblem('Something went wrong', String((e.reason as Error)?.stack ?? e.reason)));
 const app = document.getElementById('app')!;
 // The loading screen (in index.html) is up; let the browser paint it before the hall is built,

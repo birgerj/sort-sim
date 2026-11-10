@@ -3135,8 +3135,10 @@ export class Sorter implements Scene3D {
     this.hazeMat.color.setRGB(0.16, 0.13, 0.26).lerp(this.c.copy(this.padCol).multiplyScalar(0.3), pad * 0.6);
 
 
-    this.strobe.color.setRGB(1, 1, 1).multiplyScalar(this.fx.strobe ? this.snare * this.snare * 4 + (1 - ph) ** 8 * 0.3 : 0);
-    this.hemi.intensity = 0.45 + this.snare * 0.25;
+    const flash = this.fx.strobe ? this.snare * this.snare : 0;
+    this.strobe.color.setRGB(1, 1, 1).multiplyScalar(this.fx.strobe ? flash * 4 + (1 - ph) ** 8 * 0.3 : 0);
+    // The strobes light the whole hall white for a moment on the snare (not just their own lamps).
+    this.hemi.intensity = 0.45 + this.snare * 0.1 + flash * 1.6;
   }
 
   private tunnelGlow(t: Tunnel, dt: number): void {
