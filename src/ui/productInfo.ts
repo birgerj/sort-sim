@@ -140,7 +140,7 @@ export const STOP_INFO: Record<string, StopInfo> = {
     ],
     sim: 'The robot floor is a grid with one-way lanes. Each robot reserves its path cell by cell, drives to the box for its postcode, tips the parcel in and parks.',
   },
-  robot: {
+  computing: {
     family: 'Edge AI Platform',
     title: 'Edge Platform',
     intro: [
@@ -154,7 +154,7 @@ export const STOP_INFO: Record<string, StopInfo> = {
       'Local resilience: sorting continues when the network is disrupted',
       'Optimized for AI models, robotics control and other time-sensitive processes',
     ],
-    sim: 'You are riding along: every beat this robot gets its next move, steering around the others to its box and back to the pickup tables.',
+    sim: 'These racks stand in the hall itself, next to the machines: they decide each tray’s chute and every robot’s next move on the beat, and the hall keeps sorting if the line to the outside goes down.',
   },
   'manual sorting': {
     family: 'Vision AI Solutions',

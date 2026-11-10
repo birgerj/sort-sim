@@ -6429,6 +6429,8 @@ export class Sorter implements Scene3D {
         },
       },
       { ...fixed('control room', v(-48, 2.85, 17.2), v(-48, 2.75, 21.6), 'Control room'), hover: 'still' },
+      // The server racks against the west wall, square on from the hall.
+      { ...fixed('computing', v(WX + 6.5, 2.2, 25.2), v(WX + 0.7, 1.2, 25.2), 'Computing'), hover: 'arc' },
       {
         // The box door where a forklift is swapping a box (or the fullest box).
         name: 'boxes',
