@@ -1010,6 +1010,20 @@ interface Lane {
   doorCol: THREE.Color;
 }
 
+/** What a scanner read off its last parcel. */
+export interface ScanInfo {
+  /** The parcel's barcode (its id, eight digits). */
+  code: string;
+  read: boolean;
+  postcode: string;
+  city: string;
+  /** Where it goes: a chute, the buffer store, or manual sorting. */
+  dest: string;
+  /** Length × width × height in cm, and weight in kg. */
+  size: string;
+  kg: number;
+}
+
 interface Tunnel {
   ring: THREE.MeshBasicMaterial;
   curtain: THREE.MeshBasicMaterial;
@@ -1024,6 +1038,8 @@ interface Tunnel {
   screen: number;
   /** When it last scanned a parcel (seconds, `Sorter.time`), for its blink on the video wall. */
   scannedAt?: number;
+  /** The last parcel it scanned, as its status panel on the video wall shows it. */
+  last?: ScanInfo;
   /** Where it stands on the floor (x, z) and which way the belt runs there (angle in plan), for the video wall. */
   at?: [number, number, number];
 }
@@ -2750,6 +2766,10 @@ export class Sorter implements Scene3D {
                 this.kpi.noread();
                 if (p.labelCell) this.drawLabel(p.labelCell, p);
               }
+              // (Its panel on the video wall says where it goes now.)
+              const last = lane.tunnel.last;
+              if (last && p.reason === 'oversize') last.dest = 'manual · too big';
+              else if (last && p.reason === 'noread') last.dest = 'no-read chute';
             }
           }
           p.sPrev = s;
@@ -2887,6 +2907,16 @@ export class Sorter implements Scene3D {
     t.read = Math.random() > 0.02;
     t.col.copy(p.glow);
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
+    const cm = (m: number) => Math.round(m * 100);
+    t.last = {
+      code: String(p.id).padStart(8, '0'),
+      read: t.read,
+      postcode: pcDigits(p.pc),
+      city,
+      dest: p.dest >= 0 ? `chute ${p.dest + 1}` : p.buffered !== undefined ? `chute ${p.buffered + 1} → buffer` : 'buffer store',
+      size: `${cm(p.d)}×${cm(p.w)}×${cm(p.h)} cm`,
+      kg: p.kg,
+    };
     for (const side of [0, 1]) {
       if (t.read) this.scanLabels.set(t.screen * 2 + side, `${pcDigits(p.pc)} ${city}`, `${String(p.id).padStart(8, '0')} · chute ${p.dest >= 0 ? p.dest + 1 : p.buffered !== undefined ? `${p.buffered + 1} → buffer` : 'store'}`, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
       else this.scanLabels.set(t.screen * 2 + side, 'NO READ', String(p.id).padStart(8, '0'), { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
@@ -4703,6 +4733,8 @@ export class Sorter implements Scene3D {
       age: t.scannedAt === undefined ? Infinity : this.time - t.scannedAt,
       read: t.read,
     }));
+    // The lane scanners' status panels (the last parcel each one read).
+    const scanPanels = this.lanes.map((l, k) => ({ name: `Scanner ${k + 1}`, age: l.tunnel.scannedAt === undefined ? Infinity : this.time - l.tunnel.scannedAt, last: l.tunnel.last }));
     // The hall with its inbound wing, the collectors and lanes (once), and the inbound trucks.
     if (!this.mapInfeed) {
       this.mapInfeed = [];
@@ -4718,7 +4750,7 @@ export class Sorter implements Scene3D {
     }
     const outline: [number, number][] = [[LX - 12, HZ], [LX - 12, NZ], [WING.x0, NZ], [WING.x0, WING.z0], [WING.x1, WING.z0], [WING.x1, NZ], [LX + STRAIGHT + 12, NZ], [LX + STRAIGHT + 12, HZ]];
     // (The plan shows the sorter, the docks, the robot floor and the inbound wing: the store end is cropped.)
-    return { hall: [LX - 12, LX + STRAIGHT + 12, WING.z0 - 3, HZ + 1], outline, infeed: this.mapInfeed, inbound: this.wing.list(), loop: this.mapLoop, chutes, doors, robots, boxes, parcels, infeedParcels, scanners, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
+    return { hall: [LX - 12, LX + STRAIGHT + 12, WING.z0 - 3, HZ + 1], outline, infeed: this.mapInfeed, inbound: this.wing.list(), loop: this.mapLoop, chutes, doors, robots, boxes, parcels, infeedParcels, scanners, scanPanels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
   }
 
   /**

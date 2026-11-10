@@ -3,6 +3,7 @@
 // every couple of seconds (clocks every second).
 import * as THREE from 'three';
 import { daysToChristmas, XMAS } from '../sim/season';
+import type { ScanInfo } from './sorter';
 
 /** Counters the scene keeps; rates are worked out here. */
 export interface HubStats {
@@ -38,6 +39,8 @@ export interface HubMap {
   infeedParcels?: [number, number][];
   /** The scanners (lane tunnels and loop scanners): seconds since their last scan, and whether it read. */
   scanners?: { x: number; z: number; dir: number; age: number; read: boolean }[];
+  /** A status panel per lane scanner: the last parcel it read (none yet: undefined). */
+  scanPanels?: { name: string; age: number; last?: ScanInfo }[];
   recirculating: number;
   /** Parcels waiting at the infeed (on the lanes and outside). */
   queue: number;
@@ -247,6 +250,15 @@ export class Screens {
       g.arc(X(r.x), Z(r.z), 6, 0, Math.PI * 2);
       g.fill();
     }
+    // Status panels for the lane scanners, in the free strip right of the inbound wing, above the north docks.
+    if (m.scanPanels?.length && m.inbound?.length) {
+      const px0 = X(Math.max(...m.inbound.map((d) => d.x))) + 44;
+      const px1 = W - pad;
+      const northDoors = m.doors.filter((d) => d.z < 0);
+      const py0 = 62;
+      const py1 = (northDoors.length ? Math.min(...northDoors.map((d) => Z(d.z))) : 180) - 10;
+      this.scanPanels(g, m.scanPanels, px0, py0, px1, py1);
+    }
     // Legend.
     g.font = '600 18px system-ui, sans-serif';
     const legend: [string, string][] = [['#22cc66', 'chute ok'], ['#f2a51a', 'filling / cleardown'], ['#e2231a', 'full'], ['#4a4d55', 'truck away'], ['#4d8bff', 'robot busy']];
@@ -257,6 +269,71 @@ export class Screens {
       g.fillText(t, 48 + i * 230, H - 17);
     });
     this.map.needsUpdate = true;
+  }
+
+  /** One panel per lane scanner, side by side: barcode, postcode and city, destination, size and weight. */
+  private scanPanels(g: CanvasRenderingContext2D, panels: NonNullable<HubMap['scanPanels']>, x0: number, y0: number, x1: number, y1: number): void {
+    const gap = 12;
+    const w = (x1 - x0 - gap * (panels.length - 1)) / panels.length;
+    const h = y1 - y0;
+    const fit = (text: string, max: number) => {
+      if (g.measureText(text).width <= max) return text;
+      while (text.length > 1 && g.measureText(`${text}…`).width > max) text = text.slice(0, -1);
+      return `${text}…`;
+    };
+    panels.forEach((pn, i) => {
+      const x = x0 + i * (w + gap);
+      const f = Math.max(0, 1 - pn.age / SCAN_BLINK);
+      const last = pn.last;
+      const ok = !last || last.read;
+      g.fillStyle = '#1a1c24';
+      g.fillRect(x, y0, w, h);
+      // The frame lights up on a scan (green on a read, red on a no-read).
+      g.strokeStyle = f > 0 ? (ok ? `rgba(91, 224, 160, ${0.4 + 0.6 * f})` : `rgba(255, 90, 74, ${0.4 + 0.6 * f})`) : '#2e313a';
+      g.lineWidth = 2;
+      g.strokeRect(x + 1, y0 + 1, w - 2, h - 2);
+      // Header: the scanner's name and a status lamp.
+      g.fillStyle = '#9aa0a8';
+      g.font = '700 14px system-ui, sans-serif';
+      g.fillText(pn.name.toUpperCase(), x + 12, y0 + 14);
+      g.fillStyle = f > 0 ? (ok ? '#5be0a0' : '#ff5a4a') : last ? (ok ? '#1f6f50' : '#7a2620') : '#3a3d44';
+      g.beginPath();
+      g.arc(x + w - 16, y0 + 14, 5, 0, Math.PI * 2);
+      g.fill();
+      if (!last) {
+        g.fillStyle = '#6b7078';
+        g.font = '600 16px system-ui, sans-serif';
+        g.fillText('Waiting for parcels', x + 12, y0 + 46);
+        return;
+      }
+      // The barcode: a few bars from its digits, and the code itself.
+      const bx = x + 12;
+      const by = y0 + 26;
+      g.fillStyle = ok ? '#e8e6ef' : '#ff5a4a';
+      let cx = bx;
+      for (const ch of last.code) {
+        const d = Number(ch);
+        for (const bw of [1 + (d % 3), 1 + ((d >> 1) % 2), 2 + (d % 2)]) {
+          g.fillRect(cx, by, bw, 14);
+          cx += bw + 1.5;
+        }
+      }
+      g.font = '700 20px ui-monospace, Menlo, Consolas, monospace';
+      g.fillText(fit(ok ? last.code : `NO READ ${last.code}`, w - (cx - bx) - 34), cx + 10, by + 7);
+      // Postcode and city.
+      g.fillStyle = '#ffffff';
+      g.font = '700 17px system-ui, sans-serif';
+      g.fillText(fit(ok ? `${last.postcode}  ${last.city}` : 'Label unreadable', w - 24), x + 12, y0 + 56);
+      // Where it goes, then size and weight.
+      g.fillStyle = ok ? '#5be0a0' : '#e0a0a0';
+      g.font = '600 15px system-ui, sans-serif';
+      g.fillText(fit(`→ ${last.dest}`, w - 24), x + 12, y0 + 76);
+      if (h >= 104) {
+        g.fillStyle = '#9aa0a8';
+        g.font = '500 14px system-ui, sans-serif';
+        g.fillText(fit(`${last.size} · ${last.kg.toFixed(1)} kg`, w - 24), x + 12, y0 + 95);
+      }
+    });
   }
 
   private rate(): number {
