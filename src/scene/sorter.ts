@@ -3301,32 +3301,25 @@ export class Sorter implements Scene3D {
   }
 
   /**
-   * The towers' lamps: green while parcels wait at the chute (on the dock belt, or on the pickup
-   * table), amber blinking while its truck is in cleardown (for robot stations: the table is
-   * full), red flashing on a fault (the dock belt full, nothing more can come down). At the
-   * night party they are disco lights.
+   * The towers' lamps, the same code as the hub plan in the control room: off while the chute is
+   * empty, green while it fills, amber when it is getting full (over 60 %) or its truck is in
+   * cleardown, red when it is full. At the night party they are disco lights.
    */
   private updateTowers(): void {
     const t = this.towers;
     if (!t) return;
-    const blink = Math.floor(this.bt * 2) % 2 ? 1 : 0.15;
     const party = this.dayShown === false;
     for (const [k, list] of this.towersOf) {
-      let green = 0;
-      let amber = 0;
-      let red = 0;
-      const ch = this.chutes[k];
-      if (ch?.belt && this.dockOf.has(k)) {
-        const free = this.dockFree(k);
-        green = free < 0.98 ? 1 : 0;
-        if (free < 0.9) red = blink;
+      const fill = this.chuteFill(k);
+      let clearing = false;
+      if (this.dockOf.has(k)) {
         const door = DOCK_X.indexOf(this.dockOf.get(k)!);
-        if (door >= 0 && this.trucks.clearing(door)) amber = blink;
-      } else if (this.stationOf.has(k)) {
-        const q = this.stationQueue[this.stationOf.get(k)!]?.length ?? 0;
-        green = q > 0 ? 1 : 0;
-        if (q >= STATION_CAP) amber = blink;
-      } else if (ch) green = ch.flash > 0.05 ? 1 : 0;
+        const st = door >= 0 ? this.trucks.docks[door]?.state : undefined;
+        clearing = st === 'cleardown' || st === 'closing';
+      }
+      const red = fill >= 1 ? 1 : 0;
+      const amber = !red && (fill > 0.6 || clearing) ? 1 : 0;
+      const green = !red && !amber && fill > 0.001 ? 1 : 0;
       for (const i of list) {
         if (party) t.disco(i, this.bt, this.kick);
         else t.set(i, { green, amber, red }, 1.6);
@@ -3804,6 +3797,14 @@ export class Sorter implements Scene3D {
   private mapLoop: [number, number][] | null = null;
 
   /** Everything the video wall shows, gathered from the hall. */
+  /** How full a chute is, 0…1 (the hub plan's bars and the signal towers both read this). */
+  private chuteFill(k: number): number {
+    const ch = this.chutes[k];
+    if (!ch) return 0;
+    const fill = this.stationOf.has(k) ? 1 - this.room(k) / 4 : ch.belt ? 1 - this.dockFree(k) / ch.belt.len : 0;
+    return clamp(fill, 0, 1);
+  }
+
   private mapData(): HubMap {
     if (!this.mapLoop) {
       this.mapLoop = [];
@@ -3814,9 +3815,7 @@ export class Sorter implements Scene3D {
     }
     const chutes = this.chutes.map((ch, k) => {
       const end = ch.path.pts[ch.path.pts.length - 1]!;
-      const st = this.stationOf.get(k);
-      const fill = st !== undefined ? 1 - this.room(k) / 4 : ch.belt ? 1 - this.dockFree(k) / ch.belt.len : 0;
-      return { x: end.x, z: end.z, fill: clamp(fill, 0, 1), dock: st === undefined };
+      return { x: end.x, z: end.z, fill: this.chuteFill(k), dock: !this.stationOf.has(k) };
     });
     const fills = this.trucks.list();
     const doors = this.trucks.docks.map((d, i) => ({ x: d.x, z: d.wallZ, state: d.state, load: Math.min(1, fills[i]!.fill) }));
