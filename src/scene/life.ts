@@ -406,6 +406,31 @@ export class Life {
    * the loop is the dance floor).
    */
   addWalkway(x0: number, x1: number, z: number, w: number): void {
+    // The path itself: a dark green floor coating (green for the safe zone), a ring between the edges.
+    const ring = new THREE.Shape();
+    const h = w / 2;
+    ring.moveTo(x0 - h, -z - h);
+    ring.lineTo(x1 + h, -z - h);
+    ring.lineTo(x1 + h, z + h);
+    ring.lineTo(x0 - h, z + h);
+    ring.closePath();
+    const hole = new THREE.Path();
+    hole.moveTo(x0 + h, -z + h);
+    hole.lineTo(x0 + h, z - h);
+    hole.lineTo(x1 - h, z - h);
+    hole.lineTo(x1 - h, -z + h);
+    hole.closePath();
+    ring.holes.push(hole);
+    const coat = this.k.std(0x1a3626, 0.55, 0, 0x22573a);
+    coat.polygonOffset = true;
+    coat.polygonOffsetFactor = -1;
+    coat.polygonOffsetUnits = -1;
+    const c = new THREE.Mesh(new THREE.ShapeGeometry(ring), coat);
+    // (Flat on the floor: the shape's y becomes −z, and the ring is the same both ways.)
+    c.rotation.x = -Math.PI / 2;
+    c.position.y = 0.008;
+    c.userData.noInk = true;
+    this.k.put(c, 'day');
     const tex = hazardStripes();
     const strip = (ax: number, az: number, bx: number, bz: number) => {
       const len = Math.hypot(bx - ax, bz - az);
@@ -526,7 +551,7 @@ export class Life {
       m.rotation.y = ry;
       k.put(m);
     };
-    for (const z of [-24, 20]) place(L.wx + 0.1, 3.2, z, Math.PI / 2);
+    for (const z of [-31, 20]) place(L.wx + 0.1, 3.2, z, Math.PI / 2);
     for (const z of [-20, 20]) place(L.ex - 0.1, 3.2, z, -Math.PI / 2);
     // (On the north wall east of the inbound wing, which opens the wall further west.)
     place(-19.5, 4.2, L.nz + 0.1, 0);

@@ -214,8 +214,11 @@ const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }
 const WING = { x0: WX, x1: -22.2, z0: -54 };
 // (3.95 m apart: the ten fit between the hall's west wall, which runs straight on, and centred over the lanes.)
 const INBOUND_DOORS = Array.from({ length: 10 }, (_, i) => -59.98 + 3.95 * i);
-/** The canteen: a room on the first floor outside the hall, against the west wall beside the wing (windows into the hall, a stair down inside). */
-const CANTEEN = { wallX: WX, z0: -52.5, z1: -36.3, depth: 7.5, floorY: 4.6 };
+/**
+ * The office and the canteen: rooms on the first floor outside the hall, against the west wall
+ * where it looks out over the loop's west end (windows into the hall, a balcony and a stair down inside).
+ */
+const CANTEEN = { wallX: WX, floorY: 4.6, depth: 7.5, office: [-18, -9.15] as [number, number], canteen: [-9, 23] as [number, number] };
 const CANTEEN_OPEN = canteenOpenings(CANTEEN);
 const LANE_DOORS = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
 /** Where each lane starts: the middle of its doors, on its collector. */
@@ -264,7 +267,7 @@ function westWall(z0: number, z1: number): THREE.ShapeGeometry {
   sh.lineTo(-w / 2, HH / 2);
   sh.closePath();
   // (Turned +π/2 about y, the shape's x runs to −z: local x = cz − z.)
-  for (const [a, b, y0, y1] of [...CANTEEN_OPEN.windows, CANTEEN_OPEN.door]) {
+  for (const [a, b, y0, y1] of [...CANTEEN_OPEN.windows, ...CANTEEN_OPEN.doors]) {
     const za = Math.max(a, z0 + 0.02);
     const zb = Math.min(b, z1 - 0.02);
     if (zb <= za) continue;
@@ -1531,7 +1534,7 @@ export class Sorter implements Scene3D {
         northDoors: NORTH_DOORS,
         southDoors: SOUTH_DOORS,
         wing: { ...WING, doors: INBOUND_DOORS },
-        westGap: [CANTEEN.z0 - 1, canteenStairFoot(CANTEEN) + 0.5],
+        westGap: [canteenStairFoot(CANTEEN) - 0.5, CANTEEN.canteen[1] + 0.5],
         loopEdge: edge,
         trees: [
           { x: -55.8, z: 21.2, h: 7 },
@@ -1571,9 +1574,10 @@ export class Sorter implements Scene3D {
     // The manager (in a suit, no helmet) walks a round inside the loop, past the chute tables, on
     // the walkway marked out on the floor there (clear of the work tables and the platform's stair).
     {
-      const zi = LOOP_ZH - 2.0;
+      // (2.4 m wide; its outer edge 1.2 m inside the loop's.)
+      const zi = LOOP_ZH - 2.4;
       const x0 = PLATFORM_X + 7.6;
-      this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 1.6);
+      this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4);
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
@@ -5782,7 +5786,8 @@ export class Sorter implements Scene3D {
     this.pois = [
       { ...fixed('infeeds', v(-33, 7.4, -17), v(-40, 3.6, -9.5), 'Infeed'), hover: 'still' },
       fixed('inbound', v(-38, 4.6, -40), v(-46, 1.4, -54), 'Inbound docks'),
-      fixed('canteen', v(-50, 6.2, -38), v(-62, 5.6, -45), 'Canteen'),
+      fixed('canteen', v(-51, 6.4, 10), v(-62, 5.6, 2), 'Canteen'),
+      fixed('office', v(-53, 6.4, -9), v(-63.5, 5.4, -13.5), 'Office'),
       fixed('scan tunnels', v(-36, 4.4, -37), v(-46, 1.2, -45), 'Scanning'),
       {
         // One lap above the inside edge of the loop, at cruise height, looking ahead and down.

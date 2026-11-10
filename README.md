@@ -36,10 +36,13 @@ sound is generated in code.
    over the lanes.
    An empty truck leaves and a full one backs in. The video wall in the control room
    shows the wing, the lanes and the inbound trucks (it grew taller; the plan kept its
-   scale). The **canteen** is a room on the first floor outside the hall, against the
-   west wall beside the wing: from the hall you see its band of windows (tables, lockers,
-   a counter with coffee, plants, people on their break) and its door onto a landing, with
-   a stair down along the wall. The old break area by the robots is gone; its coffee
+   scale). The **canteen** and the **office** are rooms on the first floor outside the hall,
+   against the west wall where it looks out over the loop's west end: from the hall you see
+   their windows (the office: two managers at their computers; the canteen, 32 m long:
+   tables, lockers, a counter with coffee, plants, people on their break) and their doors
+   onto a balcony hung on the wall, with a stair down along the wall at its north end. The
+   manager's walkway inside the loop is coated dark green (the safe zone) between
+   black/yellow taped edges. The old break area by the robots is gone; its coffee
    machine and vending machine stay.
 1. **Infeed (north-west).** Five lanes, 4 m apart, start at the collectors in
    the inbound wing, each through a scan tunnel, then a buffer (where parcels
