@@ -729,3 +729,46 @@ export function parcelWear(m: THREE.MeshStandardMaterial): void {
   const key = m.customProgramCacheKey.bind(m);
   m.customProgramCacheKey = () => `${key()}-parcelwear`;
 }
+
+/**
+ * Small specks on a worktop or shelf (dark grey speckled laminate or powder coat), only in the
+ * realistic day: in world space, so a batch of boxes can share it.
+ */
+export function specks(m: THREE.MeshStandardMaterial): void {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
+    sh.uniforms.uReal = REAL;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSk;')
+      .replace(
+        '#include <worldpos_vertex>',
+        `#include <worldpos_vertex>
+        {
+          vec4 wp = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            wp = instanceMatrix * wp;
+          #endif
+          vSk = (modelMatrix * wp).xyz;
+        }`,
+      );
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uReal;\nvarying vec3 vSk;\n${NOISE}`)
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        if (uReal > 0.001) {
+          vec2 q = vSk.xz + vSk.y * 0.7;
+          float dark = step(0.9, rdNoise(q * 160.0));
+          float light = step(0.93, rdNoise(q * 130.0 + 7.0));
+          float wearSpot = smoothstep(0.6, 0.8, rdFbm(q * 3.0));
+          vec3 c = diffuseColor.rgb * (1.0 - 0.45 * dark) + 0.12 * light;
+          c *= 1.0 - 0.08 * wearSpot;
+          diffuseColor.rgb = mix(diffuseColor.rgb, c, uReal);
+          roughnessFactor = mix(roughnessFactor, clamp(roughnessFactor - 0.15 * wearSpot, 0.2, 1.0), uReal);
+        }`,
+      );
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${key()}-specks`;
+}
