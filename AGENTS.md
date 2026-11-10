@@ -34,6 +34,7 @@ Read this before changing code. README.md describes the hall and the controls.
 |---|---|
 | `src/main.ts` | Wires scene + music + HUD; URL parameters; frame loop; time of day (`tod` 0 day … 1 night). Exposes `window.sortsim` for the console and the screenshot script. |
 | `src/ui/walk.ts` | Walk mode input and on-screen controls: keys (WASD, E/Q up and down), mouse look, touch stick (left), look (right), Up/Down buttons, Walk/Fly switch and height; `Sorter.walkInput`, `walkAlt`, `walkTo`. Height `alt` above eye level; 0 is walking. |
+| `src/ui/deptIcons.ts` | Go to: department groups and order (`DEPT_GROUPS`; keys 1–9, 0 follow it via `orderDepts`) and an icon per department (Lucide, ISC). A new stop with `dept` set lands in a group More until it is added here. |
 | `src/ui/hud.ts`, `src/ui/style.css` | Start screen, caption, the dock (tabs Go to / Camera / Hub / Night / More, each with a panel that slides up above it; one layout for phones and desktops), keys, auto-hide with a mouse, settings in localStorage (`sortsim.settings`). |
 | `src/audio/composer.ts` | The song as data: seeded, pure, testable. D minor, 32-bar form (intro / groove / breakdown), four styles by `mood`: ambient, deep, house, acid techno. |
 | `src/audio/music.ts` | WebAudio synths and the clock; the tempo can change bar by bar (`setTempo`, 60–160 BPM, `bars` map), and the composer's mood follows it. The clock runs without sound too. `frame()` returns beats, drum envelopes, chord colours and the notes that just sounded (latency-compensated). |

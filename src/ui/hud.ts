@@ -5,6 +5,7 @@
  * keys do most things on a desktop. Settings are remembered in localStorage; URL
  * parameters override them for one visit.
  */
+import { DEPT_ICONS, groupDepts, orderDepts } from './deptIcons';
 import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
@@ -103,6 +104,8 @@ export class Hud {
   private open: Tab | null = null;
   private deptBtns = new Map<string, HTMLButtonElement>();
   private deptWhen = new Map<string, 'day' | 'night'>();
+  /** Each group heading in Go to, with its departments (hidden when none of them shows). */
+  private deptHeads = new Map<HTMLElement, string[]>();
   private camBtns = new Map<string, HTMLButtonElement>();
   private timeBtns = new Map<TimeMode | DayLook, HTMLButtonElement>();
   private speedBtns = new Map<number, HTMLButtonElement>();
@@ -167,6 +170,10 @@ export class Hud {
       const w = this.deptWhen.get(id);
       const show = !w || (w === 'night') === night;
       if (b.hidden === show) b.hidden = !show;
+    }
+    for (const [head, ids] of this.deptHeads) {
+      const show = ids.some((id) => !this.deptBtns.get(id)?.hidden);
+      if (head.hidden === show) head.hidden = !show;
     }
     const mode = this.scene.cameraMode();
     for (const [id, b] of this.camBtns) b.classList.toggle('on', id === mode);
@@ -305,17 +312,28 @@ export class Hud {
     this.sheet.append(head);
     this.sheet.setAttribute('aria-label', 'Menu panel');
 
-    // Go to: the departments.
+    // Go to: the departments, in groups with a small heading each (deptIcons.ts).
     const go = this.section('go');
     const grid = el('div', 'depts');
-    this.scene.departments().forEach((d, n) => {
-      const b = el('button', '', d.label);
-      b.title = n < 10 ? `Key ${(n + 1) % 10}` : '';
-      b.onclick = () => this.scene.visit(d.id);
-      grid.append(b);
-      this.deptBtns.set(d.id, b);
-      if (d.when) this.deptWhen.set(d.id, d.when);
-    });
+    let n = 0;
+    for (const g of groupDepts(this.scene.departments())) {
+      const head = el('div', 'dept-group', g.title);
+      grid.append(head);
+      this.deptHeads.set(head, g.depts.map((d) => d.id));
+      for (const d of g.depts) {
+        const b = el('button', 'dept');
+        b.type = 'button';
+        b.title = n < 10 ? `Key ${(n + 1) % 10}` : '';
+        n++;
+        // (Icons are deptIcons.ts's own constant SVG markup.)
+        b.innerHTML = `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${DEPT_ICONS[d.id] ?? ''}</svg>`;
+        b.append(el('span', '', d.label));
+        b.onclick = () => this.scene.visit(d.id);
+        grid.append(b);
+        this.deptBtns.set(d.id, b);
+        if (d.when) this.deptWhen.set(d.id, d.when);
+      }
+    }
     go.append(grid);
 
     // Camera.
@@ -816,7 +834,7 @@ export class Hud {
   private bindKeys(): void {
     window.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement)?.tagName === 'INPUT') return;
-      const depts = this.scene.departments();
+      const depts = orderDepts(this.scene.departments());
       const k = e.key.toLowerCase();
       // Esc closes an open panel first (in walk mode too).
       if (k === 'escape' && (this.open || this.panel || this.stats)) {
