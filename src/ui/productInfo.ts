@@ -103,7 +103,7 @@ export const STOP_INFO: Record<string, StopInfo> = {
       'Faster sorting: no need to check screens or handheld devices',
       'Easy integration with existing sorting systems and routing logic',
     ],
-    sim: 'Above each dock belt a projector shows the postcodes of the next parcels; the worker walks each one to the right roll cage.',
+    sim: 'Above each dock belt a projector puts a number on each of the next parcels: the roll cage it goes in (or R for the return tote). The worker walks each one there.',
   },
   'pickup stations': {
     family: 'Flexible Sorting Solutions',
@@ -197,7 +197,7 @@ export const STOP_INFO: Record<string, StopInfo> = {
       'Early detection of disruptions',
       'Dashboards with the key performance indicators',
     ],
-    sim: 'The video wall shows chute fill, cleardowns, trucks, robots and the infeed queue; the Hub figures hold every KPI and a CSV export.',
+    sim: 'The video wall shows the inbound wing and its trucks, the infeed queue, chute fill, cleardowns, outbound trucks and robots; the Hub figures hold every KPI and a CSV export.',
   },
   'loop ride': {
     family: 'Operational Intelligence Solutions',

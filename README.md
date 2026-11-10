@@ -38,7 +38,7 @@ sound is generated in code.
    shows the wing, the lanes and the inbound trucks (it grew taller; the plan kept its
    scale). The **canteen** and the **office** are rooms on the first floor outside the hall,
    against the west wall where it looks out over the loop's west end: from the hall you see
-   their windows (the office: two managers at their computers; the canteen, 32 m long:
+   their windows (the office: two planners at their computers; the canteen, 32 m long:
    tables, lockers, a counter with coffee, plants, people on their break) and their doors
    onto a balcony hung on the wall, with a stair down along the wall at its north end. The
    manager's walkway inside the loop has black/yellow taped edges, with (in Day) a worn floor

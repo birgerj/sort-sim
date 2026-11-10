@@ -1,6 +1,6 @@
 // The canteen and the office: rooms on the first floor outside the hall, against its west wall,
 // looking out over the sorter loop's west end. From the hall you see their windows high in the
-// wall (the office: two managers at their computers; the canteen: tables, lockers, a counter with
+// wall (the office: two planners at their computers; the canteen: tables, lockers, a counter with
 // coffee, plants, people on their break), a balcony along the wall in front of their doors, and a
 // steel stair down along the wall at its north end.
 //
@@ -73,7 +73,7 @@ export function canteenOpenings(L: CanteenLayout): { windows: Box4[]; doors: Box
 
 export class Canteen {
   private people: Human[] = [];
-  /** The managers at their computers. */
+  /** The planners at their computers. */
   private typists: Human[] = [];
   private readonly x0: number;
 
@@ -94,7 +94,7 @@ export class Canteen {
       h.head.rotation.y = Math.sin(bt * 0.13 + i) * 0.35;
       settle(h, dt, { idle: 0 });
     });
-    // The managers type on the beat, now and then looking up from the screens.
+    // The planners type on the beat, now and then looking up from the screens.
     this.typists.forEach((h, i) => {
       const t = bt * Math.PI * 2 + i;
       h.foreL.rotation.x = -1.2 + 0.1 * Math.max(0, Math.sin(t));
@@ -153,7 +153,7 @@ export class Canteen {
     for (let z = z0 + 2; z < z1 - 1; z += 3.5) for (const x of [x0 + 1.8, x1 - 1.8]) k.box('clamp', lamp, x, y + ROOM_H - 0.02, z, 0.3, 0.03, 1.2);
   }
 
-  /** The office: two desks facing the windows, a manager at a computer at each, cabinets, a whiteboard. */
+  /** The office: two desks facing the windows, a planner at a computer at each, cabinets, a whiteboard. */
   private buildOffice(): void {
     const { k, L, x0 } = this;
     const y = L.floorY;
@@ -170,7 +170,7 @@ export class Canteen {
     [o0 + (o1 - o0) * 0.45, o0 + (o1 - o0) * 0.8].forEach((dz, i) => {
       k.box('odesk', top, dx, y + 0.74, dz, 0.8, 0.05, 1.7);
       for (const sz of [-0.8, 0.8]) k.box('odleg', grey, dx, y + 0.37, dz + sz, 0.7, 0.74, 0.05);
-      // Two screens facing the manager (west), their backs to the windows.
+      // Two screens facing the planner (west), their backs to the windows.
       for (const sz of [-0.33, 0.33]) {
         k.box('omon', dark, dx + 0.2, y + 1.1, dz + sz, 0.04, 0.38, 0.6);
         k.box('oscreen', screen, dx + 0.175, y + 1.1, dz + sz, 0.01, 0.33, 0.55);
@@ -179,7 +179,7 @@ export class Canteen {
       k.box('okbd', dark, dx - 0.15, y + 0.78, dz, 0.18, 0.02, 0.48);
       k.box('omouse', dark, dx - 0.15, y + 0.78, dz + 0.36, 0.1, 0.03, 0.06);
       k.box('omug', k.std(0xdddddd, 0.5, 0.1, 0xffffff), dx + 0.05, y + 0.82, dz - 0.65, 0.08, 0.1, 0.08);
-      // The chair, and the manager in it, facing east: the screens, and past them the hall.
+      // The chair, and the planner in it, facing east: the screens, and past them the hall.
       const cx = dx - 0.7;
       k.box('ochair', dark, cx, y + 0.48, dz, 0.5, 0.08, 0.5);
       k.box('ochair', dark, cx - 0.27, y + 0.85, dz, 0.06, 0.7, 0.48);
