@@ -188,6 +188,18 @@ export class Inbound {
     });
   }
 
+  /** The unloaders, by door and place in the crew (for the staff list). */
+  people(): { d: number; n: number; h: Human }[] {
+    return this.bays.flatMap((b, d) => b.crew.map((u, n) => ({ d, n, h: u.h })));
+  }
+
+  /** Unloader n of door d is at work: carrying a parcel, or at a load he is to unload. */
+  busy(d: number, n: number): boolean {
+    const b = this.bays[d]!;
+    const u = b.crew[n]!;
+    return u.carry.length > 0 || (b.state === 'open' && b.left > 0 && (n === 0 || this.crewSize === 2));
+  }
+
   /** Unloaders per truck: 1 or 2 (the second only comes when the rate needs it). */
   crewSize: 1 | 2 = 1;
 

@@ -106,6 +106,14 @@ export class BoxYard {
     if (!this.jobs.includes(bin)) this.jobs.push(bin);
   }
 
+  /** A forklift at work on a box swap (not while it waits for a truck at the door). */
+  busy(k: number): boolean {
+    const l = this.lifts[k]!;
+    if (l.job === null) return false;
+    const k0 = !l.key ? l.keys[0] : undefined;
+    return !(k0?.wait && !k0.wait());
+  }
+
   update(bt: number): void {
     // Hand out jobs to idle forklifts on their side.
     for (const l of this.lifts) {

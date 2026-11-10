@@ -17,6 +17,29 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 };
 
+/**
+ * Where a waiting new version is offered: on the start card while it is up (next to sound and
+ * country), otherwise as a toast. The card can be up before the hall (and this class) exists.
+ */
+const update: { apply: (() => void) | null; card: ((apply: () => void) => void) | null; toast: ((apply: () => void) => void) | null } = {
+  apply: null,
+  card: null,
+  toast: null,
+};
+function offerUpdate(apply: () => void): void {
+  update.apply = apply;
+  (update.card ?? update.toast)?.(apply);
+}
+/** The start card shows an Update button while it is up; the returned function hands back to the toast. */
+export function updateOnCard(show: (apply: () => void) => void): () => void {
+  update.card = show;
+  if (update.apply) show(update.apply);
+  return () => {
+    update.card = null;
+    if (update.apply) update.toast?.(update.apply);
+  };
+}
+
 export class Pwa {
   /** Buttons for the control bar (the HUD puts them in its own group). */
   readonly install = el('button', '', 'Install app');
@@ -135,11 +158,8 @@ export class Pwa {
     if (!('serviceWorker' in navigator)) return;
     try {
       const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-      const offer = (w: ServiceWorker) => {
-        this.say('A new version of Sort sim is ready.', 0, 'Update', () => {
-          w.postMessage('skip-waiting');
-        });
-      };
+      update.toast = (apply) => this.say('A new version of Sort sim is ready.', 0, 'Update', apply);
+      const offer = (w: ServiceWorker) => offerUpdate(() => w.postMessage('skip-waiting'));
       if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
       reg.addEventListener('updatefound', () => {
         const w = reg.installing;

@@ -11,6 +11,7 @@ import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter'
 import { COUNTRIES, COUNTRY, type CountryId } from '../sim/countries';
 import { XMAS } from '../sim/season';
 import { InfoPanel } from './info';
+import { duration, ROLE_TEXT, Staff, type StaffMember } from '../sim/staff';
 import { NIGHT_PRESETS, NIGHT_SWITCHES, presetOf, type NightFx, type NightPreset } from '../scene/nightFx';
 
 export type TimeMode = 'day' | 'night' | 'cycle';
@@ -60,6 +61,19 @@ export function saveSettings(s: Settings): void {
   }
 }
 
+/** Hub minutes as a clock time, "22:05". */
+const clock = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
+
+/** A bar: working (teal) and waiting (grey) as shares of the time counted. */
+function workBar(pct: number): HTMLElement {
+  const b = el('span', 'wbar');
+  const w = el('i');
+  w.style.width = `${pct}%`;
+  b.append(w);
+  b.setAttribute('aria-label', `${pct}% working`);
+  return b;
+}
+
 const el_ = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => el(tag, cls, text);
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -92,6 +106,10 @@ export class Hud {
   private stats: { el: HTMLElement; body: HTMLElement; last: number } | null = null;
   /** The shipping label of a clicked parcel. */
   private card: { el: HTMLElement; p: Parcel; where: HTMLElement } | null = null;
+  /** The card of a tapped staff member (refreshed every second). */
+  private staffCard: { el: HTMLElement; m: StaffMember; body: HTMLElement; last: number } | null = null;
+  /** The staff list in the figures (kept while the panel is open). */
+  private staffList: { el: HTMLElement; head: HTMLElement; rows: { m: StaffMember; r: HTMLElement; bar: HTMLElement; pw: HTMLElement; pq: HTMLElement }[] } | null = null;
   private hideTimer = 0;
   /** Group for the app buttons (install, full screen). */
   appGroup!: HTMLElement;
@@ -163,6 +181,7 @@ export class Hud {
       if (this.card.where.textContent !== w) this.card.where.textContent = w;
     }
     if (this.stats && performance.now() - this.stats.last > 1000) this.drawStats();
+    if (this.staffCard && performance.now() - this.staffCard.last > 1000) this.drawStaffCard();
     for (const pn of [this.panel, this.stats?.el]) {
       if (!pn) continue;
       // Stay clear of the control bar below.
@@ -678,7 +697,59 @@ export class Hud {
       r.append(el('span', '', hhmm(d.at)), el('span', '', `${d.door} ${d.city}`), el('span', '', `${d.load}/${d.room}`), el('span', d.onTime ? 'ok' : 'late', d.onTime ? (d.full ? 'full' : 'on time') : 'late'));
       deps.append(r);
     }
-    this.stats.body.replaceChildren(grid, chart, store, deps);
+    // (Keep the list where it was scrolled to: the panel is redrawn every second.)
+    const top = this.stats.body.scrollTop;
+    // (The staff list stays in place below; only what is above it is swapped.)
+    const body = this.stats.body;
+    const staff = this.drawStaff();
+    while (body.firstChild && body.firstChild !== staff) body.firstChild.remove();
+    body.prepend(grid, chart, store, deps);
+    if (staff.parentNode !== body) body.append(staff);
+    this.stats.body.scrollTop = top;
+  }
+
+  /**
+   * The staff list: the team's share of time working, then everyone in door order with
+   * their shares of working and waiting. Built once per opening and updated in place, so a
+   * row being tapped is never swapped out from under the finger.
+   */
+  private drawStaff(): HTMLElement {
+    const list = this.scene.staff.list;
+    let st = this.staffList;
+    if (!st || !this.stats?.el.contains(st.el)) {
+      const box = el('div', 'staff');
+      const head = el('div', 'tl');
+      box.append(head);
+      const rows = list.map((m) => {
+        const r = el('button', 'person');
+        r.title = `${m.name}, ${ROLE_TEXT[m.role]}, ${m.place}: show the card and follow`;
+        const name = el('span', 'pn');
+        name.append(el('b', '', m.name), el('span', 'ts', `${ROLE_TEXT[m.role]} · ${m.place}`));
+        const bar = workBar(0);
+        const pw = el('span', 'pw');
+        const pq = el('span', 'pq');
+        r.append(name, bar, pw, pq);
+        r.onclick = () => {
+          this.toggleStats();
+          this.scene.followStaff(m);
+          this.showStaff(m);
+        };
+        box.append(r);
+        return { m, r, bar: bar.firstElementChild as HTMLElement, pw, pq };
+      });
+      st = this.staffList = { el: box, head, rows };
+    }
+    const team = Staff.workPct(this.scene.staff.totals());
+    st.head.textContent = `Staff · ${list.length} people · team ${team}% working, ${100 - team}% waiting`;
+    for (const x of st.rows) {
+      const pct = Staff.workPct(x.m);
+      x.r.classList.toggle('on', x.m.working);
+      x.bar.style.width = `${pct}%`;
+      x.bar.parentElement!.setAttribute('aria-label', `${pct}% working`);
+      x.pw.textContent = `${pct}%`;
+      x.pq.textContent = `${100 - pct}%`;
+    }
+    return st.el;
   }
 
   private panelCount(): void {
@@ -808,7 +879,12 @@ export class Hud {
         const t = this.scene.pickThing(e.clientX, e.clientY);
         if (t) {
           this.scene.poke(t);
-          this.scene.followObject(t);
+          // Someone with a job in the hall (or a forklift's driver): followed by name, with their card.
+          const m = this.scene.staffOf(t.obj);
+          if (m) {
+            this.scene.followStaff(m);
+            this.showStaff(m);
+          } else this.scene.followObject(t);
         } else this.scene.tapEgg(e.clientX, e.clientY);
       }
     });
@@ -826,7 +902,52 @@ export class Hud {
     window.addEventListener('pointercancel', end);
   }
 
+  /** A staff member's card: name, job, where, and how the shift has gone so far. */
+  private showStaff(m: StaffMember): void {
+    this.card?.el.remove();
+    this.card = null;
+    this.staffCard?.el.remove();
+    const card = el_('div', 'label-card staff-card');
+    const head = el_('div', 'lc-head');
+    head.append(el_('b', '', 'STAFF'), el_('span', '', `No. ${String(m.id).padStart(3, '0')}`));
+    const close = el_('button', 'lc-close', '×');
+    close.setAttribute('aria-label', 'Close card');
+    close.onclick = () => {
+      card.remove();
+      this.staffCard = null;
+    };
+    head.append(close);
+    const who = el_('div', 'sc-who');
+    who.append(el_('div', 'lc-name', m.name), el_('div', 'sc-role', ROLE_TEXT[m.role]), el_('div', 'lc-small', m.place));
+    const body = el_('div', 'sc-body');
+    card.append(head, who, body);
+    this.root.append(card);
+    this.staffCard = { el: card, m, body, last: 0 };
+    this.drawStaffCard();
+  }
+
+  private drawStaffCard(): void {
+    const c = this.staffCard;
+    if (!c) return;
+    c.last = performance.now();
+    const m = c.m;
+    const now = this.scene.hubTime();
+    const pct = Staff.workPct(m);
+    const counted = m.work + m.wait > 0;
+    const state = el_('div', `sc-state ${m.working ? 'work' : 'wait'}`, `${m.working ? 'Working' : 'Waiting'} · for ${duration(now - m.changed)}`);
+    const rows = el_('div', 'sc-rows');
+    const row = (k: string, v: string) => rows.append(el_('span', 'lc-small', k), el_('span', '', v));
+    row('On shift since', clock(m.since));
+    row('Shift so far', duration(now - m.since));
+    row('Working', `${duration(m.work)}${counted ? ` · ${pct}%` : ''}`);
+    row('Waiting', `${duration(m.wait)}${counted ? ` · ${100 - pct}%` : ''}`);
+    row('Jobs started', String(m.jobs));
+    c.body.replaceChildren(state, rows, workBar(pct));
+  }
+
   private showLabel(p: Parcel): void {
+    this.staffCard?.el.remove();
+    this.staffCard = null;
     this.card?.el.remove();
     const info = this.scene.parcelInfo(p);
     const a = info.address;

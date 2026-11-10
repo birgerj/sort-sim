@@ -59,6 +59,7 @@ import { Clutter } from './clutter';
 import { BPM } from '../audio/composer';
 import { addressFor, type Address } from '../sim/addresses';
 import { Kpi } from '../sim/kpi';
+import { Staff, type Role, type StaffMember } from '../sim/staff';
 import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
@@ -1031,6 +1032,8 @@ interface Poi {
   next?: (since: number) => boolean;
   /** Beats to stay on the fly tour (default 6–11). */
   dwell?: number;
+  /** The fly tour leaves it out while this says so (nothing to see there now). */
+  skip?: () => boolean;
 }
 
 interface Tour {
@@ -1530,6 +1533,7 @@ export class Sorter implements Scene3D {
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
     this.buildCrew();
+    this.hireStaff();
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.eggs = new Eggs(this);
@@ -1810,6 +1814,7 @@ export class Sorter implements Scene3D {
       speed: this.speed,
     });
     this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown, dance: this.fx.dance, bpm: this.bpmNow });
+    this.staff.tick(this.hubTime());
     this.eggs.update(dt, bt, this.dayShown !== false, this.camera.position);
     // ...and their acts on top, once everyone has been animated.
     ANTICS.post(bt);
@@ -3584,6 +3589,8 @@ export class Sorter implements Scene3D {
     const p = following ? this.follow : null;
     if (p && p.mode === 'fixed' && p.pathKind !== 'back') this.follow = null;
     const th = this.camMode === 'follow' ? this.followThing : null;
+    // (Set below when the camera has something to turn around: see `orbit`.)
+    this.orbitOn = null;
     if (th) {
       // A robot, forklift or person: behind it and a little to the side, looking where it goes.
       this.tour = null;
@@ -3597,7 +3604,9 @@ export class Sorter implements Scene3D {
       this.want.copy(c).addScaledVector(this.fwd, -back).addScaledVector(side, back * 0.45);
       this.want.y = clamp(c.y + back * 0.55, 1.2, HH - 0.8);
       this.wantLook.copy(c).addScaledVector(this.fwd, 1.5);
+      this.orbitOn = th.obj;
     } else if (p) {
+      this.orbitOn = p;
       // Back in fly mode, the tour starts afresh from wherever the camera is.
       this.tour = null;
       const c = this.p.copy(p.pos);
@@ -3618,9 +3627,15 @@ export class Sorter implements Scene3D {
     this.want.y = Math.min(this.want.y, FLY_MAX_Y);
     [this.want.x, this.want.z] = inHall(this.want.x, this.want.z, 1.5);
     const k = this.first ? 1 : 1 - Math.exp(-dt * (p ? 2.6 : th ? 1.2 : this.camRate));
-    this.camera.position.lerp(this.want, k);
+    // The camera's own place is kept apart from the turn by hand, so a swipe goes round
+    // the target at once instead of waiting for the slow follow to catch up.
+    if (!this.orbitBase) this.orbitBase = this.camera.position.clone();
+    else if (!this.orbitOn && !this.orbitBusy()) this.orbitBase.copy(this.camera.position);
+    this.orbitBase.lerp(this.want, k);
+    this.camera.position.copy(this.orbitBase);
     this.look.lerp(this.wantLook, this.first ? 1 : 1 - Math.exp(-dt * 3.2));
     this.first = false;
+    this.orbit(dt);
     this.camera.lookAt(this.look);
     // Looking around by hand (a swipe or drag): turn the view; ten seconds after the last
     // swipe it eases back to where the camera itself looks.
@@ -3639,9 +3654,64 @@ export class Sorter implements Scene3D {
   private lookPitch = 0;
   private lookAt = -99;
 
-  /** Turn the view by hand (radians); it returns to the camera's own view after 10 s. */
+  /**
+   * Turning around a followed target by hand (a person, robot, forklift, parcel, or a
+   * moving stop such as the technician): what the camera follows (`orbitOn`, set every
+   * frame), the turn asked for (`orbitWant*`: yaw round the vertical, and height as an
+   * angle) and the turn shown, which eases after it. It stays until the target changes,
+   * then swings back to the camera's own view.
+   */
+  private orbitOn: unknown = null;
+  private orbitKey: unknown = null;
+  private orbitBase: THREE.Vector3 | null = null;
+  private orbitYaw = 0;
+  private orbitPitch = 0;
+  private orbitWantYaw = 0;
+  private orbitWantPitch = 0;
+  private readonly orbitV = new THREE.Vector3();
+
+  /** Still turned (or turning back) by hand. */
+  private orbitBusy(): boolean {
+    return Math.abs(this.orbitYaw) > 1e-3 || Math.abs(this.orbitPitch) > 1e-3;
+  }
+
+  /** Place the camera round the point it looks at, by the turn asked for by hand. */
+  private orbit(dt: number): void {
+    if (this.orbitOn !== this.orbitKey) {
+      this.orbitKey = this.orbitOn;
+      this.orbitWantYaw = 0;
+      this.orbitWantPitch = 0;
+    }
+    const e = 1 - Math.exp(-dt * 10);
+    this.orbitYaw += (this.orbitWantYaw - this.orbitYaw) * e;
+    this.orbitPitch += (this.orbitWantPitch - this.orbitPitch) * e;
+    if (!this.orbitBusy()) return;
+    const o = this.orbitV.subVectors(this.camera.position, this.look);
+    const r = o.length();
+    if (r < 1e-3) return;
+    o.applyAxisAngle(UP, this.orbitYaw);
+    // Height as an angle over the target: from just above the floor to almost straight down.
+    const el = clamp(Math.atan2(o.y, Math.hypot(o.x, o.z)) + this.orbitPitch, 0.12, 1.35);
+    const h = Math.hypot(o.x, o.z) || 1;
+    o.set((o.x / h) * Math.cos(el) * r, Math.sin(el) * r, (o.z / h) * Math.cos(el) * r);
+    const c = this.camera.position.copy(this.look).add(o);
+    c.y = clamp(c.y, 0.4, FLY_MAX_Y);
+    // (Inside the hall, the inbound wing included.)
+    [c.x, c.z] = inHall(c.x, c.z, 1.5);
+  }
+
+  /**
+   * A swipe or drag on the hall. Following something: turn the camera around it (it stays
+   * turned until something else is followed). Otherwise turn the view; it returns to the
+   * camera's own view after 10 s.
+   */
   lookAround(dYaw: number, dPitch: number): void {
     if (this.camMode === 'walk') return;
+    if (this.orbitOn) {
+      this.orbitWantYaw -= dYaw * 1.4;
+      this.orbitWantPitch = clamp(this.orbitWantPitch + dPitch, -1.4, 1.4);
+      return;
+    }
     this.lookYaw = clamp(this.lookYaw - dYaw, -Math.PI, Math.PI);
     this.lookPitch = clamp(this.lookPitch - dPitch, -0.9, 0.9);
     this.lookAt = this.time;
@@ -5582,6 +5652,7 @@ export class Sorter implements Scene3D {
       },
     });
     const tmp = new THREE.Vector3();
+    const techFwd = new THREE.Vector3();
     const tan = new THREE.Vector3();
     const nrm = new THREE.Vector3();
     /** The loop position nearest to the camera, so a ride starts where we are. */
@@ -5870,6 +5941,31 @@ export class Sorter implements Scene3D {
           return true;
         },
       },
+      {
+        // Behind the technician: at his bench, on his scooter to a chute that is down, at work on its photo eye.
+        name: 'technician',
+        dept: 'Technician',
+        hover: 'track',
+        rate: 3,
+        dwell: 32,
+        // (On the fly tour only while there is a fault to fix: idle at the bench he is not much to watch.)
+        skip: () => !this.crew || (this.crew.doing === 'bench' && this.faults.down.size === 0),
+        pick: () => {
+          const c = this.crew;
+          if (c) this.chaseStart(c.root.position, c.heading);
+        },
+        at: (p, l) => {
+          const c = this.crew;
+          if (!c) return false;
+          tmp.copy(c.root.position).setY(1.2);
+          // Standing still (bench, repair): swing round behind him, to look over his shoulder at his hands.
+          const still = c.doing === 'bench' || c.doing === 'repair';
+          if (still) this.chaseFwd.lerp(techFwd.set(Math.sin(c.heading), 0, Math.cos(c.heading)), 1 - Math.exp(-this.chaseDt * 2)).normalize();
+          // (Kept low: the bench is under the maintenance platform and the chutes under the loop.)
+          this.chase(tmp, still ? 2.2 : 3.4, 0.8, 0.35, 2, p, l);
+          return true;
+        },
+      },
     ];
     this.camera.position.set(-50, 6, -20);
   }
@@ -6125,6 +6221,48 @@ export class Sorter implements Scene3D {
   /** The hub's figures. */
   readonly kpi = new Kpi();
 
+  /** The people with a job in the hall, by name, and how their shift goes (see `hireStaff`). */
+  readonly staff = new Staff();
+
+  /**
+   * Names everyone with a job (after the country) and says how to tell they are working:
+   * the picker and loader of every north door, the unloaders at the inbound doors, the technician, the manual sorter and the
+   * forklift drivers in the south aisle. Long hair or a ponytail gives a woman's name.
+   */
+  private hireStaff(): void {
+    const now = this.hubTime();
+    const woman = (style: number, seed: number) => style === 2 || (style === 1 && seed % 2 === 1);
+    const hire = (role: Role, place: string, h: { root: THREE.Object3D; hairStyle: number } | undefined, obj: THREE.Object3D, seed: number, busy: () => boolean) =>
+      this.staff.add(role, place, woman(h?.hairStyle ?? 0, seed), seed, obj, busy, now);
+    this.docks.docks.forEach((d, i) => {
+      const place = `Door ${i + 1} · ${NORTH_CITIES[d.city]!.name}`;
+      hire('picker', place, d.worker, d.worker.root, i * 2 + 11, () => this.docks.busy(i, 0));
+      hire('loader', place, d.loader, d.loader.root, i * 2 + 12, () => this.docks.busy(i, 1));
+    });
+    for (const { d, n, h } of this.wing.people()) {
+      hire('unloader', `Door ${41 + d} · inbound`, h, h.root, 211 + d * 2 + n, () => this.wing.busy(d, n));
+    }
+    const crew = this.crew;
+    if (crew) hire('technician', 'Workbench · maintenance platform', crew.h, crew.h.root, 97, () => crew.doing !== 'bench');
+    hire('manual', 'Manual sort table', this.manual.worker, this.manual.worker.root, 131, () => this.manual.busy);
+    this.yard.lifts.forEach((l, k) => {
+      const driver = l.g.children.map((c) => RIGS.get(c)).find((x) => x);
+      hire('driver', `South aisle · forklift ${k + 1}`, driver, l.g, 173 + k, () => this.yard.busy(k));
+    });
+  }
+
+  /** The staff member a tapped person or forklift is, if any. */
+  staffOf(obj: THREE.Object3D): StaffMember | undefined {
+    return this.staff.find(obj);
+  }
+
+  /** Follow a staff member with the camera (from the list in the figures). */
+  followStaff(m: StaffMember): void {
+    const obj = m.obj as THREE.Object3D;
+    const kind = m.role === 'driver' ? ('forklift' as const) : ('person' as const);
+    this.followObject({ obj, h: kind === 'forklift' ? 2.0 : 1.75, kind, name: m.name });
+  }
+
   private readonly ray = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
   private readonly instParcels: Parcel[][] = [[], [], [], []];
@@ -6262,6 +6400,8 @@ export class Sorter implements Scene3D {
     if (hover === 'still' || hover === 'track') {
       // Hold the view the stop gives (following it if it moves).
       this.want.copy(pos);
+      // A moving stop (the technician, a robot, a forklift...): a swipe turns around it.
+      if (hover === 'track') this.orbitOn = poi;
       this.camRate = poi.rate ?? (hover === 'track' ? 4 : 1.2);
     } else {
       // Turn around what we look at: all the way round slowly, or a gentle swing to and fro.
@@ -6282,8 +6422,8 @@ export class Sorter implements Scene3D {
       // Only stops that belong to the look on screen (no empty DJ booth by day).
       const night = this.isNight();
       const inLook = this.pois.map((_, i) => i).filter((i) => {
-        const w = this.pois[i]!.when;
-        return !w || (w === 'night') === night;
+        const { when: w, skip } = this.pois[i]!;
+        return (!w || (w === 'night') === night) && !skip?.();
       });
       // With product info on, only the stops that have a card (if any fit this look).
       const withInfo = this.dwellFor ? inLook.filter((i) => this.dwellFor!(this.pois[i]!.name) !== undefined) : [];

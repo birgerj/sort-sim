@@ -4,9 +4,12 @@
 // shows until it is.
 import { COUNTRIES, COUNTRY, type CountryId } from '../sim/countries';
 import { loadSettings, saveSettings } from './hud';
+import { updateOnCard } from './pwa';
 
 const SPEAKER_ON =
   '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+const REFRESH =
+  '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
 const SPEAKER_OFF =
   '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 6 6"/><path d="m22 9-6 6"/></svg>';
 
@@ -61,15 +64,31 @@ export function startCard(onStart: (sound: boolean) => void): void {
     location.reload();
   };
 
+  // Update: only when a new version is waiting; it reloads into the new one.
+  const upd = el('button', 'sound-toggle update');
+  upd.type = 'button';
+  upd.hidden = true;
+  upd.title = 'A new version of Sort sim is ready';
+  // (Icons are this file's own constant SVG markup.)
+  upd.innerHTML = `${REFRESH}<span>Update</span>`;
+  const release = updateOnCard((apply) => {
+    upd.hidden = false;
+    upd.onclick = () => {
+      upd.disabled = true;
+      apply();
+    };
+  });
+
   const go = el('button', 'primary', 'Start');
   go.type = 'button';
   go.onclick = () => {
     wrap.remove();
+    release();
     onStart(sound);
   };
 
   const row = el('div', 'row');
-  row.append(snd, country);
+  row.append(snd, country, upd);
   card.append(row, go);
   wrap.append(card);
   document.body.append(wrap);

@@ -48,6 +48,8 @@ export interface Human {
   handR: THREE.Group;
   /** Ponytail (only with that hair style). */
   tail: THREE.Group | null;
+  /** Hair style as built: 0 short, 1 longer, 2 ponytail (staff names follow it). */
+  hairStyle: number;
   /** Eyes (scaled flat to blink) and mouth (scaled open to talk). */
   eyes: THREE.Group;
   mouth: THREE.Group;
@@ -1054,7 +1056,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     k.put(root);
   }
   const m: MotionState = { t: 0, walk: 0, amp: 0, px: 0, py: 0, pyaw: 0, proll: 0, drop: 0, footL: 0, footR: 0, tx: 0, tvx: 0, tz: 0, tvz: 0, yaw: 0, y: 0, seed: (seed % 997) / 997, talk: 0, talkE: 0, blinkAt: 1 + r(4) * 4 };
-  return { root, pelvis, torso, chest, armL, armR, foreL, foreR, head, legL, legR, kneeL, kneeR, footL, footR, handL, handR, tail, eyes, mouth, m };
+  return { root, pelvis, torso, chest, armL, armR, foreL, foreR, head, legL, legR, kneeL, kneeR, footL, footR, handL, handR, tail, hairStyle: style, eyes, mouth, m };
 }
 
 /** Layer the people's meshes are also on, so the ink pass can draw them on their own. */
