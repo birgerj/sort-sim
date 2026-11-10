@@ -86,6 +86,8 @@ interface Step {
   /** Point to face while doing it. */
   face?: V3;
   pose: 'walk' | 'pick' | 'carry' | 'drop' | 'push' | 'throw';
+  /** Not work: going over for a chat (counted as waiting in the staff figures). */
+  idle?: boolean;
   /** On tiptoe, arms out, eyes on the parcel (a fragile one). */
   careful?: boolean;
   /** A cage that moves along with the worker, to this spot. */
@@ -368,7 +370,7 @@ export class Docks {
           else this.plan(d);
           // Nothing to load (by day): over to the others for a chat.
           if (w === d.loader && day && !w.steps.length && w.chat && w.root.position.distanceTo(w.chat) > 0.3) {
-            w.steps.push({ beats: 1, to: w.chat, face: w.chatMid, pose: 'walk' });
+            w.steps.push({ beats: 1, to: w.chat, face: w.chatMid, pose: 'walk', idle: true });
           }
         }
         if (!w.step && w.steps.length) {
@@ -1134,6 +1136,13 @@ export class Docks {
       if (i === 0) k.batch(this.cageMeshGeo, this.cageMeshMat(), g).position.y = 1.1;
     }
     k.blob(at.x, at.z - 0.4, 1.8, 2.2);
+  }
+
+  /** Is this dock's picker (role 0) or loader (1) at work: a parcel in hand or a job planned? */
+  busy(dock: number, role: 0 | 1): boolean {
+    const d = this.docks[dock]!;
+    const w = role ? d.loader : d.worker;
+    return !!w.parcel || (!!w.step && !w.step.idle) || w.steps.some((s) => !s.idle);
   }
 
   /** A worker with jointed arms, legs and torso, so they can work and dance. */

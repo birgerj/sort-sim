@@ -62,7 +62,7 @@ export class ManualSort {
   private items = new Map<Item, State>();
   /** Parcels in each pigeonhole (some hold an envelope from the start). */
   private fill: number[] = [];
-  private worker: Human;
+  readonly worker: Human;
   private moves: Move[] = [];
   private move: Move | null = null;
   private mt0 = 0;
@@ -173,6 +173,11 @@ export class ManualSort {
 
   /** Once a frame: the worker's next move, and the pose. */
   private lastBt = 0;
+
+  /** At work: a move under way or planned (by day; at night the table rests). */
+  get busy(): boolean {
+    return !!this.move || this.moves.length > 0;
+  }
 
   update(bt: number, day: boolean): void {
     if (!this.move && !this.moves.length && day) this.plan();

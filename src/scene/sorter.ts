@@ -58,6 +58,7 @@ import { Clutter } from './clutter';
 import { BPM } from '../audio/composer';
 import { addressFor, type Address } from '../sim/addresses';
 import { Kpi } from '../sim/kpi';
+import { Staff, type Role, type StaffMember } from '../sim/staff';
 import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
@@ -1470,6 +1471,7 @@ export class Sorter implements Scene3D {
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
     this.buildCrew();
+    this.hireStaff();
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.eggs = new Eggs(this);
@@ -1746,6 +1748,7 @@ export class Sorter implements Scene3D {
       speed: this.speed,
     });
     this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown, dance: this.fx.dance, bpm: this.bpmNow });
+    this.staff.tick(this.hubTime());
     this.eggs.update(dt, bt, this.dayShown !== false, this.camera.position);
     // ...and their acts on top, once everyone has been animated.
     ANTICS.post(bt);
@@ -5848,6 +5851,45 @@ export class Sorter implements Scene3D {
 
   /** The hub's figures. */
   readonly kpi = new Kpi();
+
+  /** The people with a job in the hall, by name, and how their shift goes (see `hireStaff`). */
+  readonly staff = new Staff();
+
+  /**
+   * Names everyone with a job (after the country) and says how to tell they are working:
+   * the picker and loader of every north door, the technician, the manual sorter and the
+   * forklift drivers in the south aisle. Long hair or a ponytail gives a woman's name.
+   */
+  private hireStaff(): void {
+    const now = this.hubTime();
+    const woman = (style: number, seed: number) => style === 2 || (style === 1 && seed % 2 === 1);
+    const hire = (role: Role, place: string, h: { root: THREE.Object3D; hairStyle: number } | undefined, obj: THREE.Object3D, seed: number, busy: () => boolean) =>
+      this.staff.add(role, place, woman(h?.hairStyle ?? 0, seed), seed, obj, busy, now);
+    this.docks.docks.forEach((d, i) => {
+      const place = `Door ${i + 1} · ${NORTH_CITIES[d.city]!.name}`;
+      hire('picker', place, d.worker, d.worker.root, i * 2 + 11, () => this.docks.busy(i, 0));
+      hire('loader', place, d.loader, d.loader.root, i * 2 + 12, () => this.docks.busy(i, 1));
+    });
+    const crew = this.crew;
+    if (crew) hire('technician', 'Workbench · maintenance platform', crew.h, crew.h.root, 97, () => crew.doing !== 'bench');
+    hire('manual', 'Manual sort table', this.manual.worker, this.manual.worker.root, 131, () => this.manual.busy);
+    this.yard.lifts.forEach((l, k) => {
+      const driver = l.g.children.map((c) => RIGS.get(c)).find((x) => x);
+      hire('driver', `South aisle · forklift ${k + 1}`, driver, l.g, 173 + k, () => this.yard.busy(k));
+    });
+  }
+
+  /** The staff member a tapped person or forklift is, if any. */
+  staffOf(obj: THREE.Object3D): StaffMember | undefined {
+    return this.staff.find(obj);
+  }
+
+  /** Follow a staff member with the camera (from the list in the figures). */
+  followStaff(m: StaffMember): void {
+    const obj = m.obj as THREE.Object3D;
+    const kind = m.role === 'driver' ? ('forklift' as const) : ('person' as const);
+    this.followObject({ obj, h: kind === 'forklift' ? 2.0 : 1.75, kind, name: m.name });
+  }
 
   private readonly ray = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
