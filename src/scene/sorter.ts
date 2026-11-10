@@ -34,6 +34,7 @@ import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
+import { StackLights } from './stackLights';
 import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper, lightPools, parcelWear } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
@@ -2943,6 +2944,7 @@ export class Sorter implements Scene3D {
       if (ch.belt && this.dockFree(k) < 0.9) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
       else ch.lamp.color.copy(ch.col).multiplyScalar(0.35 + ch.flash * 3 + this.kick * 0.3);
     });
+    this.updateTowers();
 
     // Moving heads: a new figure every bar, moving with the beat.
     const pattern = Math.floor(bar) % 4;
@@ -3281,6 +3283,56 @@ export class Sorter implements Scene3D {
     }
     this.boxes.clear();
     this.flushBlobs();
+  }
+
+  /** The chutes' signal towers (stackLights.ts), and which towers belong to which chute. */
+  private towers: StackLights | null = null;
+  private towersOf = new Map<number, number[]>();
+  private towerAt(chute: number, at: V3, height: number): void {
+    if (!this.towers) {
+      const shell = this.std(0xb9b5ab, 0.55, 0.05, 0xeeebe3);
+      this.towers = new StackLights(CHUTES.length * 2, shell);
+      this.put(this.towers.group);
+    }
+    const i = this.towers.add(at, height);
+    const list = this.towersOf.get(chute) ?? [];
+    list.push(i);
+    this.towersOf.set(chute, list);
+  }
+
+  /**
+   * The towers' lamps: green while parcels wait at the chute (on the dock belt, or on the pickup
+   * table), amber blinking while its truck is in cleardown (for robot stations: the table is
+   * full), red flashing on a fault (the dock belt full, nothing more can come down). At the
+   * night party they are disco lights.
+   */
+  private updateTowers(): void {
+    const t = this.towers;
+    if (!t) return;
+    const blink = Math.floor(this.bt * 2) % 2 ? 1 : 0.15;
+    const party = this.dayShown === false;
+    for (const [k, list] of this.towersOf) {
+      let green = 0;
+      let amber = 0;
+      let red = 0;
+      const ch = this.chutes[k];
+      if (ch?.belt && this.dockOf.has(k)) {
+        const free = this.dockFree(k);
+        green = free < 0.98 ? 1 : 0;
+        if (free < 0.9) red = blink;
+        const door = DOCK_X.indexOf(this.dockOf.get(k)!);
+        if (door >= 0 && this.trucks.clearing(door)) amber = blink;
+      } else if (this.stationOf.has(k)) {
+        const q = this.stationQueue[this.stationOf.get(k)!]?.length ?? 0;
+        green = q > 0 ? 1 : 0;
+        if (q >= STATION_CAP) amber = blink;
+      } else if (ch) green = ch.flash > 0.05 ? 1 : 0;
+      for (const i of list) {
+        if (party) t.disco(i, this.bt, this.kick);
+        else t.set(i, { green, amber, red }, 1.6);
+      }
+    }
+    t.flush();
   }
 
   private mesh(geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
@@ -3784,7 +3836,19 @@ export class Sorter implements Scene3D {
   private buildBoards(): void {
     const board = new THREE.MeshBasicMaterial({ map: this.screens.board });
     const frame = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
-    const place = (x: number, y: number, z: number, ry: number) => {
+    // Wall things go between the columns (north ones stand 2.4 m further east): moved to the
+    // middle of the bay they are in when they would touch a column.
+    const clear = (x: number, z: number, half: number) => {
+      const cols = z < HZC ? COLUMNS.map((c) => c + 2.4) : COLUMNS;
+      const hit = cols.find((c) => Math.abs(c - x) < half + 0.6);
+      if (hit === undefined) return x;
+      const left = Math.max(...cols.filter((c) => c < hit), WX);
+      const right = Math.min(...cols.filter((c) => c > hit), EX);
+      // The bay on the side the thing mostly was.
+      return x < hit ? (left + hit) / 2 : (hit + right) / 2;
+    };
+    const place = (x0: number, y: number, z: number, ry: number) => {
+      const x = clear(x0, z, 3.1);
       const g = new THREE.Group();
       g.position.set(x, y, z);
       g.rotation.y = ry;
@@ -3800,12 +3864,12 @@ export class Sorter implements Scene3D {
     const clock = new THREE.MeshBasicMaterial({ map: this.screens.clock, transparent: true });
     const clk = (x: number, y: number, z: number, ry: number) => {
       const m = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), clock);
-      m.position.set(x, y, z);
+      m.position.set(Math.abs(z - HZC) > 1 ? clear(x, z, 0.7) : x, y, z);
       m.rotation.y = ry;
       this.put(m);
     };
     clk(WX + 0.1, 8.4, 4, Math.PI / 2);
-    clk(-30, 8.4, NZ + 0.1, 0);
+    clk(-22, 8.4, NZ + 0.1, 0);
     clk(-30, 8.4, HZ - 0.1, Math.PI);
   }
 
@@ -4104,7 +4168,8 @@ export class Sorter implements Scene3D {
       const belt = Path.fillet(pts, 1.2);
       beltPaths.push(belt);
       this.box('post', legMat, c.end.x + 0.9, 1.4, c.end.z, 0.08, 2.8, 0.08);
-      this.box(`lamp${c.k}`, c.lamp, c.end.x + 0.9, 2.9, c.end.z, 0.3, 0.3, 0.3);
+      // A signal tower on the post (on top of it, facing the dock).
+      this.towerAt(c.k, v(c.end.x + 0.9, 2.8, c.end.z), 0.62);
       this.cages.set(c.k, Docks.projectorAt(dx));
       this.chutes[c.k] = { s: c.s, side: c.side, path: c.path, col: c.col, lamp: c.lamp, flash: 0, belt };
     });
@@ -4125,10 +4190,14 @@ export class Sorter implements Scene3D {
         const yaw = Math.atan2(this.n.x, this.n.z);
         const px = this.p.x + this.n.x * 0.12;
         const pz = this.p.z + this.n.z * 0.12;
-        m.makeRotationY(yaw).setPosition(px + this.n.x * 0.05, 1.65, pz + this.n.z * 0.05);
+        // (A centimetre in front of the frame's face, or the two flicker through each other.)
+        m.makeRotationY(yaw).setPosition(px + this.n.x * 0.062, 1.65, pz + this.n.z * 0.062);
         shows.place(k, m);
         // A bracket and frame on the pillar.
         this.box('chutedisp', legMat, px + this.n.x * 0.02, 1.65, pz + this.n.z * 0.02, Math.abs(this.n.z) * 0.86 + 0.06, 0.48, Math.abs(this.n.x) * 0.86 + 0.06);
+        // Above it, a signal tower on a little shelf bracket off the pillar.
+        this.box('towerbr', legMat, px + this.n.x * 0.1, 1.96, pz + this.n.z * 0.1, Math.abs(this.n.z) * 0.18 + Math.abs(this.n.x) * 0.22, 0.03, Math.abs(this.n.x) * 0.18 + Math.abs(this.n.z) * 0.22);
+        this.towerAt(k, v(px + this.n.x * 0.12, 1.975, pz + this.n.z * 0.12), 0.5);
         const dock = dockXs.findIndex(([c]) => c === k);
         if (k === REJECT) shows.set(k, 'NO READ', 'to manual sorting', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
         else if (dock >= 0) {
