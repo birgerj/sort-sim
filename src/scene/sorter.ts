@@ -149,6 +149,8 @@ const PLATFORM_Y = 2.4;
 const HOLD_S = 18;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
 const LANE_QUEUE = 7;
+/** Parcels on their way from the trucks to one lane at most (the feed path is long: a lane needs several in flight to run full). */
+const FEED_MAX = 10;
 /** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
 const ROBOT_SHARE = 0.12;
 /** Rounds on the sorter before a parcel whose chute stays full is put aside (overflow). */
@@ -1856,7 +1858,7 @@ export class Sorter implements Scene3D {
     let best = -1;
     const n = (k: number) => this.waiting[k]! + this.feeding[k]!;
     // (Only lanes with a truck at one of their doors that has parcels left.)
-    for (let k = 0; k < this.lanes.length; k++) if (n(k) < LANE_QUEUE && this.feedDoor(k) >= 0 && (best < 0 || n(k) < n(best))) best = k;
+    for (let k = 0; k < this.lanes.length; k++) if (this.feedable(k) && (best < 0 || n(k) < n(best))) best = k;
     return best;
   }
 
@@ -2324,8 +2326,13 @@ export class Sorter implements Scene3D {
    * telescope, which runs onto the collector and into the lane (then on as `spawn`). Spaced so no
    * two meet on the collector, and each unloader keeps a human pace.
    */
+  /** Lane k can take another parcel from its trucks: room in its queue and on its way, and a truck with parcels. */
+  private feedable(k: number): boolean {
+    return this.feeding[k]! < FEED_MAX && this.waiting[k]! + this.feeding[k]! < LANE_QUEUE + FEED_MAX && this.feedDoor(k) >= 0;
+  }
+
   private feed(k: number, color: RGB | null, lead: boolean): boolean {
-    if (this.waiting[k]! + this.feeding[k]! >= LANE_QUEUE) return false;
+    if (this.feeding[k]! >= FEED_MAX || this.waiting[k]! + this.feeding[k]! >= LANE_QUEUE + FEED_MAX) return false;
     const d = this.feedDoor(k);
     if (d < 0) return false;
     const t = this.wing.take(d, this.fb);
@@ -2343,8 +2350,13 @@ export class Sorter implements Scene3D {
     if (Math.abs(dx - mx) > 0.01) pts.push(v(mx, LANE_Y, COLL_Z));
     const path = Path.fillet(pts, 0.5);
     const run = path.len / BEAT_M;
-    // A parcel off the wall every few seconds per unloader (in belt beats at this tempo and speed).
-    const gap = (3600 / (UNLOAD_PER_HOUR * this.wing.crewSize)) * (this.bpmNow / 60) * this.speed;
+    // A parcel off the stack every few seconds per unloader (in belt beats at this tempo and speed),
+    // faster as the rate goes up: the unloaders keep ahead of what is asked (a little more than
+    // their share), so at the top rates the lanes run full and a queue builds at the infeeds.
+    const human = (3600 / (UNLOAD_PER_HOUR * this.wing.crewSize)) * (this.bpmNow / 60) * this.speed;
+    const demand = this.rate / Math.max(1, this.bpmNow * this.speed);
+    const need = INBOUND_DOORS.length / Math.max(1e-3, demand * 1.4);
+    const gap = Math.max(0.9, Math.min(human, need));
     const t0 = Math.max(this.ct, this.doorNext[d]!, this.feedArrive[k]! + 0.6 - run);
     this.doorNext[d] = t0 + gap;
     this.feedArrive[k] = t0 + run;
