@@ -41,8 +41,12 @@ sound is generated in code.
    their windows (the office: two managers at their computers; the canteen, 32 m long:
    tables, lockers, a counter with coffee, plants, people on their break) and their doors
    onto a balcony hung on the wall, with a stair down along the wall at its north end. The
-   manager's walkway inside the loop is coated dark green (the safe zone) between
-   black/yellow taped edges. The old break area by the robots is gone; its coffee
+   manager's walkway inside the loop has black/yellow taped edges, with (in Day) a worn floor
+   coating only just greener than the concrete. More walkways: from the canteen stair down the west
+   wall, under the loop's west end, to the corridor south of the loop, and an aisle along the north
+   docks between the roll cages and the doors. The dock projectors show each waiting parcel's
+   roll cage (1–6, from the cage by the belt on its west side, clockwise; the cage cards carry the
+   number too) with a soft beam onto it. **Ride a robot** stays with one robot, pickup after pickup. The old break area by the robots is gone; its coffee
    machine and vending machine stay.
 1. **Infeed (north-west).** Five lanes, 4 m apart, start at the collectors in
    the inbound wing, each through a scan tunnel, then a buffer (where parcels
@@ -176,7 +180,7 @@ The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go 
 |---|---|
 | Go to a department | `1`–`9`, `0` |
 | Camera: Auto / Fly / Follow a parcel | `A` / `F` / `P` (next parcel) |
-| Walk and fly | `V`, then `W A S D` / arrows, drag to look, `Shift` run (fly faster), `E` / `Q` or `PgUp` / `PgDn` up and down, `Esc` stop; touch: a stick under the left thumb (at its edge you run), drag on the right half to look, hold **Up** / **Down** at the right edge. Climbing from the floor is flying, coming down to it is walking; **Walk / Fly** at the top lands or takes off. The menu stays usable |
+| Walk and fly | `V`, then `W A S D` / arrows, drag to look, `Shift` run (fly faster), `E` / `Q` or `PgUp` / `PgDn` up and down, `Esc` stop; touch: a stick under the left thumb (at its edge you run), drag on the right half to look, hold **Up** / **Down** at the right edge. Climbing from the floor is flying, coming down to it is walking; **Walk / Fly** at the top lands or takes off. Keep climbing and you fly up through the roof (hidden from above, with everything hung under it) until the whole floor fits on screen; look straight down. **Go to → Top down** goes there at once. The menu stays usable |
 | Time: Day / Night / Day ↔ night cycle (in Settings) | `D` / `N` / `C` |
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start), Fault (a dock chute goes down now) | buttons (`?rate=`, `?faults=0`) |

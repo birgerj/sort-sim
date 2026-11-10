@@ -425,7 +425,7 @@ export class Life {
     ring.holes.push(hole);
     // A floor coating only just greener than the concrete (the taped edges do the marking);
     // a touch lighter than meant, as the wear map below is light grey where untouched.
-    const coat = this.k.std(0x2b302d, 0.6, 0, 0xccd8cd);
+    const coat = this.k.std(0x2b302d, 0.6, 0, 0x6c766d);
     coat.map = walkwayWear(x0, x1, z, w);
     coat.polygonOffset = true;
     coat.polygonOffsetFactor = -1;
@@ -461,6 +461,43 @@ export class Life {
     return c;
   }
 
+  /**
+   * A straight walkway: the floor from x0–x1, z0–z1 coated (like the loop's walkway; the Sorter
+   * shows the coating in Day only) and black/yellow tape laid along `tapes` ([ax, az, bx, bz],
+   * usually the long edges, left open where another walkway joins). Gives back the coating.
+   */
+  addFloorPath(x0: number, x1: number, z0: number, z1: number, tapes: [number, number, number, number][]): THREE.Mesh {
+    const coat = this.k.std(0x2b302d, 0.6, 0, 0x6c766d);
+    const map = pathWear().clone();
+    // (UVs of the plane run 0–1 over it; the wear repeats every 8 m.)
+    map.repeat.set((x1 - x0) / 8, (z1 - z0) / 8);
+    map.offset.set(x0 / 8, z0 / 8);
+    map.needsUpdate = true;
+    coat.map = map;
+    coat.polygonOffset = true;
+    coat.polygonOffsetFactor = -1;
+    coat.polygonOffsetUnits = -1;
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), coat);
+    c.rotation.x = -Math.PI / 2;
+    c.position.set((x0 + x1) / 2, 0.008, (z0 + z1) / 2);
+    c.userData.noInk = true;
+    this.k.put(c, 'day');
+    for (const [ax, az, bx, bz] of tapes) this.tape(ax, az, bx, bz);
+    return c;
+  }
+
+  /** A strip of black/yellow floor tape from a to b (12 cm wide; by day, in both day looks). */
+  private tape(ax: number, az: number, bx: number, bz: number): void {
+    const len = Math.hypot(bx - ax, bz - az);
+    const t = hazardStripes();
+    t.repeat.set(len / 0.6, 1);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.12), new THREE.MeshBasicMaterial({ map: t, polygonOffset: true, polygonOffsetFactor: -2 }));
+    m.rotation.set(-Math.PI / 2, 0, -Math.atan2(bz - az, bx - ax));
+    m.position.set((ax + bx) / 2, 0.014, (az + bz) / 2);
+    m.userData.noInk = true;
+    this.k.put(m, 'day');
+  }
+
   /** Someone walking a round along `pts` (metres per beat), for routes the scene knows best. */
   addWalker(look: Parameters<typeof buildHuman>[1], pts: V2[], speed: number): void {
     const h = buildHuman(this.k, look);
@@ -487,7 +524,8 @@ export class Life {
       this.walkers.push(walker(h, route, speed, phase * route.len));
     };
     // Team leader with a tablet, round the manual sorting and control room.
-    walk({ shirt: 0x6b3fd1, trousers: 0x22283f, cap: 0x1d1d1f }, [[-44, 15.3], [-26, 15.3], [-26, 17.3], [-44, 17.3]], 0.7, 0, true);
+    // (Its south side clear of the parcel trolley by the manual sorting.)
+    walk({ shirt: 0x6b3fd1, trousers: 0x22283f, cap: 0x1d1d1f }, [[-44, 15.3], [-26, 15.3], [-26, 16.7], [-44, 16.7]], 0.7, 0, true);
     // Two colleagues walking the infeed side.
     if (XMAS) {
       // Father Christmas walks a round by the control room, waving.
@@ -857,6 +895,57 @@ function walkwayWear(x0: number, x1: number, z: number, w: number): THREE.Canvas
   t.anisotropy = 8;
   t.repeat.set(1 / W, 1 / D);
   t.offset.set(-X0 / W, -Y0 / D);
+  return t;
+}
+
+/** Wear for straight walkways: 8 × 8 m that repeats (stains, scuffs, worn patches, speckle), light grey where untouched. */
+let pathWearTex: THREE.CanvasTexture | null = null;
+function pathWear(): THREE.CanvasTexture {
+  if (pathWearTex) return pathWearTex;
+  const S = 1024;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  const r = new Rng(815);
+  const m = S / 8;
+  g.fillStyle = '#e6e6e6';
+  g.fillRect(0, 0, S, S);
+  const blot = (x: number, y: number, rad: number, col: string, a: number) => {
+    // (Drawn nine times round the tile, so it repeats without seams.)
+    for (const ox of [-S, 0, S])
+      for (const oy of [-S, 0, S]) {
+        const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, rad);
+        gr.addColorStop(0, col.replace('A', String(a)));
+        gr.addColorStop(1, col.replace('A', '0'));
+        g.fillStyle = gr;
+        g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
+      }
+  };
+  for (let i = 0; i < 120; i++) blot(r.next() * S, r.next() * S, (0.25 + r.next() * 0.45) * m, 'rgba(255,255,255,A)', 0.08);
+  for (let i = 0; i < 10; i++) blot(r.next() * S, r.next() * S, (0.1 + r.next() * 0.5) * m, 'rgba(250,246,238,A)', 0.18 + r.next() * 0.14);
+  for (let i = 0; i < 4; i++) blot(r.next() * S, r.next() * S, (0.15 + r.next() * 0.5) * m, r.next() < 0.5 ? 'rgba(40,30,18,A)' : 'rgba(10,12,12,A)', 0.1 + r.next() * 0.08);
+  g.lineCap = 'round';
+  for (let i = 0; i < 70; i++) {
+    const x = r.next() * S;
+    const y = r.next() * S;
+    const a = (r.next() - 0.5) * 0.9 + (r.next() < 0.5 ? 0 : Math.PI / 2);
+    const len = (0.05 + r.next() * 0.3) * m;
+    g.strokeStyle = `rgba(20,20,20,${0.08 + r.next() * 0.14})`;
+    g.lineWidth = 0.6 + r.next() * 1.6;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    g.stroke();
+  }
+  for (let i = 0; i < 30000; i++) {
+    g.fillStyle = r.next() < 0.5 ? `rgba(255,255,255,${r.next() * 0.08})` : `rgba(0,0,0,${r.next() * 0.07})`;
+    g.fillRect(r.next() * S, r.next() * S, 1 + r.next() * 1.5, 1 + r.next() * 1.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  pathWearTex = t;
   return t;
 }
 

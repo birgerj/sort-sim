@@ -1592,6 +1592,34 @@ export class Sorter implements Scene3D {
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
+    // More walkways, where people walk (checked clear of machines, belts and parked things):
+    // from the canteen's stair down the west wall, under the loop's west end, to the corridor
+    // south of the loop by the manual sorting and control room; and an aisle along the north
+    // docks between the roll cages and the doors. (Coating in Day only, like the loop's.)
+    {
+      const ax0 = WX + 2.6;
+      const ax1 = WX + 4.8;
+      const az0 = canteenStairFoot(CANTEEN) - 1.7;
+      const bz0 = 11.9;
+      const bz1 = 13.9;
+      const bx1 = -24;
+      this.realOnly.push(
+        this.life.addFloorPath(ax0, ax1, az0, bz0, [
+          // (Open on the west side by the stair's foot.)
+          [ax0, az0, ax1, az0],
+          [ax1, az0, ax1, bz0],
+          [ax0, az0 + 2.4, ax0, bz1],
+        ]),
+        this.life.addFloorPath(ax0, bx1, bz0, bz1, [
+          [ax1, bz0, bx1, bz0],
+          [ax0, bz1, bx1, bz1],
+        ]),
+        this.life.addFloorPath(-14, 100, -34.6, -32.2, [
+          [-14, -34.6, 100, -34.6],
+          [-14, -32.2, 100, -32.2],
+        ]),
+      );
+    }
     this.buildCrew();
     // The canteen behind the west wall, with its windows and door in the wall and a stair down inside.
     this.canteen = new Canteen(this, CANTEEN);
