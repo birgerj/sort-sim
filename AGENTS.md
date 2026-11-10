@@ -79,6 +79,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
 | `src/sim/rng.ts` | Seeded random numbers. |
 | `scripts/shots.mjs` | Headless screenshots per department, day and night. |
+| `scripts/measure.mjs` | Headless measurement per department and look: draw calls and triangles per render pass, triangles by distance and by size on screen, which groups own the small ones, update time. `npm run build && node scripts/measure.mjs [dept ...]` (`MEASURE_LOOKS`, `MEASURE_QUALITY`, `MEASURE_FRAMES`); writes `measure/<quality>.json`. |
 
 ## Two clocks
 
