@@ -77,6 +77,7 @@ export class Hud {
   private tabs = new Map<Tab, HTMLButtonElement>();
   private open: Tab | null = null;
   private deptBtns = new Map<string, HTMLButtonElement>();
+  private deptWhen = new Map<string, 'day' | 'night'>();
   private camBtns = new Map<string, HTMLButtonElement>();
   private timeBtns = new Map<TimeMode | DayLook, HTMLButtonElement>();
   private speedBtns = new Map<number, HTMLButtonElement>();
@@ -121,7 +122,14 @@ export class Hud {
     if (this.caption.textContent !== cap) this.caption.textContent = cap;
     this.caption.classList.toggle('show', !!cap);
     const visiting = this.scene.visiting();
-    for (const [id, b] of this.deptBtns) b.classList.toggle('on', id === visiting);
+    const night = this.scene.isNight();
+    for (const [id, b] of this.deptBtns) {
+      b.classList.toggle('on', id === visiting);
+      // Night-only stops (dance floor, DJ) only at night.
+      const w = this.deptWhen.get(id);
+      const show = !w || (w === 'night') === night;
+      if (b.hidden === show) b.hidden = !show;
+    }
     const mode = this.scene.cameraMode();
     for (const [id, b] of this.camBtns) b.classList.toggle('on', id === mode);
     const look = this.settings.look ?? 'minimal';
@@ -133,7 +141,6 @@ export class Hud {
       if (b.textContent !== ms) b.textContent = ms;
     }
     for (const [v, b] of this.qualityBtns) b.classList.toggle('on', v === this.settings.quality);
-    const night = this.scene.isNight();
     const nt = this.tabs.get('night')!;
     if (nt.hidden === night) nt.hidden = !night;
     if (!night && this.open === 'night') this.openTab(null);
@@ -268,6 +275,7 @@ export class Hud {
       b.onclick = () => this.scene.visit(d.id);
       grid.append(b);
       this.deptBtns.set(d.id, b);
+      if (d.when) this.deptWhen.set(d.id, d.when);
     });
     go.append(grid);
 

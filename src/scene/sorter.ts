@@ -286,6 +286,117 @@ const REAL_PALETTE = new Map<number, { c: number; metal?: number; rough?: number
   [DAY.blue, { c: 0x24508f, metal: 0.2, rough: 0.5 }],
 ]);
 
+/**
+ * The front of a 42U rack, as a picture (256 × 704 px; a unit is 16 px): from the bottom,
+ * servers (1U and 2U, with drive bays and vents), a few empty slots (dark, with the rails' holes),
+ * blanking panels, switches with rows of ports, and patch panels near the top. Pushes where the
+ * status LEDs go (u, v from the bottom-left, 0…1, and a colour) into `leds`.
+ */
+function rackFront(seed: number, leds: [number, number, number][], console = false): THREE.CanvasTexture {
+  let s = seed >>> 0;
+  const r = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const Wp = 256;
+  const Hp = 704;
+  const U = 16;
+  const led = (x: number, y: number, c: number) => leds.push([x / Wp, 1 - y / Hp, c]);
+  return canvasTex(Wp, Hp, (g) => {
+    // Inside of the rack: dark, with the mounting rails and their square holes.
+    g.fillStyle = '#0c0d10';
+    g.fillRect(0, 0, Wp, Hp);
+    g.fillStyle = '#2a2d33';
+    g.fillRect(0, 0, 14, Hp);
+    g.fillRect(Wp - 14, 0, 14, Hp);
+    g.fillStyle = '#0c0d10';
+    for (let y = 3; y < Hp; y += U / 3) {
+      g.fillRect(5, y, 4, 3);
+      g.fillRect(Wp - 9, y, 4, 3);
+    }
+    let u = 0;
+    const slot = (n: number) => {
+      const y = Hp - (u + n) * U;
+      u += n;
+      return y;
+    };
+    const ears = (y: number, h: number, c: string) => {
+      g.fillStyle = c;
+      g.fillRect(2, y + 1, Wp - 4, h - 2);
+    };
+    while (u < 42) {
+      const left = 42 - u;
+      const top = u > 32;
+      const pick = r();
+      if (console && u >= 17 && u < 20) {
+        // Where the console tray slides out: a blank 1U above and below, and the tray's own face.
+        const y = slot(Math.min(3, left));
+        ears(y, U * 3, '#1b1d22');
+        continue;
+      }
+      if (pick < 0.08 && left >= 1) {
+        // An empty slot or two.
+        slot(Math.min(left, 1 + Math.floor(r() * 2)));
+      } else if (top && pick < 0.55 && left >= 1) {
+        // Patch panel: a row of 24 ports with numbers, and cables.
+        const y = slot(1);
+        ears(y, U, '#1e2025');
+        for (let i = 0; i < 24; i++) {
+          const x = 24 + i * 9;
+          g.fillStyle = '#05060a';
+          g.fillRect(x, y + 5, 7, 6);
+          if (r() < 0.7) {
+            g.fillStyle = ['#2f7fd0', '#d0b030', '#3aa860', '#c84a4a'][Math.floor(r() * 4)]!;
+            g.fillRect(x + 1, y + 6, 5, 4);
+          }
+        }
+      } else if (pick < 0.32 && left >= 1) {
+        // Switch: two rows of ports, each with a tiny LED, a console port and status lights.
+        const y = slot(1);
+        ears(y, U, '#2b2e35');
+        for (let row = 0; row < 2; row++) {
+          for (let i = 0; i < 20; i++) {
+            const x = 26 + i * 9 + Math.floor(i / 6) * 3;
+            const py = y + 2 + row * 6;
+            g.fillStyle = '#07080b';
+            g.fillRect(x, py, 7, 5);
+            if (r() < 0.6) led(x + 3.5, py + 1, r() < 0.85 ? 0x40ff70 : 0xffb030);
+          }
+        }
+        for (let i = 0; i < 4; i++) {
+          g.fillStyle = '#4a4e57';
+          g.fillRect(222 + (i % 2) * 8, y + 3 + Math.floor(i / 2) * 6, 6, 4);
+        }
+        led(18, y + 8, 0x40ff70);
+      } else if (pick < 0.42 && left >= 1) {
+        // Blanking panel.
+        const y = slot(1);
+        ears(y, U, '#17191d');
+        g.fillStyle = '#22252b';
+        for (let x = 30; x < Wp - 30; x += 6) g.fillRect(x, y + 6, 3, 4);
+      } else {
+        // Server, 1U or 2U: drive bays on the left, vents, a power button and LEDs.
+        const n = left >= 2 && r() < 0.6 ? 2 : 1;
+        const y = slot(n);
+        const h = n * U;
+        ears(y, h, ['#30343b', '#2a2d33', '#3a3e46'][Math.floor(r() * 3)]!);
+        const bays = n === 2 ? 12 : 8;
+        const cols = n === 2 ? 6 : 8;
+        for (let i = 0; i < bays; i++) {
+          const bx = 22 + (i % cols) * 21;
+          const by = y + 3 + Math.floor(i / cols) * (U - 2);
+          g.fillStyle = '#1a1c21';
+          g.fillRect(bx, by, 19, n === 2 ? 11 : 10);
+          g.fillStyle = '#4b5059';
+          g.fillRect(bx + 2, by + 2, 11, 2);
+          led(bx + 16, by + 3, r() < 0.9 ? 0x40a0ff : 0xffb030);
+        }
+        g.fillStyle = '#16181c';
+        for (let x = 200; x < 236; x += 4) g.fillRect(x, y + 3, 2, h - 6);
+        led(242, y + 5, 0x40ff70);
+        if (n === 2) led(242, y + 12, 0x40a0ff);
+      }
+    }
+  });
+}
+
 /** Position and direction of travel at loop position s (counter-clockwise seen from above: east along the north side). */
 function loopAt(s: number, pos: V3, tan: V3): void {
   s = ((s % LOOP_LEN) + LOOP_LEN) % LOOP_LEN;
@@ -2945,6 +3056,7 @@ export class Sorter implements Scene3D {
       else ch.lamp.color.copy(ch.col).multiplyScalar(0.35 + ch.flash * 3 + this.kick * 0.3);
     });
     this.updateTowers();
+    this.blinkRacks();
 
     // Moving heads: a new figure every bar, moving with the beat.
     const pattern = Math.floor(bar) % 4;
@@ -3290,7 +3402,8 @@ export class Sorter implements Scene3D {
   private towersOf = new Map<number, number[]>();
   private towerAt(chute: number, at: V3, height: number): void {
     if (!this.towers) {
-      const shell = this.std(0xb9b5ab, 0.55, 0.05, 0xeeebe3);
+      // A black housing: the lamps stand out against it.
+      const shell = this.std(0x121316, 0.45, 0.2, 0x1d1d1f);
       this.towers = new StackLights(CHUTES.length * 2, shell);
       this.put(this.towers.group);
     }
@@ -3322,7 +3435,8 @@ export class Sorter implements Scene3D {
       const green = !red && !amber && fill > 0.001 ? 1 : 0;
       for (const i of list) {
         if (party) t.disco(i, this.bt, this.kick);
-        else t.set(i, { green, amber, red }, 1.6);
+        // (Filmic tone mapping in the realistic day pales bright colours: a little less there keeps them saturated.)
+        else t.set(i, { green, amber, red }, this.real ? 0.9 : 1.3);
       }
     }
     t.flush();
@@ -3829,6 +3943,89 @@ export class Sorter implements Scene3D {
     }
     // (The plan shows the sorter, the docks and the robot floor: the infeed and store ends are cropped.)
     return { hall: [LX - 12, LX + STRAIGHT + 12, NZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
+  }
+
+  /**
+   * Server racks in a row against the west wall, front to the hall: 42U cabinets with a glass
+   * door frame, filled with switches, patch panels, servers and a few empty slots, a pull-out
+   * console with a live screen, and small status LEDs that blink at their own pace (one
+   * instanced mesh). The fronts are drawn on canvases, so the detail costs no geometry.
+   */
+  private buildRacks(): void {
+    const N = 6;
+    const W = 0.8;
+    const H = 2.2;
+    const D = 1.1;
+    const X = WX + 0.15 + D / 2;
+    const Z0 = 27.6 - N * W;
+    const body = this.std(0x2c2f36, 0.55, 0.4, DAY.magenta);
+    const frame = this.std(0x1a1c20, 0.5, 0.5, 0x1d1d1f);
+    const ledPos: number[] = [];
+    const ledCol: number[] = [];
+    const ledRate: number[] = [];
+    for (let r = 0; r < N; r++) {
+      const z = Z0 + W / 2 + r * W;
+      this.box('rack', body, X, H / 2, z, D, H, W);
+      // The door frame round the front, and a plinth.
+      const fx = X + D / 2 + 0.01;
+      this.box('rackframe', frame, fx, H - 0.06, z, 0.03, 0.12, W);
+      this.box('rackframe', frame, fx, 0.06, z, 0.03, 0.12, W);
+      for (const s of [-1, 1]) this.box('rackframe', frame, fx, H / 2, z + s * (W / 2 - 0.04), 0.03, H, 0.08);
+      // The front: what is in the rack, drawn once (seeded per rack).
+      const leds: [number, number, number][] = [];
+      const tex = rackFront(r * 97 + 5, leds, r === 2);
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.16, H - 0.24), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: 0.4 }));
+      face.position.set(fx - 0.005, H / 2, z);
+      face.rotation.y = Math.PI / 2;
+      this.put(face);
+      for (const [u, v, c] of leds) {
+        // (u, v: 0…1 across and up the front.)
+        ledPos.push(fx + 0.004, 0.12 + v * (H - 0.24), z - (W - 0.16) / 2 + u * (W - 0.16));
+        ledCol.push(c);
+        ledRate.push(0.6 + Math.random() * 5);
+      }
+      if (r === 2) {
+        // The console: a tray pulled out at waist height, with a keyboard and a screen folded up.
+        const ty = 1.05;
+        this.box('rackcon', frame, fx + 0.2, ty, z, 0.4, 0.025, W - 0.2);
+        this.box('rackkbd', this.std(0x15161a, 0.6, 0.2, 0x1d1d1f), fx + 0.23, ty + 0.02, z, 0.16, 0.012, 0.42);
+        this.box('rackcon', frame, fx + 0.03, ty + 0.2, z, 0.025, 0.36, W - 0.2);
+        const scr = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.26, 0.31), new THREE.MeshBasicMaterial({ map: this.screens.dash }));
+        scr.position.set(fx + 0.045, ty + 0.2, z);
+        scr.rotation.y = Math.PI / 2;
+        this.put(scr);
+      }
+    }
+    // The LEDs: tiny squares, one instanced mesh; their brightness changes every frame.
+    const n = ledCol.length;
+    const geo = new THREE.PlaneGeometry(0.012, 0.008).rotateY(Math.PI / 2);
+    const im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial(), n);
+    const o = new THREE.Object3D();
+    for (let i = 0; i < n; i++) {
+      o.position.set(ledPos[i * 3]!, ledPos[i * 3 + 1]!, ledPos[i * 3 + 2]!);
+      o.updateMatrix();
+      im.setMatrixAt(i, o.matrix);
+      im.setColorAt(i, this.c.setHex(ledCol[i]!));
+    }
+    im.userData.noInk = true;
+    this.put(im);
+    this.rackLeds = { im, col: ledCol, rate: ledRate };
+  }
+
+  /** The racks' status LEDs (see buildRacks): each blinks at its own pace, some steady. */
+  private rackLeds: { im: THREE.InstancedMesh; col: number[]; rate: number[] } | null = null;
+  private blinkRacks(): void {
+    const r = this.rackLeds;
+    if (!r || this.camera.position.distanceToSquared(this.t.set(-60, 1.2, 25)) > 30 * 30) return;
+    const t = this.time;
+    for (let i = 0; i < r.col.length; i++) {
+      const f = r.rate[i]!;
+      // Activity LEDs flicker; a third are steady (link or power).
+      const on = i % 3 === 0 ? 1 : Math.sin(t * f * 6.283 + i * 1.7) + Math.sin(t * f * 2.3 + i) > 0.3 ? 1 : 0.12;
+      this.c.setHex(r.col[i]!).multiplyScalar(on * 1.3);
+      r.im.setColorAt(i, this.c);
+    }
+    if (r.im.instanceColor) r.im.instanceColor.needsUpdate = true;
   }
 
   /** Big KPI boards and clocks on the walls, showing live numbers and the real time. */
@@ -4821,27 +5018,8 @@ export class Sorter implements Scene3D {
     this.only = dayOnly;
     this.person(dx + 0.3, dz - 1.5, 0.2);
 
-    // Computing: magenta GPU racks next to the control room.
-    const magenta = this.std(DAY.magenta, 0.7, 0.1);
-    const gpu = canvasTex(128, 64, (g) => {
-      g.fillStyle = '#d6339a';
-      g.fillRect(0, 0, 128, 64);
-      g.fillStyle = '#1d1d1f';
-      g.font = `700 34px ${SIGN_FONT}`;
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillText('GPU', 64, 34);
-    });
-    const leds = new THREE.MeshBasicMaterial({ color: 0xffd6ec });
-    for (let k = 0; k < 3; k++) {
-      const x = -58.5 + k * 1.8;
-      this.box('gpu', magenta, x, 2.1, 27.6, 1.5, 4.2, 1.5);
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5), new THREE.MeshBasicMaterial({ map: gpu }));
-      p.position.set(x, 3.5, 26.84);
-      p.rotation.y = Math.PI;
-      this.put(p);
-      for (let j = 0; j < 5; j++) this.box('leds', leds, x, 0.8 + j * 0.45, 26.84, 1.1, 0.05, 0.02);
-    }
+    // Computing: a row of server racks against the west wall (see buildRacks).
+    this.buildRacks();
 
     // People and parcel trolleys.
     this.person(-57, 14, Math.PI / 2);
@@ -4872,7 +5050,7 @@ export class Sorter implements Scene3D {
       g.strokeRect(-20, -18, 40, 36);
       for (const [x, h] of [[-12, 10], [-3, 20], [6, 14], [14, 24]] as const) g.fillRect(x - 3, 14 - h, 6, h);
     });
-    this.sign('Computing', '#d6339a', -56.7, 6.6, 26, 0, (g) => {
+    this.sign('Computing', '#d6339a', -59.4, 5.2, 24.9, Math.PI / 2, (g) => {
       g.strokeRect(-14, -20, 28, 22);
       g.beginPath();
       g.moveTo(0, 2);
@@ -5193,7 +5371,7 @@ export class Sorter implements Scene3D {
         },
       },
       // Behind the DJ, over the shoulder: the decks and the crowd beyond.
-      { ...fixed('dj', v(PLATFORM_X - 2.0, PLATFORM_Y + 1.95, 0.45), v(PLATFORM_X + 2.4, PLATFORM_Y + 0.9, -0.15)), hover: 'still', when: 'night' },
+      { ...fixed('dj', v(PLATFORM_X - 2.0, PLATFORM_Y + 1.95, 0.45), v(PLATFORM_X + 2.4, PLATFORM_Y + 0.9, -0.15), 'DJ'), hover: 'still', when: 'night' },
       fixed('break', v(-29, 3.2, 26.8), v(-36.5, 0.8, 31.2)),
       {
         // Standing on a tray: eye height above it, at tray speed, looking ahead.
@@ -5533,8 +5711,9 @@ export class Sorter implements Scene3D {
   }
 
   /** Departments the camera can go to. */
-  departments(): { id: string; label: string }[] {
-    return this.pois.filter((p) => p.dept).map((p) => ({ id: p.name, label: p.dept! }));
+  /** Stops to go to; `when` keeps one to the day or the night (the dance floor, the DJ). */
+  departments(): { id: string; label: string; when?: 'day' | 'night' }[] {
+    return this.pois.filter((p) => p.dept).map((p) => ({ id: p.name, label: p.dept!, when: p.when }));
   }
 
   /** Fly to (or with `jump`, appear at) a department and stay there (turning slowly) until another camera mode is chosen. */
