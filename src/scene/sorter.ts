@@ -1495,6 +1495,7 @@ export class Sorter implements Scene3D {
         beams,
         northDoors: NORTH_DOORS,
         southDoors: SOUTH_DOORS,
+        wing: { ...WING, doors: INBOUND_DOORS },
         loopEdge: edge,
         trees: [
           { x: -55.8, z: 21.2, h: 7 },
@@ -4209,7 +4210,7 @@ export class Sorter implements Scene3D {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil, 'night');
-    this.buildWing(floor.material, 6.2, longNight, ceil.material, (o) => this.put(o, 'night'));
+    this.buildWing(floor.material, longNight, ceil.material, (o) => this.put(o, 'night'));
 
     const steel = this.std(0x4c515a, 0.5, 0.7, DAY.steel);
     for (let x = WX + 2; x <= EX - 2; x += 10) this.box('steel', steel, x, HH - 0.5, HZC, 0.35, 0.8, HD);
@@ -5351,7 +5352,7 @@ export class Sorter implements Scene3D {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
-    this.buildWing(floorMat, FLOOR_TILE_M, wallMat, ceilMat, add, (m) => grime(m, 0.22, 9, 'xz'));
+    this.buildWing(floorMat, wallMat, ceilMat, add);
     add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
     // The LED fixtures' light on the floor (they hang every 10 m in four rows; see buildDay).
     const spots: [number, number][] = [];
@@ -5367,31 +5368,23 @@ export class Sorter implements Scene3D {
    * The wing's floor, walls (the north one with the inbound doors, the short one west where the
    * wing is wider than the hall) and ceiling, in one look's materials. Shapes, so UVs are metres.
    */
-  private buildWing(floor: THREE.Material | THREE.Material[], tile: number, wall: THREE.Material, ceil: THREE.Material | THREE.Material[], add: (o: THREE.Object3D) => void, fix?: (m: THREE.MeshStandardMaterial) => void): void {
+  private buildWing(floor: THREE.Material | THREE.Material[], wall: THREE.Material, ceil: THREE.Material | THREE.Material[], add: (o: THREE.Object3D) => void): void {
     const w = WING.x1 - WING.x0;
     const d = NZ - WING.z0;
     const cx = (WING.x0 + WING.x1) / 2;
     const cz = (WING.z0 + NZ) / 2;
-    const fm = (floor as THREE.MeshStandardMaterial).clone();
-    for (const key of ['map', 'roughnessMap'] as const) {
-      const t = fm[key];
-      if (!t) continue;
-      const c = t.clone();
-      c.repeat.set(1 / tile, 1 / tile);
-      c.needsUpdate = true;
-      fm[key] = c;
+    // The floor: the hall's own floor (same material), its texture carried on into the wing: UVs
+    // as if the hall's floor plane went on (u from the west wall over the hall's width, v from the
+    // south wall over its depth; the textures repeat), so slabs, joints and grime run straight through.
+    const fg = new THREE.PlaneGeometry(w, d);
+    const pos = fg.getAttribute('position');
+    const uv = fg.getAttribute('uv');
+    for (let i = 0; i < pos.count; i++) {
+      const x = cx + pos.getX(i);
+      const z = cz - pos.getY(i);
+      uv.setXY(i, (x - WX) / HW, (HZ - z) / HD);
     }
-    fix?.(fm);
-    const rect = (rw: number, rh: number) => {
-      const sh = new THREE.Shape();
-      sh.moveTo(-rw / 2, -rh / 2);
-      sh.lineTo(rw / 2, -rh / 2);
-      sh.lineTo(rw / 2, rh / 2);
-      sh.lineTo(-rw / 2, rh / 2);
-      sh.closePath();
-      return new THREE.ShapeGeometry(sh);
-    };
-    const f = new THREE.Mesh(rect(w, d), fm);
+    const f = new THREE.Mesh(fg, floor);
     f.rotation.x = -Math.PI / 2;
     f.position.set(cx, 0, cz);
     add(f);
@@ -5466,7 +5459,7 @@ export class Sorter implements Scene3D {
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil);
     this.flatOnly.push(ceil);
-    this.buildWing(floor.material, 6, longDay, ceil.material, (o) => {
+    this.buildWing(floor.material, longDay, ceil.material, (o) => {
       this.put(o);
       this.flatOnly.push(o);
     });

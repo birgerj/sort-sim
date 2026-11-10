@@ -27,6 +27,8 @@ export interface XmasLayout {
   snow: { x: number; z: number }[];
   /** The Christmas market: stall and stable, side by side, backs to the south wall. */
   market: { x: number; z: number };
+  /** The inbound wing north of the north wall (x0…x1, back wall at z0): the garlands follow its walls, its doors get wreaths. */
+  wing?: { x0: number; x1: number; z0: number; doors: number[] };
 }
 
 const RED = 0xc8102e;
@@ -167,8 +169,34 @@ export class Xmas {
     };
     const y = 6.2;
     const step = 6;
+    // Along a straight stretch of wall: swags of about `step` metres, ends `inset` in from the corners.
+    const along = (ax: number, az: number, bx: number, bz: number, inset = 1) => {
+      const len = Math.hypot(bx - ax, bz - az) - 2 * inset;
+      if (len < 2) return;
+      const n = Math.max(1, Math.round(len / step));
+      const ux = (bx - ax) / Math.hypot(bx - ax, bz - az);
+      const uz = (bz - az) / Math.hypot(bx - ax, bz - az);
+      for (let i = 0; i < n; i++) {
+        const s0 = inset + (len * i) / n;
+        const s1 = inset + (len * (i + 1)) / n;
+        swag(new THREE.Vector3(ax + ux * s0, y, az + uz * s0), new THREE.Vector3(ax + ux * s1, y, az + uz * s1), 0.9);
+      }
+    };
     for (const z of [L.nz + 0.25, L.hz - 0.25]) {
-      for (let x = L.wx + 2; x + step <= L.ex - 1; x += step) swag(new THREE.Vector3(x, y, z), new THREE.Vector3(x + step, y, z), 0.9);
+      for (let x = L.wx + 2; x + step <= L.ex - 1; x += step) {
+        // (Not across the opening to the wing: there the garland follows the wing's walls.)
+        if (L.wing && z < 0 && x + step > L.wing.x0 && x < L.wing.x1 + 0.5) continue;
+        swag(new THREE.Vector3(x, y, z), new THREE.Vector3(x + step, y, z), 0.9);
+      }
+    }
+    if (L.wing) {
+      const W = L.wing;
+      along(W.x0 + 0.25, L.nz, W.x0 + 0.25, W.z0 + 0.25);
+      along(W.x0 + 0.25, W.z0 + 0.25, W.x1 - 0.25, W.z0 + 0.25);
+      along(W.x1 - 0.25, W.z0 + 0.25, W.x1 - 0.25, L.nz + 0.25);
+      // On the north wall again from the wing's east wall to the first full swag.
+      const first = L.wx + 2 + step * Math.ceil((W.x1 + 0.5 - (L.wx + 2)) / step);
+      along(W.x1 - 0.25, L.nz + 0.25, first, L.nz + 0.25, 0);
     }
     for (let z = L.nz + 2; z + step <= L.hz - 1; z += step) swag(new THREE.Vector3(L.wx + 0.25, y, z), new THREE.Vector3(L.wx + 0.25, y, z + step), 0.9);
     const green = this.k.std(0x14532d, 0.9, 0, GREEN);
@@ -194,7 +222,7 @@ export class Xmas {
     const red = this.k.std(0x8a0b1f, 0.5, 0.1, RED);
     const berries = this.k.std(0x8a0b1f, 0.3, 0.2, 0xe2231a);
     const bow = merge([new THREE.ConeGeometry(0.14, 0.26, 4).rotateZ(Math.PI / 2).translate(-0.13, 0, 0), new THREE.ConeGeometry(0.14, 0.26, 4).rotateZ(-Math.PI / 2).translate(0.13, 0, 0), new THREE.SphereGeometry(0.06, 8, 6)]);
-    const doors = [...L.northDoors.map((x) => [x, L.nz + 0.2, 0] as const), ...L.southDoors.map((x) => [x, L.hz - 0.2, Math.PI] as const)];
+    const doors = [...L.northDoors.map((x) => [x, L.nz + 0.2, 0] as const), ...(L.wing?.doors ?? []).map((x) => [x, L.wing!.z0 + 0.2, 0] as const), ...L.southDoors.map((x) => [x, L.hz - 0.2, Math.PI] as const)];
     const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, dy: number, dz: number) => {
       const m = new THREE.InstancedMesh(geo, mat, doors.length);
       const o = new THREE.Object3D();
