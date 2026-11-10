@@ -3965,12 +3965,12 @@ export class Sorter implements Scene3D {
     const ledRate: number[] = [];
     for (let r = 0; r < N; r++) {
       const z = Z0 + W / 2 + r * W;
-      this.box('rack', body, X, H / 2, z, D, H, W);
+      this.box('srvrack', body, X, H / 2, z, D, H, W);
       // The door frame round the front, and a plinth.
       const fx = X + D / 2 + 0.01;
-      this.box('rackframe', frame, fx, H - 0.06, z, 0.03, 0.12, W);
-      this.box('rackframe', frame, fx, 0.06, z, 0.03, 0.12, W);
-      for (const s of [-1, 1]) this.box('rackframe', frame, fx, H / 2, z + s * (W / 2 - 0.04), 0.03, H, 0.08);
+      this.box('srvrackframe', frame, fx, H - 0.06, z, 0.03, 0.12, W);
+      this.box('srvrackframe', frame, fx, 0.06, z, 0.03, 0.12, W);
+      for (const s of [-1, 1]) this.box('srvrackframe', frame, fx, H / 2, z + s * (W / 2 - 0.04), 0.03, H, 0.08);
       // The front: what is in the rack, drawn once (seeded per rack).
       const leds: [number, number, number][] = [];
       const tex = rackFront(r * 97 + 5, leds, r === 2);
@@ -3987,9 +3987,9 @@ export class Sorter implements Scene3D {
       if (r === 2) {
         // The console: a tray pulled out at waist height, with a keyboard and a screen folded up.
         const ty = 1.05;
-        this.box('rackcon', frame, fx + 0.2, ty, z, 0.4, 0.025, W - 0.2);
-        this.box('rackkbd', this.std(0x15161a, 0.6, 0.2, 0x1d1d1f), fx + 0.23, ty + 0.02, z, 0.16, 0.012, 0.42);
-        this.box('rackcon', frame, fx + 0.03, ty + 0.2, z, 0.025, 0.36, W - 0.2);
+        this.box('srvrackcon', frame, fx + 0.2, ty, z, 0.4, 0.025, W - 0.2);
+        this.box('srvrackkbd', this.std(0x15161a, 0.6, 0.2, 0x1d1d1f), fx + 0.23, ty + 0.02, z, 0.16, 0.012, 0.42);
+        this.box('srvrackcon', frame, fx + 0.03, ty + 0.2, z, 0.025, 0.36, W - 0.2);
         const scr = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.26, 0.31), new THREE.MeshBasicMaterial({ map: this.screens.dash }));
         scr.position.set(fx + 0.045, ty + 0.2, z);
         scr.rotation.y = Math.PI / 2;
@@ -5018,8 +5018,13 @@ export class Sorter implements Scene3D {
     this.only = dayOnly;
     this.person(dx + 0.3, dz - 1.5, 0.2);
 
-    // Computing: a row of server racks against the west wall (see buildRacks).
-    this.buildRacks();
+    // Computing: a row of server racks against the west wall (see buildRacks), day and night.
+    {
+      const was = this.only;
+      this.only = undefined;
+      this.buildRacks();
+      this.only = was;
+    }
 
     // People and parcel trolleys.
     this.person(-57, 14, Math.PI / 2);

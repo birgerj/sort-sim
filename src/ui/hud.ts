@@ -49,7 +49,7 @@ export function loadSettings(): Settings {
   return s;
 }
 
-function saveSettings(s: Settings): void {
+export function saveSettings(s: Settings): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(s));
   } catch {
@@ -189,7 +189,7 @@ export class Hud {
     };
     quiet.onclick = () => s.remove();
     row.append(go, quiet);
-    card.append(row, el('p', 'keys', 'Keys: 1–9, 0 departments · A auto · F fly · P follow · V walk (WASD, drag to look, Shift run, Esc stop) · [ ] belt speed · D day · N night · C cycle · M sound · H hide · Esc closes a panel'));
+    card.append(row);
     s.append(card);
     return s;
   }
