@@ -86,6 +86,8 @@ export class Hud {
   readonly root = el('div', 'hud');
   private caption = el('div', 'caption');
   private info: InfoPanel;
+  /** The product-info tour is offered (`?pv=true`). */
+  private readonly pv: boolean;
   /** The dock: the tabs, always at the bottom. */
   private bar = el('nav', 'bar dock');
   /** The panel of the open tab, above the dock. */
@@ -126,9 +128,13 @@ export class Hud {
     private opts: { showStart: boolean; showUi: boolean; onQuality: () => void; onGame?: () => void },
   ) {
     this.info = new InfoPanel(scene);
-    const q = new URLSearchParams(location.search).get('info');
-    if (q === '0' || q === '1') settings.info = q === '1';
-    this.info.setOn(settings.info !== false);
+    // The product-info tour exists only with `?pv=true` (or `?pv=1`) in the address: without it
+    // there are no cards and no setting for them, and the tour keeps its own pace.
+    const params = new URLSearchParams(location.search);
+    this.pv = ['true', '1'].includes((params.get('pv') ?? '').toLowerCase());
+    const q = params.get('info');
+    if (this.pv && (q === '0' || q === '1')) settings.info = q === '1';
+    this.info.setOn(this.pv && settings.info !== false);
     this.root.append(this.caption, this.info.el, this.sheet, this.bar);
     if (!opts.showUi) this.root.classList.add('off');
     this.buildBar();
@@ -486,10 +492,10 @@ export class Hud {
       };
       xb.append(b);
     }
-    const ib = this.row(sec, 'Product info', 'A card with the product behind each tour stop; the tour stays long enough to read it.');
+    const ib = this.pv ? this.row(sec, 'Product info', 'A card with the product behind each tour stop; the tour stays long enough to read it.') : el('div');
     ib.classList.add('cols2');
     const infoBtns: HTMLButtonElement[] = [];
-    for (const [on, label] of [[false, 'Off'], [true, 'On']] as const) {
+    for (const [on, label] of this.pv ? ([[false, 'Off'], [true, 'On']] as const) : []) {
       const b = el('button', on === (this.settings.info !== false) ? 'on' : '', label);
       b.onclick = () => {
         this.settings.info = on;
