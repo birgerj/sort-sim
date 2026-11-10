@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { defineConfig, type Plugin } from 'vitest/config';
+import { BODIES_FILE, encodeBodies } from './src/scene/bakedBodies';
 
 /**
  * Writes the service worker at build time, with the list of every file in the
@@ -35,11 +36,26 @@ function serviceWorker(): Plugin {
   };
 }
 
+/**
+ * Makes the people's bodies at build time (src/scene/bakedBodies.ts) and writes them next
+ * to the page, so the browser only has to read them. (Runs before the service worker's file
+ * list is made, so the file is kept for offline use too.)
+ */
+function bakedBodies(): Plugin {
+  return {
+    name: 'sort-sim-baked-bodies',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: BODIES_FILE, source: encodeBodies() });
+    },
+  };
+}
+
 export default defineConfig({
   // Relative asset paths, so the build works on GitHub Pages under /sort-sim/.
   base: './',
   build: { chunkSizeWarningLimit: 1200 },
-  plugins: [serviceWorker()],
+  plugins: [bakedBodies(), serviceWorker()],
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',

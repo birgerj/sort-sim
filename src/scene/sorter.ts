@@ -19,6 +19,8 @@ import { pcDigits } from '../sim/countries';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
@@ -28,18 +30,26 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
 import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z, TABLE as MANUAL_TABLE } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
+import { FaultCrew, type FaultSite } from './faults';
+import { FAULT_TEXT, FaultPlan } from '../sim/faults';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
 import { buildHuman } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
+import { StackLights } from './stackLights';
+import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper, lightPools, parcelWear } from './realDay';
 import { Life } from './life';
-import { HUMANS } from './people';
+import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
 import { Xmas } from './xmas';
 import { XMAS } from '../sim/season';
 import { Party } from './party';
 import { Roof, ceilingWithLights, roofLights } from './roof';
 import { Crowd } from './crowd';
+import { ANTICS } from './antics';
+import { Eggs } from './eggs';
+import { RIGS } from './people';
+import type { Sfx } from '../audio/music';
 import { defaultNightFx, type NightFx } from './nightFx';
 import { Batcher } from './batch';
 import { Trucks } from './trucks';
@@ -52,7 +62,7 @@ import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIE
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
 import { Screens, type HubMap } from './screens';
-import { brushed, cardboardSide, checkerPlate, dayFloor, dayWall, sectionalDoor, wireMesh } from './textures';
+import { brushed, cardboardNormal, cardboardSide, checkerPlate, claddingNormal, dayFloor, dayWall, floorJointNormal, roofDeckNormal, sectionalDoor, stretchFilm, stretchFilmNormal, wireMesh } from './textures';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { FLOOR, type FleetEvent } from '../sim/robotFleet';
 
@@ -122,6 +132,10 @@ const INDUCT = [10, 14, 18, 22];
 /** Half-beat offset of each lane's landing (see above). */
 const LANE_PHASE = [0, 0.5, 0, 0.5];
 const LANE_Y = 0.9;
+/** Belt height where an infeed joins the loop: just above the lips of the trays. */
+const LANE_TOP = LOOP_Y + 0.05;
+/** Half the width of a tray (its lips), seen from the loop's centre line. */
+const TRAY_HALF = 0.62;
 /** How far out from the loop's centre line each lane turns onto it (sets the lane's x). */
 const LANE_OUT = 3.6;
 /** z of the scan tunnels (just inside the north wall). */
@@ -252,6 +266,138 @@ const DAY = {
   ink: 0x1d1d1f,
   blue: 0x1755fe,
 };
+
+/**
+ * The realistic day's colours for the illustration palette: what these parts would really be.
+ * Frames, cages and racks are galvanised or grey steel, the monitoring and computing corners
+ * dark grey-blue enclosures, blue a deeper RAL blue; scan tunnels keep a signal orange.
+ * Safety yellow and red stay. (Only for materials; people, parcels and trucks keep theirs.)
+ */
+/** Dark RAL blue (steel structure paint), for supports and legs in the realistic day. */
+const RAL_BLUE = 0x1e3a66;
+
+const REAL_PALETTE = new Map<number, { c: number; metal?: number; rough?: number }>([
+  [DAY.teal, { c: 0x9da3a9, metal: 0.7, rough: 0.42 }],
+  [DAY.tealD, { c: 0x6e757c, metal: 0.6, rough: 0.45 }],
+  [DAY.tealL, { c: 0xb5bbc1, metal: 0.5, rough: 0.5 }],
+  [DAY.tealP, { c: 0xb9bfc5, metal: 0.8, rough: 0.35 }],
+  [DAY.orange, { c: 0xd8862a, metal: 0.2, rough: 0.5 }],
+  [DAY.orangeL, { c: 0xe0a85a }],
+  [DAY.purple, { c: 0x3d4450, metal: 0.3, rough: 0.55 }],
+  [DAY.magenta, { c: 0x2b2f36, metal: 0.3, rough: 0.5 }],
+  [DAY.blue, { c: 0x24508f, metal: 0.2, rough: 0.5 }],
+]);
+
+/**
+ * The front of a 42U rack, as a picture (256 × 704 px; a unit is 16 px): from the bottom,
+ * servers (1U and 2U, with drive bays and vents), a few empty slots (dark, with the rails' holes),
+ * blanking panels, switches with rows of ports, and patch panels near the top. Pushes where the
+ * status LEDs go (u, v from the bottom-left, 0…1, and a colour) into `leds`.
+ */
+function rackFront(seed: number, leds: [number, number, number][], console = false): THREE.CanvasTexture {
+  let s = seed >>> 0;
+  const r = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const Wp = 256;
+  const Hp = 704;
+  const U = 16;
+  const led = (x: number, y: number, c: number) => leds.push([x / Wp, 1 - y / Hp, c]);
+  return canvasTex(Wp, Hp, (g) => {
+    // Inside of the rack: dark, with the mounting rails and their square holes.
+    g.fillStyle = '#0c0d10';
+    g.fillRect(0, 0, Wp, Hp);
+    g.fillStyle = '#2a2d33';
+    g.fillRect(0, 0, 14, Hp);
+    g.fillRect(Wp - 14, 0, 14, Hp);
+    g.fillStyle = '#0c0d10';
+    for (let y = 3; y < Hp; y += U / 3) {
+      g.fillRect(5, y, 4, 3);
+      g.fillRect(Wp - 9, y, 4, 3);
+    }
+    let u = 0;
+    const slot = (n: number) => {
+      const y = Hp - (u + n) * U;
+      u += n;
+      return y;
+    };
+    const ears = (y: number, h: number, c: string) => {
+      g.fillStyle = c;
+      g.fillRect(2, y + 1, Wp - 4, h - 2);
+    };
+    while (u < 42) {
+      const left = 42 - u;
+      const top = u > 32;
+      const pick = r();
+      if (console && u >= 17 && u < 20) {
+        // Where the console tray slides out: a blank 1U above and below, and the tray's own face.
+        const y = slot(Math.min(3, left));
+        ears(y, U * 3, '#1b1d22');
+        continue;
+      }
+      if (pick < 0.08 && left >= 1) {
+        // An empty slot or two.
+        slot(Math.min(left, 1 + Math.floor(r() * 2)));
+      } else if (top && pick < 0.55 && left >= 1) {
+        // Patch panel: a row of 24 ports with numbers, and cables.
+        const y = slot(1);
+        ears(y, U, '#1e2025');
+        for (let i = 0; i < 24; i++) {
+          const x = 24 + i * 9;
+          g.fillStyle = '#05060a';
+          g.fillRect(x, y + 5, 7, 6);
+          if (r() < 0.7) {
+            g.fillStyle = ['#2f7fd0', '#d0b030', '#3aa860', '#c84a4a'][Math.floor(r() * 4)]!;
+            g.fillRect(x + 1, y + 6, 5, 4);
+          }
+        }
+      } else if (pick < 0.32 && left >= 1) {
+        // Switch: two rows of ports, each with a tiny LED, a console port and status lights.
+        const y = slot(1);
+        ears(y, U, '#2b2e35');
+        for (let row = 0; row < 2; row++) {
+          for (let i = 0; i < 20; i++) {
+            const x = 26 + i * 9 + Math.floor(i / 6) * 3;
+            const py = y + 2 + row * 6;
+            g.fillStyle = '#07080b';
+            g.fillRect(x, py, 7, 5);
+            if (r() < 0.6) led(x + 3.5, py + 1, r() < 0.85 ? 0x40ff70 : 0xffb030);
+          }
+        }
+        for (let i = 0; i < 4; i++) {
+          g.fillStyle = '#4a4e57';
+          g.fillRect(222 + (i % 2) * 8, y + 3 + Math.floor(i / 2) * 6, 6, 4);
+        }
+        led(18, y + 8, 0x40ff70);
+      } else if (pick < 0.42 && left >= 1) {
+        // Blanking panel.
+        const y = slot(1);
+        ears(y, U, '#17191d');
+        g.fillStyle = '#22252b';
+        for (let x = 30; x < Wp - 30; x += 6) g.fillRect(x, y + 6, 3, 4);
+      } else {
+        // Server, 1U or 2U: drive bays on the left, vents, a power button and LEDs.
+        const n = left >= 2 && r() < 0.6 ? 2 : 1;
+        const y = slot(n);
+        const h = n * U;
+        ears(y, h, ['#30343b', '#2a2d33', '#3a3e46'][Math.floor(r() * 3)]!);
+        const bays = n === 2 ? 12 : 8;
+        const cols = n === 2 ? 6 : 8;
+        for (let i = 0; i < bays; i++) {
+          const bx = 22 + (i % cols) * 21;
+          const by = y + 3 + Math.floor(i / cols) * (U - 2);
+          g.fillStyle = '#1a1c21';
+          g.fillRect(bx, by, 19, n === 2 ? 11 : 10);
+          g.fillStyle = '#4b5059';
+          g.fillRect(bx + 2, by + 2, 11, 2);
+          led(bx + 16, by + 3, r() < 0.9 ? 0x40a0ff : 0xffb030);
+        }
+        g.fillStyle = '#16181c';
+        for (let x = 200; x < 236; x += 4) g.fillRect(x, y + 3, 2, h - 6);
+        led(242, y + 5, 0x40ff70);
+        if (n === 2) led(242, y + 12, 0x40a0ff);
+      }
+    }
+  });
+}
 
 /** Position and direction of travel at loop position s (counter-clockwise seen from above: east along the north side). */
 function loopAt(s: number, pos: V3, tan: V3): void {
@@ -388,7 +534,16 @@ export class Path {
 }
 
 /** Sweeps a 2D profile (across, up) along a path. uv.y is the distance in metres. */
-function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, step = 0.35): THREE.BufferGeometry {
+/**
+ * A plane that ends an extrusion at an angle (a mitred end): whatever lies past it (on the side
+ * `n` points to) is slid back along the path onto it. Only for an end on a straight stretch.
+ */
+interface Cut {
+  c: V3;
+  n: V3;
+}
+
+function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, step = 0.35, cut?: Cut): THREE.BufferGeometry {
   const n = Math.max(2, Math.ceil((s1 - s0) / step) + 1);
   const segs = prof.length - 1;
   const pos = new Float32Array(n * segs * 2 * 3);
@@ -407,11 +562,26 @@ function extrude(path: Path, prof: [number, number][], s0 = 0, s1 = path.len, st
       for (let k = 0; k < 2; k++) {
         const [px, py] = prof[j + k]!;
         const o = (j * n + i) * 2 + k;
-        pos[o * 3] = P.x + Sd.x * px + N.x * py;
-        pos[o * 3 + 1] = P.y + Sd.y * px + N.y * py;
-        pos[o * 3 + 2] = P.z + Sd.z * px + N.z * py;
+        let x = P.x + Sd.x * px + N.x * py;
+        let y = P.y + Sd.y * px + N.y * py;
+        let z = P.z + Sd.z * px + N.z * py;
+        let ss = s;
+        if (cut) {
+          const over = (x - cut.c.x) * cut.n.x + (z - cut.c.z) * cut.n.z;
+          const along = T.x * cut.n.x + T.z * cut.n.z;
+          if (over > 0 && along > 1e-3) {
+            const back = over / along;
+            x -= T.x * back;
+            y -= T.y * back;
+            z -= T.z * back;
+            ss -= back;
+          }
+        }
+        pos[o * 3] = x;
+        pos[o * 3 + 1] = y;
+        pos[o * 3 + 2] = z;
         uv[o * 2] = k;
-        uv[o * 2 + 1] = s;
+        uv[o * 2 + 1] = ss;
       }
     }
   }
@@ -514,13 +684,14 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   return t;
 }
 /** Belt surface: dark rubber by night, light rollers by day. */
-function drawBelt(t: THREE.CanvasTexture, day: boolean): void {
+/** The belt surface: white slats in the drawn day, mid-grey rubber in the realistic day, dark at night. */
+function drawBelt(t: THREE.CanvasTexture, day: boolean, real = false): void {
   const c = t.image as HTMLCanvasElement;
   const g = c.getContext('2d');
   if (!g) return;
-  g.fillStyle = day ? '#eef0f3' : '#1f2125';
+  g.fillStyle = real && day ? '#7b8087' : day ? '#eef0f3' : '#1f2125';
   g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = day ? '#c4cad1' : '#34373d';
+  g.fillStyle = real && day ? '#62666c' : day ? '#c4cad1' : '#34373d';
   for (let y = 0; y < c.height; y += 8) g.fillRect(0, y, c.width, day ? 2 : 3);
   t.needsUpdate = true;
 }
@@ -615,6 +786,39 @@ function noise(g: CanvasRenderingContext2D, w: number, h: number, base: number, 
   g.putImageData(id, 0, 0);
 }
 
+/** A seasick parcel's green (third round on the loop). */
+const SICK = new THREE.Color(0x8fd14f);
+
+/**
+ * A rubber duck in a unit box (scaled per parcel like the others), facing +z: body, tail,
+ * head, wings, an orange beak and black eyes (as vertex colours; the yellow is the instance colour).
+ */
+function duckGeometry(): THREE.BufferGeometry {
+  const ell = (rx: number, ry: number, rz: number, x: number, y: number, z: number, col: [number, number, number]) => {
+    const g = new THREE.SphereGeometry(1, 18, 12).scale(rx, ry, rz).translate(x, y, z).toNonIndexed();
+    const n = g.attributes.position!.count;
+    g.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: n }, () => col).flat(), 3));
+    return g;
+  };
+  const W: [number, number, number] = [1, 1, 1];
+  const parts = [
+    ell(0.44, 0.3, 0.46, 0, -0.2, -0.04, W),
+    // The tail, pointing up at the back.
+    ell(0.16, 0.2, 0.14, 0, -0.04, -0.42, W),
+    ell(0.26, 0.26, 0.25, 0, 0.22, 0.18, W),
+    ell(0.1, 0.17, 0.3, -0.37, -0.16, -0.06, W),
+    ell(0.1, 0.17, 0.3, 0.37, -0.16, -0.06, W),
+    ell(0.13, 0.05, 0.13, 0, 0.14, 0.44, [1, 0.55, 0.9]),
+    ell(0.045, 0.05, 0.03, -0.12, 0.3, 0.4, [0.05, 0.05, 0.05]),
+    ell(0.045, 0.05, 0.03, 0.12, 0.3, 0.4, [0.05, 0.05, 0.05]),
+  ];
+  const g = mergeGeometries(parts)!;
+  // Sit it on the bottom of the box: nothing below −0.5.
+  g.computeBoundingBox();
+  g.translate(0, -0.5 - g.boundingBox!.min.y, 0);
+  return g;
+}
+
 /** 'dock': at a truck dock, moved by the Docks (worker or slide into a roll cage). */
 type Mode = 'path' | 'loop' | 'tween' | 'carriage' | 'shuttle' | 'fixed' | 'queue' | 'table' | 'robot' | 'dock' | 'manual' | 'held';
 
@@ -627,8 +831,8 @@ export interface Parcel {
   /** Glow colour once scanned: destination colour, or the track colour for lead parcels. */
   glow: THREE.Color;
   lead: boolean;
-  /** 0 box, 1 polybag, 2 tube. */
-  shape: 0 | 1 | 2;
+  /** 0 box, 1 polybag, 2 tube, 3 a rubber duck (very rarely; it quacks when tapped). */
+  shape: 0 | 1 | 2 | 3;
   scanned: boolean;
   flash: number;
   /** Chute index, or −1 for the store. */
@@ -902,6 +1106,9 @@ export class Sorter implements Scene3D {
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  /** Vignette and warm/cool finish of the realistic day. */
+  private grade: ShaderPass;
+  private smaa: SMAAPass;
   /** Day outlines as a screen effect. */
   private ink: InkPass;
   private gtao: GTAOPass;
@@ -942,7 +1149,7 @@ export class Sorter implements Scene3D {
 
   // Parcels.
   private parcels: Parcel[] = [];
-  /** Parcels by shape (0 box, 1 polybag, 2 tube): one instanced mesh and glow buffer each. */
+  /** Parcels by shape (0 box, 1 polybag, 2 tube, 3 duck): one instanced mesh and glow buffer each. */
   private shapes: { mesh: THREE.InstancedMesh; glow: THREE.InstancedBufferAttribute }[] = [];
   private labelMesh!: THREE.InstancedMesh;
   /** Displays on the scan tunnels. */
@@ -1005,6 +1212,8 @@ export class Sorter implements Scene3D {
   private party!: Party;
   private roof!: Roof;
   private crowd!: Crowd;
+  /** The little jokes hidden in the hall. */
+  private eggs!: Eggs;
   /** Instanced parts of repeated models (robots, people, forklifts, cages, contact shadows). */
   private batcher!: Batcher;
   /** Trailers behind the dock doors: north 0–19 (roll cages), then the open south doors (boxes). */
@@ -1030,7 +1239,7 @@ export class Sorter implements Scene3D {
   /** Christmas decorations (Settings → Christmas). */
   private xmas: Xmas | null = null;
   private dayShown: boolean | null = null;
-  private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number }[] = [];
+  private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number; rc?: THREE.Color; rr?: number; rm?: number }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
   readonly nightOnly: THREE.Object3D[] = [];
   /** What the night party shows (see NightFx); night-only objects that one switch hides. */
@@ -1040,6 +1249,16 @@ export class Sorter implements Scene3D {
   only: 'day' | 'night' | undefined;
   private nightEnv: THREE.Texture | null = null;
   private keyLight!: THREE.DirectionalLight;
+  /** The realistic day look ("Day") instead of the flat one ("Minimal"); nights are the same. */
+  private real = false;
+  private dayEnv: THREE.Texture | null = null;
+  /** Hall surfaces of the flat day look, and their lit counterparts in the realistic one. */
+  private flatOnly: THREE.Object3D[] = [];
+  private realOnly: THREE.Object3D[] = [];
+  /** Materials with relief for the realistic day only: their normal scale at full day. */
+  private realNormals: { m: THREE.MeshStandardMaterial; s: number }[] = [];
+  /** Materials that wear another picture in the realistic day (their own map otherwise). */
+  private realMaps: { m: THREE.MeshStandardMaterial; own: THREE.Texture | null; real: THREE.Texture; col: THREE.Color; realCol: THREE.Color; rough: number; realRough: number }[] = [];
   private hull!: THREE.InstancedMesh;
   private cageLine!: THREE.LineBasicMaterial;
 
@@ -1087,19 +1306,42 @@ export class Sorter implements Scene3D {
     this.renderer.toneMappingExposure = 1.15;
     this.scene.background = new THREE.Color(0x0b0910);
     this.scene.fog = new THREE.FogExp2(0x0b0910, 0.017);
+    // The scene graph (about 7,000 objects) is brought up to date once per frame, in
+    // Batcher.update() just before drawing; every render pass (scene, ink normals, AO,
+    // shadows, mirror) would otherwise walk the whole graph again.
+    this.scene.matrixWorldAutoUpdate = false;
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.gtao = new GTAOPass(this.scene, this.camera, 512, 512);
     this.gtao.enabled = false;
     this.gtao.blendIntensity = 0.85;
+    // AO is worked out from depth and normals: see-through things that write no depth (floor marks,
+    // light shafts, glass, blob shadows) must stay out of it, or they darken whatever lies under them.
+    {
+      const gtao = this.gtao as unknown as { overrideVisibility(): void };
+      const own = gtao.overrideVisibility.bind(gtao);
+      gtao.overrideVisibility = () => {
+        own();
+        this.scene.traverse((o) => {
+          const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+          if ((o as THREE.Mesh).isMesh && m && !Array.isArray(m) && m.transparent && !m.depthWrite) o.visible = false;
+        });
+      };
+    }
     this.composer.addPass(this.gtao);
-    this.ink = new InkPass(this.scene, this.camera);
+    this.ink = new InkPass(this.scene, this.camera, INK_MASK_LAYER);
     this.composer.addPass(this.ink);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.55, 0.6);
     this.composer.addPass(this.bloom);
     this.bokeh = new BokehPass(this.scene, this.camera, { focus: 10, aperture: 0.0025, maxblur: 0.006 });
     this.bokeh.enabled = false;
     this.composer.addPass(this.bokeh);
+    this.grade = gradePass();
+    this.composer.addPass(this.grade);
+    // Edge smoothing for the realistic day: without the ink lines, stair-stepped edges show.
+    this.smaa = new SMAAPass(1, 1);
+    this.smaa.enabled = false;
+    this.composer.addPass(this.smaa);
     this.composer.addPass(new OutputPass());
     try {
       const saved = localStorage.getItem(CAM_KEY);
@@ -1232,8 +1474,12 @@ export class Sorter implements Scene3D {
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
+    this.buildCrew();
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
+    this.eggs = new Eggs(this);
+    this.eggs.link({ life: this.life, docks: this.docks, party: this.party, floor: this.floor, tableY: DECK_Y });
+    ANTICS.build(this);
     this.buildBoards();
     this.buildDay();
     this.roof = new Roof(this, ROOF_LIGHTS, HH);
@@ -1438,6 +1684,8 @@ export class Sorter implements Scene3D {
     });
     const bar = i.playing && i.bar !== undefined ? i.bar : bt / 4;
 
+    // People's little acts: give back their owners' own pose before anyone animates them.
+    ANTICS.pre();
     if (crossed) {
       for (let b = Math.floor(prev) + 1; b <= Math.floor(bt); b++) this.onBeat(b);
     }
@@ -1476,15 +1724,18 @@ export class Sorter implements Scene3D {
     this.trucks.update(bt);
     this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
-      chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && this.room(k) <= 0 ? 1 : 0), 0),
+      chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),
       robotsBusyPct: (100 * this.floor.fleet.bots.filter((b) => b.state !== 'idle').length) / this.floor.fleet.bots.length,
       infeedQueue: this.backlog + this.waiting.reduce((a, b) => a + b, 0),
+      chutesDown: this.faults.down.size,
       ...this.storeUse(),
       batch: this.batches.active ? `${this.batches.active.city.name} ${Math.round(this.batches.active.share * 100)}%` : '',
     }));
     this.manual.update(bt, this.dayShown !== false);
     this.yard.update(bt);
     this.life.update(dt, bt);
+    this.crew?.update(dt, bt);
+    this.updateFaultShows();
     this.xmas?.update(bt, 1 - this.day, this.kick);
     this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown });
     this.roof.update(bt, this.day, this.camera);
@@ -1499,9 +1750,13 @@ export class Sorter implements Scene3D {
       fullBoxes: this.floor.bins.filter((b) => !b.open).length,
       speed: this.speed,
     });
-    this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown, dance: this.fx.dance });
+    this.docks.update(dt, bt, { kick: this.kick, snare: this.snare, dayShown: !!this.dayShown, dance: this.fx.dance, bpm: this.bpmNow });
+    this.eggs.update(dt, bt, this.dayShown !== false, this.camera.position);
+    // ...and their acts on top, once everyone has been animated.
+    ANTICS.post(bt);
     this.updateCamera(dt, bar, i.travelSpeed);
-    if (this.quality === 'high' || this.quality === 'ultra') {
+    this.bakeShadows();
+    if (this.shadowMode === 'live') {
       // The sun stands high in the south-east; its shadow box is centred where the camera looks.
       this.keyLight.position.copy(this.look).add(this.t.set(25, 45, 30));
       this.keyLight.target.position.copy(this.look);
@@ -1632,30 +1887,117 @@ export class Sorter implements Scene3D {
   setQuality(q: Quality): void {
     if (q === this.quality) return;
     const hq = q === 'high' || q === 'ultra';
-    const shadows = hq;
-    if (shadows !== this.renderer.shadowMap.enabled) {
-      this.renderer.shadowMap.enabled = shadows;
+    this.gtao.enabled = hq;
+    const ultra = q === 'ultra';
+    this.gtao.updateGtaoMaterial({ samples: ultra ? 24 : 12, radius: ultra ? 0.5 : 0.35 });
+    this.quality = q;
+    this.shadowMode = null; // re-decide the shadows for this quality
+    this.dayShown = null; // re-apply the look (mirror floor, shadows)
+    this.applyTheme(this.day);
+  }
+
+  /**
+   * Sun shadows. `live` (quality high and up, Minimal and Night): every solid casts, in a box
+   * that follows the camera, drawn every frame. `baked` (the realistic day, quality normal and
+   * up): one box over the whole hall, drawn once and then only now and then, with only what
+   * stands still casting (what moves keeps its soft contact shadow), so the shadows cost
+   * next to nothing per frame. `off` otherwise.
+   */
+  private shadowMode: 'off' | 'live' | 'baked' | null = null;
+  /** Meshes that move (found by watching them for a moment), kept out of the baked shadows. */
+  private movers: THREE.Mesh[] | null = null;
+  private moverWatch: { list: { m: THREE.Mesh; w: THREE.Matrix4; v: number }[]; until: number } | null = null;
+  private nextBake = 0;
+
+  private updateShadows(): void {
+    const q = this.quality;
+    const hq = q === 'high' || q === 'ultra';
+    const mode = this.real && this.dayShown === true ? (q === 'low' ? 'off' : 'baked') : hq ? 'live' : 'off';
+    if (mode === this.shadowMode) return;
+    const on = mode !== 'off';
+    if (on !== this.renderer.shadowMap.enabled) {
+      this.renderer.shadowMap.enabled = on;
       // Shadow maps change the shader programs.
       this.scene.traverse((o) => {
         const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
         if (m) for (const x of Array.isArray(m) ? m : [m]) x.needsUpdate = true;
       });
     }
-    this.keyLight.castShadow = shadows;
-    this.gtao.enabled = hq;
-    // Ultra (laptops and desktops): finer shadows over a larger area and more AO samples.
-    const ultra = q === 'ultra';
-    this.keyLight.shadow.mapSize.setScalar(ultra ? 4096 : 2048);
-    const sc = this.keyLight.shadow.camera;
-    sc.left = sc.bottom = ultra ? -55 : -36;
-    sc.right = sc.top = ultra ? 55 : 36;
+    const sun = this.keyLight;
+    sun.castShadow = on;
+    const sc = sun.shadow.camera;
+    if (mode === 'baked') {
+      // The whole hall from a fixed sun (high in the south-east, as in the live mode).
+      sun.target.position.set(HCX, 0, HZC);
+      sun.position.set(HCX + 50, 90, HZC + 60);
+      sc.left = sc.bottom = -115;
+      sc.right = sc.top = 115;
+      sc.near = 1;
+      sc.far = 320;
+      // (2048 even on high: a 4096 depth map is 64 MB, too much for many phones.)
+      sun.shadow.mapSize.setScalar(2048);
+      sun.shadow.normalBias = 0.06;
+      sun.shadow.bias = -0.0004;
+      this.renderer.shadowMap.autoUpdate = false;
+      this.renderer.shadowMap.needsUpdate = true;
+      for (const m of this.movers ?? []) m.castShadow = false;
+      if (!this.movers) this.watchMovers();
+    } else {
+      const ultra = q === 'ultra';
+      sc.left = sc.bottom = ultra ? -55 : -36;
+      sc.right = sc.top = ultra ? 55 : 36;
+      sc.near = 1;
+      sc.far = 140;
+      sun.shadow.mapSize.setScalar(ultra ? 4096 : 2048);
+      sun.shadow.normalBias = 0.03;
+      sun.shadow.bias = -0.0006;
+      this.renderer.shadowMap.autoUpdate = true;
+      for (const m of this.movers ?? []) m.castShadow = true;
+    }
     sc.updateProjectionMatrix();
-    this.keyLight.shadow.map?.dispose();
-    this.keyLight.shadow.map = null as unknown as THREE.WebGLRenderTarget;
-    this.gtao.updateGtaoMaterial({ samples: ultra ? 24 : 12, radius: ultra ? 0.5 : 0.35 });
-    this.quality = q;
-    this.dayShown = null; // re-apply the look (mirror floor)
-    this.applyTheme(this.day);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null as unknown as THREE.WebGLRenderTarget;
+    this.shadowMode = mode;
+  }
+
+  /** Note where every shadow caster is now; `checkMovers` compares a moment later. */
+  private watchMovers(): void {
+    const list: { m: THREE.Mesh; w: THREE.Matrix4; v: number }[] = [];
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.castShadow) return;
+      const im = m as THREE.InstancedMesh;
+      // (The jokes move only now and then (the cat, the runaway parcel): never in the baked shadow.)
+      let o2: THREE.Object3D | null = m;
+      let joke = false;
+      while (o2) {
+        if (o2 === this.eggs?.group) joke = true;
+        o2 = o2.parent;
+      }
+      list.push({ m, w: joke ? new THREE.Matrix4().makeScale(0, 0, 0) : m.matrixWorld.clone(), v: im.isInstancedMesh ? im.instanceMatrix.version : 0 });
+    });
+    this.moverWatch = { list, until: this.time + 1.5 };
+  }
+
+  /** Per frame while baking: find the movers, then bake again now and then (doors, trucks). */
+  private bakeShadows(): void {
+    if (this.shadowMode !== 'baked') return;
+    const w = this.moverWatch;
+    if (w && this.time >= w.until) {
+      this.movers = w.list
+        .filter(({ m, w: mw, v }) => {
+          const im = m as THREE.InstancedMesh;
+          return (m as THREE.SkinnedMesh).isSkinnedMesh || !m.matrixWorld.equals(mw) || (im.isInstancedMesh && im.instanceMatrix.version !== v);
+        })
+        .map(({ m }) => m);
+      for (const m of this.movers) m.castShadow = false;
+      this.moverWatch = null;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.nextBake = this.time + 30;
+    } else if (!w && this.time >= this.nextBake) {
+      this.renderer.shadowMap.needsUpdate = true;
+      this.nextBake = this.time + 30;
+    }
   }
 
   /** Belt speed, as a multiple of 2 m per beat (3.3 m/s at 100 BPM). */
@@ -1798,6 +2140,8 @@ export class Sorter implements Scene3D {
   private newParcel(): Parcel | null {
     if (this.parcels.length >= MAX_PARCELS) return null;
     const r = Math.random();
+    // Very rarely: a rubber duck, on its own, with a label round its neck.
+    if (r < 0.0025) return this.addParcel(this.duckParcel());
     // Flat envelopes, soft polybags, tubes and boxes.
     const env = r < 0.12;
     const bag = !env && r < 0.3;
@@ -1853,6 +2197,51 @@ export class Sorter implements Scene3D {
       dead: false,
     };
     if (p.gift) p.col.set(pick([0xc8102e, 0x1f7a3a, 0xe8b923, 0x1755fe, 0xd6339a, 0xf3f4f6]));
+    return this.addParcel(p);
+  }
+
+  /** A rubber duck: yellow, about the size of a small parcel, and for the developer. */
+  private duckParcel(): Parcel {
+    return {
+      id: this.nextId++,
+      w: 0.32,
+      h: 0.34,
+      d: 0.4,
+      kg: 0.12,
+      tags: [],
+      born: this.hubTime(),
+      col: new THREE.Color(0xffd21f),
+      glow: new THREE.Color(),
+      lead: false,
+      shape: 3,
+      scanned: false,
+      flash: 0,
+      dest: 0,
+      pc: 0,
+      mode: 'fixed',
+      pathKind: 'lane',
+      lane: 0,
+      t0: 0,
+      t1: 1,
+      ease: 0,
+      sPrev: 0,
+      sIn: 0,
+      tIn: 0,
+      divertAt: 0,
+      tray: -1,
+      from: new THREE.Vector3(),
+      to: new THREE.Vector3(),
+      off: new THREE.Vector3(),
+      shuttle: 0,
+      pos: new THREE.Vector3(),
+      q: new THREE.Quaternion(),
+      yawQ: new THREE.Quaternion().setFromAxisAngle(UP, rnd(-0.25, 0.25)),
+      vel: new THREE.Vector3(),
+      dead: false,
+    };
+  }
+
+  private addParcel(p: Parcel): Parcel {
     this.assign(p);
     p.labelCell = this.freeCells.pop() ?? 0;
     if (p.labelCell) this.drawLabel(p.labelCell, p);
@@ -2239,12 +2628,102 @@ export class Sorter implements Scene3D {
   /** Parcels on their way down a chute (diverted, not yet at the table or the dock). */
   private inbound = new Map<number, number>();
 
+  /** Faults on the dock chutes (`?faults=0` switches them off), and the technician who repairs them. */
+  readonly faults = new FaultPlan(
+    CHUTES.map((_, k) => k).filter((k) => k < 20),
+    Math.random,
+    {},
+  );
+  private crew: FaultCrew | null = null;
+  private dockEnds = new Map<number, { end: V3; s: number }>();
+  private tableS: number[] = [];
+  private chuteShows: Labels | null = null;
+  /** The dock chutes' display text (the fault text replaces it while down), and what each shows now. */
+  private showText = new Map<number, [string, string]>();
+  private showNow = new Map<number, string>();
+  /** Beat until which a repaired chute's lamps flash green. */
+  private fixedFlash = new Map<number, number>();
+
+  /** Take a dock chute down now (a random running one without `chute`); false when none could. */
+  fault(chute?: number): boolean {
+    const f = this.faults.trigger(this.bt, chute);
+    if (f) this.crew?.report(f);
+    if (f) this.kpi.fault();
+    return !!f;
+  }
+
+  /** Random faults on or off (the ones down still get repaired). */
+  setFaults(on: boolean): void {
+    this.faults.enabled = on;
+  }
+
+  /** The technician and his routes: from his bench along the inside of the loop, under it beside each dock chute. */
+  private buildCrew(): void {
+    // The corridor inside the loop, between the work tables at the chutes and the dance floor.
+    const CZ = -LOOP_ZH + 1.65;
+    const pillars: number[] = [];
+    for (let s = 1; s < STRAIGHT; s += 4) pillars.push(s);
+    const sites: FaultSite[] = [];
+    for (const [k, { end, s }] of this.dockEnds) {
+      // Under the loop beside the chute (clear of the pillars, the work tables and the
+      // neighbouring chutes): east of its belt if there is room, else west of the chute.
+      const clear = (e: number) => !pillars.some((p) => Math.abs(p - e) < 0.45) && !this.tableS.some((t) => Math.abs(t - e) < 1.35);
+      let exit: number | null = null;
+      let side = 1;
+      for (let e = s + 4.05; e <= s + 5.4 && exit === null; e += 0.05) if (clear(e)) exit = e;
+      if (exit === null) {
+        side = -1;
+        for (let e = s - 1.0; e >= s - 2.2 && exit === null; e -= 0.05) if (clear(e)) exit = e;
+      }
+      if (exit === null) continue;
+      loopAt(exit, this.p, this.t);
+      const ex = this.p.x;
+      // He stands beside the belt, just past the chute's end, and works on the photo eye on its rail.
+      const stand: [number, number] = [end.x + side * 1.15, end.z - 0.9];
+      const park: [number, number] = [ex, end.z - 1.9];
+      sites.push({ chute: k, park, stand, work: v(end.x + side * 0.66, 1.2, end.z - 0.9), way: [[ex, CZ], [ex, park[1]]] });
+    }
+    // (Only chutes he can reach go down.)
+    this.faults.only(sites.map((x) => x.chute));
+    this.faults.enabled = new URLSearchParams(location.search).get('faults') !== '0';
+    this.crew = new FaultCrew(this, {
+      bench: [PLATFORM_X - 0.5, -2.35],
+      benchTop: v(PLATFORM_X - 0.5, 0.92, -3.0),
+      park: [PLATFORM_X + 2.2, -1.7],
+      parkYaw: Math.PI / 2,
+      out: [[PLATFORM_X + 5.0, -1.9], [PLATFORM_X + 6.2, CZ]],
+      sites,
+    }, this.faults);
+    this.crew.onRepaired = (k) => this.fixedFlash.set(k, this.bt + 3);
+    this.crew.onFault = () => this.kpi.fault();
+  }
+
+  /** The dock chutes' displays: the fault and the technician's progress while down. */
+  private updateFaultShows(): void {
+    const shows = this.chuteShows;
+    if (!shows || !this.crew) return;
+    let dirty = false;
+    for (const [k, [main, sub]] of this.showText) {
+      const f = this.faults.down.get(k);
+      const st = f ? this.crew.status(k) : null;
+      const key = f ? `${f.kind}:${st}` : '';
+      if ((this.showNow.get(k) ?? '') === key) continue;
+      this.showNow.set(k, key);
+      dirty = true;
+      if (!f) shows.set(k, main, sub, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+      else shows.set(k, `FAULT · ${FAULT_TEXT[f.kind]}`, st === 'working' ? 'technician at work' : st === 'waiting' ? 'waiting for technician' : 'technician on the way', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#f2c200' });
+    }
+    if (dirty) shows.flush();
+  }
+
   /** Room left at a chute's end: the pickup table (4) or the dock belt (5), minus what is on its way. */
   private room(dest: number, need = 0.9): number {
     if (dest === REJECT) {
       const onRobots = this.floor.fleet.bots.filter((b) => b.bin === this.floor.tableBin).length;
       return this.manual.room(onRobots + (this.inbound.get(REJECT) ?? 0), 6) ? 1 : 0;
     }
+    // A chute that is down takes nothing until it is repaired.
+    if (this.faults.isDown(dest)) return 0;
     const st = this.stationOf.get(dest);
     // A pickup table holds as many as fit by length (about 0.8 m kept per parcel on its way).
     const used = st !== undefined ? this.stationQueue[st]!.reduce((a, p) => a + p.d + GAP, 0) : 0;
@@ -2526,7 +3005,7 @@ export class Sorter implements Scene3D {
   private writeParcels(): void {
     const kick = 0.55 + this.kick * 0.8;
     const o = this.o;
-    const counts = [0, 0, 0];
+    const counts = [0, 0, 0, 0];
     let labels = 0;
     let tapes = 0;
     let ribbons = 0;
@@ -2534,7 +3013,7 @@ export class Sorter implements Scene3D {
     for (const p of this.parcels) {
       const set = this.shapes[p.shape]!;
       const k = counts[p.shape]!;
-      if (k >= MAX_PARCELS) continue;
+      if (k >= (p.shape === 3 ? 16 : MAX_PARCELS)) continue;
       counts[p.shape]!++;
       this.instParcels[p.shape]![k] = p;
       this.n.set(0, 1, 0).applyQuaternion(p.q);
@@ -2542,8 +3021,14 @@ export class Sorter implements Scene3D {
       o.quaternion.copy(p.q);
       o.scale.set(p.w, p.h, p.d);
       o.updateMatrix();
+      // Seasick: a parcel on its third round (or more) turns a little green and sways on its tray.
+      const sick = p.mode === 'loop' && (p.laps ?? 0) >= 2;
+      if (sick) {
+        o.quaternion.multiply(this.qa.setFromAxisAngle(this.t.set(0, 0, 1), Math.sin(this.time * 5 + p.id) * 0.14));
+        o.updateMatrix();
+      }
       set.mesh.setMatrixAt(k, o.matrix);
-      set.mesh.setColorAt(k, p.col);
+      set.mesh.setColorAt(k, sick ? this.c.copy(p.col).lerp(SICK, 0.55 + 0.1 * Math.sin(this.time * 3 + p.id)) : p.col);
       if (p === this.follow) {
         // The followed parcel gets a blue outline (a slightly larger box drawn inside out).
         o.scale.set(p.w + 0.12, p.h + 0.12, p.d + 0.12);
@@ -2566,8 +3051,8 @@ export class Sorter implements Scene3D {
       glow[k * 3] = this.c.r + p.flash * 0.6;
       glow[k * 3 + 1] = this.c.g + p.flash * 0.6;
       glow[k * 3 + 2] = this.c.b + p.flash * 0.6;
-      // Shipping label on top (tubes have theirs wrapped round, not drawn).
-      if (p.shape === 2) continue;
+      // Shipping label on top (tubes have theirs wrapped round, not drawn; a duck has none).
+      if (p.shape >= 2) continue;
       // Boxes get a strip of tape along the top first.
       if (p.gift) {
         // A present: a ribbon both ways round the top.
@@ -2670,9 +3155,11 @@ export class Sorter implements Scene3D {
       ch.flash = Math.max(0, ch.flash - dt * 2);
       // A dock belt that is full: its lamp flashes red, and the sorter sends nothing more down
       // (parcels for it go round again, or into the buffer store).
-      if (ch.belt && this.dockFree(k) < 0.9) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
+      if (ch.belt && (this.dockFree(k) < 0.9 || this.faults.isDown(k))) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
       else ch.lamp.color.copy(ch.col).multiplyScalar(0.35 + ch.flash * 3 + this.kick * 0.3);
     });
+    this.updateTowers();
+    this.blinkRacks();
 
     // Moving heads: a new figure every bar, moving with the beat.
     const pattern = Math.floor(bar) % 4;
@@ -2751,8 +3238,10 @@ export class Sorter implements Scene3D {
     this.hazeMat.color.setRGB(0.16, 0.13, 0.26).lerp(this.c.copy(this.padCol).multiplyScalar(0.3), pad * 0.6);
 
 
-    this.strobe.color.setRGB(1, 1, 1).multiplyScalar(this.fx.strobe ? this.snare * this.snare * 4 + (1 - ph) ** 8 * 0.3 : 0);
-    this.hemi.intensity = 0.45 + this.snare * 0.25;
+    const flash = this.fx.strobe ? this.snare * this.snare : 0;
+    this.strobe.color.setRGB(1, 1, 1).multiplyScalar(this.fx.strobe ? flash * 4 + (1 - ph) ** 8 * 0.3 : 0);
+    // The strobes light the whole hall white for a moment on the snare (not just their own lamps).
+    this.hemi.intensity = 0.45 + this.snare * 0.1 + flash * 1.6;
   }
 
   private tunnelGlow(t: Tunnel, dt: number): void {
@@ -3013,6 +3502,60 @@ export class Sorter implements Scene3D {
     this.flushBlobs();
   }
 
+  /** The chutes' signal towers (stackLights.ts), and which towers belong to which chute. */
+  private towers: StackLights | null = null;
+  private towersOf = new Map<number, number[]>();
+  private towerAt(chute: number, at: V3, height: number): void {
+    if (!this.towers) {
+      // A black housing: the lamps stand out against it.
+      const shell = this.std(0x121316, 0.45, 0.2, 0x1d1d1f);
+      this.towers = new StackLights(CHUTES.length * 2, shell);
+      this.put(this.towers.group);
+    }
+    const i = this.towers.add(at, height);
+    const list = this.towersOf.get(chute) ?? [];
+    list.push(i);
+    this.towersOf.set(chute, list);
+  }
+
+  /**
+   * The towers' lamps, the same code as the hub plan in the control room: off while the chute is
+   * empty, green while it fills, amber when it is getting full (over 60 %) or its truck is in
+   * cleardown, red when it is full. At the night party they are disco lights.
+   */
+  private updateTowers(): void {
+    const t = this.towers;
+    if (!t) return;
+    const party = this.dayShown === false;
+    for (const [k, list] of this.towersOf) {
+      const fill = this.chuteFill(k);
+      let clearing = false;
+      if (this.dockOf.has(k)) {
+        const door = DOCK_X.indexOf(this.dockOf.get(k)!);
+        const st = door >= 0 ? this.trucks.docks[door]?.state : undefined;
+        clearing = st === 'cleardown' || st === 'closing';
+      }
+      let red = fill >= 1 ? 1 : 0;
+      let amber = !red && (fill > 0.6 || clearing) ? 1 : 0;
+      let green = !red && !amber && fill > 0.001 ? 1 : 0;
+      if (this.faults.isDown(k)) {
+        // A fault: red flashing, on the beat (a full chute is steady red).
+        red = Math.floor(this.bt * 2) % 2 ? 1 : 0.15;
+        amber = green = 0;
+      } else if ((this.fixedFlash.get(k) ?? -1) > this.bt) {
+        // Just repaired: green flashing for a moment.
+        green = Math.floor(this.bt * 4) % 2 ? 1 : 0;
+        red = amber = 0;
+      }
+      for (const i of list) {
+        if (party) t.disco(i, this.bt, this.kick);
+        // (Filmic tone mapping in the realistic day pales bright colours: a little less there keeps them saturated.)
+        else t.set(i, { green, amber, red }, this.real ? 0.9 : 1.3);
+      }
+    }
+    t.flush();
+  }
+
   private mesh(geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
@@ -3091,6 +3634,8 @@ export class Sorter implements Scene3D {
   private theme<M extends THREE.MeshStandardMaterial>(m: M, day: number, rough = 0.85, metal = 0.05): M {
     this.themed.push({ m, n: m.color.clone(), d: new THREE.Color(day), nr: m.roughness, dr: rough, nm: m.metalness, dm: metal });
     toonify(m);
+    // Safety yellow is the paint that takes the knocks (realistic day only).
+    if (day === 0xf2c200) wear(m);
     return m;
   }
 
@@ -3098,6 +3643,9 @@ export class Sorter implements Scene3D {
     const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
     if (day === undefined) {
       toonify(m);
+      // One colour in every look; the realistic day may still re-colour it (REAL_PALETTE).
+      const pal = REAL_PALETTE.get(color);
+      if (pal) this.plain.push({ m, c: new THREE.Color(color), r: rough, mt: metal, pal: new THREE.Color(pal.c), pr: pal.rough ?? rough, pm: pal.metal ?? metal });
       return m;
     }
     return this.theme(m, day);
@@ -3136,44 +3684,173 @@ export class Sorter implements Scene3D {
     fog.density = this.nightFog() + (0.009 - this.nightFog()) * this.day;
   }
 
+  /** Minimal (flat, drawn) or realistic day; the night is the same for both. */
+  setRealistic(real: boolean): void {
+    if (real === this.real) return;
+    this.real = real;
+    if (real && !this.dayEnv) {
+      this.dayEnv = dayEnvironment(this.renderer);
+      this.buildRealHall();
+    }
+    this.dayShown = null; // re-apply the look
+    this.applyTheme(this.day);
+  }
+
+  /** Single-colour materials in the illustration palette, re-coloured in the realistic day. */
+  private plain: { m: THREE.MeshStandardMaterial; c: THREE.Color; r: number; mt: number; pal: THREE.Color; pr: number; pm: number }[] = [];
+  private realC = new THREE.Color();
+  /** A day colour toned down for the lit look: light colours are capped at a light grey. */
+  private realCol(c: THREE.Color): THREE.Color {
+    const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    return this.realC.copy(c).multiplyScalar(l > 0.55 ? 0.55 / l : 1);
+  }
+
+  realNormal(m: THREE.MeshStandardMaterial, map: THREE.Texture, scale = 1): void {
+    if (m.map) {
+      // Same tiling as the colour map, so the relief lines up with the print.
+      map = map.clone();
+      map.repeat.copy(m.map.repeat);
+      map.offset.copy(m.map.offset);
+      map.rotation = m.map.rotation;
+      map.needsUpdate = true;
+    }
+    m.normalMap = map;
+    m.normalScale.setScalar(0);
+    this.realNormals.push({ m, s: scale });
+  }
+
+  /** In the realistic day, paint `m` this colour (and finish) instead of its palette colour. */
+  realColor(m: THREE.MeshStandardMaterial, color: number, rough?: number, metal?: number): void {
+    const t = this.themed.find((x) => x.m === m);
+    if (t) {
+      t.rc = new THREE.Color(color);
+      if (rough !== undefined) t.rr = rough;
+      if (metal !== undefined) t.rm = metal;
+      return;
+    }
+    const p = this.plain.find((x) => x.m === m);
+    if (p) {
+      p.pal.setHex(color);
+      if (rough !== undefined) p.pr = rough;
+      if (metal !== undefined) p.pm = metal;
+      return;
+    }
+    this.plain.push({ m, c: m.color.clone(), r: m.roughness, mt: m.metalness, pal: new THREE.Color(color), pr: rough ?? m.roughness, pm: metal ?? m.metalness });
+  }
+
+  /** In the realistic day, show `map` (with colour and roughness) on `m` instead of its own look. */
+  realMap(m: THREE.MeshStandardMaterial, map: THREE.Texture, color = 0xffffff, roughness = m.roughness): void {
+    this.realMaps.push({ m, own: m.map, real: map, col: m.color.clone(), realCol: new THREE.Color(color), rough: m.roughness, realRough: roughness });
+  }
+
+  /** Compile the shaders of what is on show now, without blocking where the browser allows it. */
+  async warmUp(tod = 0): Promise<void> {
+    try {
+      // Put the look in place first (lights, shadows, materials), so the shaders compiled now
+      // are the ones the first frame needs, not compiled once more on it.
+      this.applyTheme(1 - smooth01(tod * 1.6 - 0.3));
+      this.batcher.update();
+      // Compile for where the scene is really drawn: the composer's buffer (linear colour, no
+      // tone mapping there), not the screen, or every shader is compiled a second time later.
+      const was = this.renderer.getRenderTarget();
+      this.renderer.setRenderTarget(this.composer.readBuffer);
+      await this.renderer.compileAsync(this.scene, this.camera);
+      this.renderer.setRenderTarget(was);
+    } catch {
+      /* the first frame compiles them instead */
+    }
+  }
+
+  isRealistic(): boolean {
+    return this.real;
+  }
+
   private applyTheme(day: number): void {
     if (Math.abs(day - this.day) < 0.002 && this.dayShown !== null) return;
     this.day = day;
-    TOON.value = day;
-    this.ink.enabled = day > 0.02;
-    this.ink.strength = smooth01(day * 1.2);
-    if (this.blobMat) this.blobMat.opacity = 0.45 - 0.17 * day;
+    // The drawn look (toon steps, ink, flat colours) fades in only for Minimal.
+    const flat = this.real ? 0 : day;
+    TOON.value = flat;
+    this.ink.enabled = flat > 0.02;
+    this.ink.strength = smooth01(flat * 1.2);
+    if (this.blobMat) this.blobMat.opacity = this.real ? 0.45 - 0.1 * day : 0.45 - 0.17 * day;
     for (const t of this.themed) {
-      t.m.color.lerpColors(t.n, t.d, day);
-      t.m.roughness = t.nr + (t.dr - t.nr) * day;
-      t.m.metalness = t.nm + (t.dm - t.nm) * day;
+      // Realistic day: what the part really is (REAL_PALETTE), else the day colour without pure
+      // whites (a lit white reads as paper, not steel).
+      const pal = this.real ? REAL_PALETTE.get(t.d.getHex()) : undefined;
+      const d = this.real ? (t.rc ?? (pal ? this.realC.setHex(pal.c) : this.realCol(t.d))) : t.d;
+      t.m.color.lerpColors(t.n, d, day);
+      // Realistic day: as paint on steel (between the matte drawing and the club's metal).
+      const dr = this.real ? t.rr ?? pal?.rough ?? Math.max(0.3, (t.nr + t.dr) / 2) : t.dr;
+      const dm = this.real ? t.rm ?? pal?.metal ?? t.nm * 0.5 : t.dm;
+      t.m.roughness = t.nr + (dr - t.nr) * day;
+      t.m.metalness = t.nm + (dm - t.nm) * day;
     }
     const bg = this.scene.background as THREE.Color;
-    bg.setHex(0x0b0910).lerp(this.c.setHex(DAY.bg), day);
+    bg.setHex(0x0b0910).lerp(this.c.setHex(this.real ? 0xc8ccd1 : DAY.bg), day);
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(bg);
     fog.density = this.nightFog() + (0.009 - this.nightFog()) * day;
-    this.renderer.toneMappingExposure = 1.15 - 0.2 * day;
-    this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xffffff), day);
-    this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0xc9cfd6), day);
-    this.hemi.intensity = 0.45 + 0.55 * day;
-    this.keyLight.color.setHex(0xb0b8ff).lerp(this.white, day);
-    this.keyLight.intensity = 0.3 + 0.7 * day;
+    this.renderer.toneMappingExposure = this.real ? 1.15 - 0.4 * day : 1.15 - 0.2 * day;
+    if (this.real) {
+      // Daylight from the roof: a warm sun through the roof lights, cool sky light from above.
+      this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xdfe8ff), day);
+      this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0x8a8580), day);
+      this.hemi.intensity = 0.45 + 0.05 * day;
+      this.keyLight.color.setHex(0xb0b8ff).lerp(this.c.setHex(0xfff1dc), day);
+      this.keyLight.intensity = 0.3 + 1.5 * day;
+    } else {
+      this.hemi.color.setHex(0x6a6aa0).lerp(this.c.setHex(0xffffff), day);
+      this.hemi.groundColor.setHex(0x1a1410).lerp(this.c.setHex(0xc9cfd6), day);
+      this.hemi.intensity = 0.45 + 0.55 * day;
+      this.keyLight.color.setHex(0xb0b8ff).lerp(this.white, day);
+      this.keyLight.intensity = 0.3 + 0.7 * day;
+    }
     this.cageLine.color.setHex(0x8a8f96).lerp(this.c.setHex(DAY.tealD), day);
+    for (const n of this.realNormals) n.m.normalScale.setScalar(this.real ? n.s * day : 0);
+    REAL.value = this.real ? day : 0;
+    // The belts' side strips: the frame's teal in the drawn day, plain dark rubber edging in the realistic one.
+    for (const st of this.strips) {
+      const u = st.uniforms.uDayCol;
+      if (u) (u.value as THREE.Color).setHex(this.real ? 0x3a3e44 : DAY.tealD);
+    }
+    const rd = this.real ? day : 0;
+    for (const p of this.plain) {
+      p.m.color.lerpColors(p.c, p.pal, rd);
+      p.m.roughness = p.r + (p.pr - p.r) * rd;
+      p.m.metalness = p.mt + (p.pm - p.mt) * rd;
+    }
+    this.grade.enabled = this.real && day > 0.02;
+    this.smaa.enabled = this.real && day > 0.5;
+    (this.grade.uniforms.uAmount as THREE.IUniform<number>).value = day;
     const show = day > 0.5;
     if (show === this.dayShown) return;
     this.dayShown = show;
     for (const o of this.dayOnly) o.visible = show;
     for (const o of this.nightOnly) o.visible = !show;
+    for (const o of this.flatOnly) o.visible = show && !this.real;
+    for (const o of this.realOnly) o.visible = show && this.real;
     this.applyNightFx();
-    this.scene.environment = show ? null : this.nightEnv;
+    for (const r of this.realMaps) {
+      const on = show && this.real;
+      const map = on ? r.real : r.own;
+      if (r.m.map !== map) {
+        // (Going from no map to a map changes the shader: compile again.)
+        if (!r.m.map !== !map) r.m.needsUpdate = true;
+        r.m.map = map;
+      }
+      r.m.color.copy(on ? r.realCol : r.col);
+      r.m.roughness = on ? r.realRough : r.rough;
+    }
+    this.updateShadows();
+    this.scene.environment = show ? (this.real ? this.dayEnv : null) : this.nightEnv;
     // Night, high quality: a glossy floor that reflects the lasers, LED strips and lamps.
     const hq = this.quality === 'high' || this.quality === 'ultra';
     if (!show && hq && !this.mirror) this.mirror = this.buildMirror();
     if (this.mirror) this.mirror.visible = !show && hq;
-    // Flat, bright colours by day, like the illustration; filmic tone mapping for the club.
-    this.renderer.toneMapping = show ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
-    drawBelt(this.beltTex, show);
+    // Flat, bright colours for the drawn day; filmic tone mapping for the photo-like day and the club.
+    this.renderer.toneMapping = show && !this.real ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    drawBelt(this.beltTex, show, this.real);
   }
 
   private buildHall(): void {
@@ -3251,6 +3928,7 @@ export class Sorter implements Scene3D {
     // Columns: red at the foot, as in the photos.
     const col = this.std(0x3a3d45, 0.6, 0.6, 0xf3f4f6);
     const colRed = this.std(0x7a1a20, 0.6, 0.3, 0xe2231a);
+    wear(colRed, 0.7);
     // (In the walls, between the dock doors.)
     for (const x of COLUMNS) {
       // North: halfway between truck docks (x −13.6 + 6k); south: between the box doors (x −16 + 6k).
@@ -3326,6 +4004,9 @@ export class Sorter implements Scene3D {
     // Pallets with wrapped goods along the walls.
     const pal = this.std(0x8a6a44, 0.9, 0);
     const wrap = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.35, metalness: 0 });
+    // Realistic day: cartons showing through glossy stretch film, with its folds.
+    this.realMap(wrap, stretchFilm(), 0xffffff, 0.22);
+    this.realNormal(wrap, stretchFilmNormal(), 0.7);
     const stack = (x: number, z: number) => {
       const h = rnd(0.8, 2);
       this.box('pal', pal, x, 0.07, z, 1.2, 0.14, 1);
@@ -3344,6 +4025,14 @@ export class Sorter implements Scene3D {
   private mapLoop: [number, number][] | null = null;
 
   /** Everything the video wall shows, gathered from the hall. */
+  /** How full a chute is, 0…1 (the hub plan's bars and the signal towers both read this). */
+  private chuteFill(k: number): number {
+    const ch = this.chutes[k];
+    if (!ch) return 0;
+    const fill = this.stationOf.has(k) ? 1 - this.room(k) / 4 : ch.belt ? 1 - this.dockFree(k) / ch.belt.len : 0;
+    return clamp(fill, 0, 1);
+  }
+
   private mapData(): HubMap {
     if (!this.mapLoop) {
       this.mapLoop = [];
@@ -3354,9 +4043,7 @@ export class Sorter implements Scene3D {
     }
     const chutes = this.chutes.map((ch, k) => {
       const end = ch.path.pts[ch.path.pts.length - 1]!;
-      const st = this.stationOf.get(k);
-      const fill = st !== undefined ? 1 - this.room(k) / 4 : ch.belt ? 1 - this.dockFree(k) / ch.belt.len : 0;
-      return { x: end.x, z: end.z, fill: clamp(fill, 0, 1), dock: st === undefined };
+      return { x: end.x, z: end.z, fill: this.chuteFill(k), dock: !this.stationOf.has(k), fault: this.faults.isDown(k) };
     });
     const fills = this.trucks.list();
     const doors = this.trucks.docks.map((d, i) => ({ x: d.x, z: d.wallZ, state: d.state, load: Math.min(1, fills[i]!.fill) }));
@@ -3372,11 +4059,106 @@ export class Sorter implements Scene3D {
     return { hall: [LX - 12, LX + STRAIGHT + 12, NZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
   }
 
+  /**
+   * Server racks in a row against the west wall, front to the hall: 42U cabinets with a glass
+   * door frame, filled with switches, patch panels, servers and a few empty slots, a pull-out
+   * console with a live screen, and small status LEDs that blink at their own pace (one
+   * instanced mesh). The fronts are drawn on canvases, so the detail costs no geometry.
+   */
+  private buildRacks(): void {
+    const N = 6;
+    const W = 0.8;
+    const H = 2.2;
+    const D = 1.1;
+    const X = WX + 0.15 + D / 2;
+    const Z0 = 27.6 - N * W;
+    const body = this.std(0x2c2f36, 0.55, 0.4, DAY.magenta);
+    const frame = this.std(0x1a1c20, 0.5, 0.5, 0x1d1d1f);
+    const ledPos: number[] = [];
+    const ledCol: number[] = [];
+    const ledRate: number[] = [];
+    for (let r = 0; r < N; r++) {
+      const z = Z0 + W / 2 + r * W;
+      this.box('srvrack', body, X, H / 2, z, D, H, W);
+      // The door frame round the front, and a plinth.
+      const fx = X + D / 2 + 0.01;
+      this.box('srvrackframe', frame, fx, H - 0.06, z, 0.03, 0.12, W);
+      this.box('srvrackframe', frame, fx, 0.06, z, 0.03, 0.12, W);
+      for (const s of [-1, 1]) this.box('srvrackframe', frame, fx, H / 2, z + s * (W / 2 - 0.04), 0.03, H, 0.08);
+      // The front: what is in the rack, drawn once (seeded per rack).
+      const leds: [number, number, number][] = [];
+      const tex = rackFront(r * 97 + 5, leds, r === 2);
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.16, H - 0.24), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: 0.4 }));
+      face.position.set(fx - 0.005, H / 2, z);
+      face.rotation.y = Math.PI / 2;
+      this.put(face);
+      for (const [u, v, c] of leds) {
+        // (u, v: 0…1 across and up the front.)
+        ledPos.push(fx + 0.004, 0.12 + v * (H - 0.24), z - (W - 0.16) / 2 + u * (W - 0.16));
+        ledCol.push(c);
+        ledRate.push(0.6 + Math.random() * 5);
+      }
+      if (r === 2) {
+        // The console: a tray pulled out at waist height, with a keyboard and a screen folded up.
+        const ty = 1.05;
+        this.box('srvrackcon', frame, fx + 0.2, ty, z, 0.4, 0.025, W - 0.2);
+        this.box('srvrackkbd', this.std(0x15161a, 0.6, 0.2, 0x1d1d1f), fx + 0.23, ty + 0.02, z, 0.16, 0.012, 0.42);
+        this.box('srvrackcon', frame, fx + 0.03, ty + 0.2, z, 0.025, 0.36, W - 0.2);
+        const scr = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.26, 0.31), new THREE.MeshBasicMaterial({ map: this.screens.dash }));
+        scr.position.set(fx + 0.045, ty + 0.2, z);
+        scr.rotation.y = Math.PI / 2;
+        this.put(scr);
+      }
+    }
+    // The LEDs: tiny squares, one instanced mesh; their brightness changes every frame.
+    const n = ledCol.length;
+    const geo = new THREE.PlaneGeometry(0.012, 0.008).rotateY(Math.PI / 2);
+    const im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial(), n);
+    const o = new THREE.Object3D();
+    for (let i = 0; i < n; i++) {
+      o.position.set(ledPos[i * 3]!, ledPos[i * 3 + 1]!, ledPos[i * 3 + 2]!);
+      o.updateMatrix();
+      im.setMatrixAt(i, o.matrix);
+      im.setColorAt(i, this.c.setHex(ledCol[i]!));
+    }
+    im.userData.noInk = true;
+    this.put(im);
+    this.rackLeds = { im, col: ledCol, rate: ledRate };
+  }
+
+  /** The racks' status LEDs (see buildRacks): each blinks at its own pace, some steady. */
+  private rackLeds: { im: THREE.InstancedMesh; col: number[]; rate: number[] } | null = null;
+  private blinkRacks(): void {
+    const r = this.rackLeds;
+    if (!r || this.camera.position.distanceToSquared(this.t.set(-60, 1.2, 25)) > 30 * 30) return;
+    const t = this.time;
+    for (let i = 0; i < r.col.length; i++) {
+      const f = r.rate[i]!;
+      // Activity LEDs flicker; a third are steady (link or power).
+      const on = i % 3 === 0 ? 1 : Math.sin(t * f * 6.283 + i * 1.7) + Math.sin(t * f * 2.3 + i) > 0.3 ? 1 : 0.12;
+      this.c.setHex(r.col[i]!).multiplyScalar(on * 1.3);
+      r.im.setColorAt(i, this.c);
+    }
+    if (r.im.instanceColor) r.im.instanceColor.needsUpdate = true;
+  }
+
   /** Big KPI boards and clocks on the walls, showing live numbers and the real time. */
   private buildBoards(): void {
     const board = new THREE.MeshBasicMaterial({ map: this.screens.board });
     const frame = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
-    const place = (x: number, y: number, z: number, ry: number) => {
+    // Wall things go between the columns (north ones stand 2.4 m further east): moved to the
+    // middle of the bay they are in when they would touch a column.
+    const clear = (x: number, z: number, half: number) => {
+      const cols = z < HZC ? COLUMNS.map((c) => c + 2.4) : COLUMNS;
+      const hit = cols.find((c) => Math.abs(c - x) < half + 0.6);
+      if (hit === undefined) return x;
+      const left = Math.max(...cols.filter((c) => c < hit), WX);
+      const right = Math.min(...cols.filter((c) => c > hit), EX);
+      // The bay on the side the thing mostly was.
+      return x < hit ? (left + hit) / 2 : (hit + right) / 2;
+    };
+    const place = (x0: number, y: number, z: number, ry: number) => {
+      const x = clear(x0, z, 3.1);
       const g = new THREE.Group();
       g.position.set(x, y, z);
       g.rotation.y = ry;
@@ -3392,12 +4174,12 @@ export class Sorter implements Scene3D {
     const clock = new THREE.MeshBasicMaterial({ map: this.screens.clock, transparent: true });
     const clk = (x: number, y: number, z: number, ry: number) => {
       const m = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), clock);
-      m.position.set(x, y, z);
+      m.position.set(Math.abs(z - HZC) > 1 ? clear(x, z, 0.7) : x, y, z);
       m.rotation.y = ry;
       this.put(m);
     };
     clk(WX + 0.1, 8.4, 4, Math.PI / 2);
-    clk(-30, 8.4, NZ + 0.1, 0);
+    clk(-22, 8.4, NZ + 0.1, 0);
     clk(-30, 8.4, HZ - 0.1, Math.PI);
   }
 
@@ -3450,6 +4232,9 @@ export class Sorter implements Scene3D {
     });
     this.beltTex.repeat.set(1, 1 / 1.2);
     const beltMat = this.theme(new THREE.MeshStandardMaterial({ map: this.beltTex, roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide }), 0xffffff);
+    // Realistic day: the grey rubber of the texture as it is, with specks and stains.
+    this.themed[this.themed.length - 1]!.rc = new THREE.Color(0xffffff);
+    beltWear(beltMat);
     const frameMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x2b5ea8, roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide }), DAY.teal);
     const chuteTex = brushed().clone();
     chuteTex.repeat.set(1, 1 / 3);
@@ -3457,6 +4242,8 @@ export class Sorter implements Scene3D {
     const chuteMat = this.theme(new THREE.MeshStandardMaterial({ color: 0xa8b0ba, map: chuteTex, roughness: 0.3, metalness: 0.9, side: THREE.DoubleSide }), DAY.tealP);
     const trackMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x3c4048, roughness: 0.45, metalness: 0.7, side: THREE.DoubleSide }), DAY.teal);
     const legMat = this.std(0x6b7280, 0.5, 0.7, DAY.teal);
+    // Realistic day: the supports in a dark RAL blue, as on many real sorters.
+    this.realColor(legMat, RAL_BLUE, 0.45, 0.3);
     const strip = () => {
       const m = new THREE.ShaderMaterial({
         uniforms: { uCol: { value: new THREE.Color() }, uBeat: { value: 0 }, uKick: { value: 0 }, uGain: { value: 1 }, uDay: { value: 0 }, uDayCol: { value: new THREE.Color(DAY.tealD) } },
@@ -3499,13 +4286,14 @@ export class Sorter implements Scene3D {
       }
     };
     /** A belt from s0 to s1; `rails` can limit each side rail to some stretches (where belts merge). */
-    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }) => {
-      geo.belt!.push(extrude(path, BELT, s0, s1));
-      geo.frame!.push(extrude(path, FRAME, s0, s1));
+    const belt = (path: Path, s0: number, s1: number, led = stripIn, rails?: { L?: [number, number][]; R?: [number, number][] }, cut?: Cut) => {
+      const ex = (prof: [number, number][], a: number, b: number) => extrude(path, prof, a, b, 0.35, cut);
+      geo.belt!.push(ex(BELT, s0, s1));
+      geo.frame!.push(ex(FRAME, s0, s1));
       const k = led === stripIn ? 'sIn' : led === stripLoop ? 'sLoop' : 'sChute';
-      geo[k]!.push(extrude(path, LEDL, s0, s1), extrude(path, LEDR, s0, s1));
-      for (const [a, b] of rails?.L ?? [[s0, s1]]) if (b > a) geo.rail!.push(extrude(path, RAIL_L, a, b));
-      for (const [a, b] of rails?.R ?? [[s0, s1]]) if (b > a) geo.rail!.push(extrude(path, RAIL_R, a, b));
+      geo[k]!.push(ex(LEDL, s0, s1), ex(LEDR, s0, s1));
+      for (const [a, b] of rails?.L ?? [[s0, s1]]) if (b > a) geo.rail!.push(ex(RAIL_L, a, b));
+      for (const [a, b] of rails?.R ?? [[s0, s1]]) if (b > a) geo.rail!.push(ex(RAIL_R, a, b));
       legs(path, s0, s1, 0.6);
       // Drive motors under the frame, one per section.
       for (let s = s0 + 4; s < s1 - 2; s += 12) {
@@ -3518,6 +4306,7 @@ export class Sorter implements Scene3D {
       }
     };
 
+    const inductGap = new THREE.MeshBasicMaterial({ color: 0x0c0d0f });
     // Infeeds: four lanes side by side at floor level, in from the north wall, each through its own scan tunnel.
     for (let k = 0; k < 4; k++) {
       const y = LANE_Y;
@@ -3527,13 +4316,26 @@ export class Sorter implements Scene3D {
       const end = this.p.clone();
       const into = this.t.clone().applyAxisAngle(UP, -Math.PI / 6);
       const corner = end.clone().addScaledVector(into, -LANE_OUT / Math.abs(into.z));
-      corner.y = LOOP_Y - 0.5;
+      // The last stretch is level, its belt just above the trays' lips (as on a real induction).
+      corner.y = LANE_TOP;
+      end.y = LANE_TOP;
       const x = corner.x;
       const z0 = NZ - 1;
       const path = Path.fillet([v(x, y, z0), v(x, y, -23.5), v(x, corner.y, corner.z), end], 3);
-      // The belt runs right up to the loop: its end reaches over the edge of the trays
-      // (just above them), so parcels transfer straight onto their tray with no gap.
-      belt(path, 0.6, path.len - 1.75, stripIn);
+      // The belt ends at the loop's side, cut square to it (mitred at the 30° of the join),
+      // a hand's width from the trays, so parcels slide across onto their tray.
+      outward(this.t, this.n);
+      const cut: Cut = { c: this.p.clone().addScaledVector(this.n, TRAY_HALF + 0.06), n: this.n.clone().negate() };
+      belt(path, 0.6, path.len, stripIn, undefined, cut);
+      // The run-in is made of short induction belts that time each parcel to its tray:
+      // dark gaps across the belt between them, and a drive under each.
+      const edgeS = path.len - (TRAY_HALF + 0.06) / Math.sin(Math.PI / 6);
+      for (const back of [1.1, 2.5, 3.9]) {
+        path.at(edgeS - back, this.p, this.t);
+        const ry = Math.atan2(this.t.x, this.t.z);
+        this.box('indgap', inductGap, this.p.x, this.p.y + 0.004, this.p.z, 1.2, 0.01, 0.035, undefined, ry);
+        this.box('motor', motorMat, this.p.x, this.p.y - 0.4, this.p.z, 0.5, 0.2, 0.3, undefined, ry);
+      }
 
       const tunnelS = LANE_TUNNEL_Z - z0;
       const tunnel = this.tunnel(path, tunnelS, 1.2);
@@ -3553,7 +4355,7 @@ export class Sorter implements Scene3D {
       loopAt(INDUCT[3]!, this.p, this.t);
       const wx = this.p.x - LANE_OUT / Math.tan(Math.PI / 6) + 1.7;
       const wy = LOOP_Y - 1.0;
-      const z1 = -23.5 + ((wy - LANE_Y) / (LOOP_Y - 0.5 - LANE_Y)) * (-8.5 - LANE_OUT + 23.5);
+      const z1 = -23.5 + ((wy - LANE_Y) / (LANE_TOP - LANE_Y)) * (-8.5 - LANE_OUT + 23.5);
       const z0 = z1 - 6;
       this.box('grate', grate, wx, wy - 0.05, (z0 + z1) / 2, 1.1, 0.1, z1 - z0);
       for (const z of [z0, (z0 + z1) / 2, z1]) this.box('steel', steel, wx, (wy - 0.1) / 2, z, 0.12, wy - 0.1, 0.12);
@@ -3593,6 +4395,9 @@ export class Sorter implements Scene3D {
       geo.rail!.push(extrude(tp, [[-0.15, 0.08], [-0.15, 0], [0.15, 0], [0.15, 0.08]], 0, tp.len, 0.5));
     }
     const trayMat = this.theme(new THREE.MeshStandardMaterial({ color: 0x8c96a4, roughness: 0.35, metalness: 0.85 }), 0xffffff, 0.7);
+    // Realistic day: dark grey plates, each worn its own way.
+    this.themed[this.themed.length - 1]!.rc = new THREE.Color(0x4d5258);
+    trayWear(trayMat);
     // Tilt trays: a plate with raised side lips and a pivot block underneath.
     const trayGeo = mergeGeometries([
       new THREE.BoxGeometry(1.2, 0.06, PITCH * 0.88).toNonIndexed(),
@@ -3652,6 +4457,9 @@ export class Sorter implements Scene3D {
         return;
       }
       if (station) {
+        // A signal tower on a post beside the chute's end, where the pickup table starts.
+        this.box('post', legMat, end.x + 0.85, 1.4, end.z + 0.3, 0.08, 2.8, 0.08);
+        this.towerAt(k, v(end.x + 0.85, 2.8, end.z + 0.3), 0.62);
         this.stationOf.set(k, this.stationXs.length);
         this.stationXs.push(end.x);
         this.stationQueue.push([]);
@@ -3666,6 +4474,7 @@ export class Sorter implements Scene3D {
     dockChutes.forEach((c, n) => {
       const dx = DOCK_X[n] ?? c.end.x;
       this.dockOf.set(c.k, dx);
+      this.dockEnds.set(c.k, { end: c.end.clone(), s: c.s });
       const zTurn = -15 - n * 1.5;
       const pts = Math.abs(dx - c.end.x) < 0.3
         ? [c.end, v(dx, 1.0, DOCK_BELT_END)]
@@ -3673,7 +4482,8 @@ export class Sorter implements Scene3D {
       const belt = Path.fillet(pts, 1.2);
       beltPaths.push(belt);
       this.box('post', legMat, c.end.x + 0.9, 1.4, c.end.z, 0.08, 2.8, 0.08);
-      this.box(`lamp${c.k}`, c.lamp, c.end.x + 0.9, 2.9, c.end.z, 0.3, 0.3, 0.3);
+      // A signal tower on the post (on top of it, facing the dock).
+      this.towerAt(c.k, v(c.end.x + 0.9, 2.8, c.end.z), 0.62);
       this.cages.set(c.k, Docks.projectorAt(dx));
       this.chutes[c.k] = { s: c.s, side: c.side, path: c.path, col: c.col, lamp: c.lamp, flash: 0, belt };
     });
@@ -3694,16 +4504,25 @@ export class Sorter implements Scene3D {
         const yaw = Math.atan2(this.n.x, this.n.z);
         const px = this.p.x + this.n.x * 0.12;
         const pz = this.p.z + this.n.z * 0.12;
-        m.makeRotationY(yaw).setPosition(px + this.n.x * 0.05, 1.65, pz + this.n.z * 0.05);
+        // (A centimetre in front of the frame's face, or the two flicker through each other.)
+        m.makeRotationY(yaw).setPosition(px + this.n.x * 0.062, 1.65, pz + this.n.z * 0.062);
         shows.place(k, m);
         // A bracket and frame on the pillar.
         this.box('chutedisp', legMat, px + this.n.x * 0.02, 1.65, pz + this.n.z * 0.02, Math.abs(this.n.z) * 0.86 + 0.06, 0.48, Math.abs(this.n.x) * 0.86 + 0.06);
+        // Above it, a signal tower on a little shelf bracket off the pillar.
+        this.box('towerbr', legMat, px + this.n.x * 0.1, 1.96, pz + this.n.z * 0.1, Math.abs(this.n.z) * 0.18 + Math.abs(this.n.x) * 0.22, 0.03, Math.abs(this.n.x) * 0.18 + Math.abs(this.n.z) * 0.22);
+        this.towerAt(k, v(px + this.n.x * 0.12, 1.975, pz + this.n.z * 0.12), 0.5);
         const dock = dockXs.findIndex(([c]) => c === k);
         if (k === REJECT) shows.set(k, 'NO READ', 'to manual sorting', { bg: '#2a0d0d', fg: '#ff5a4a', sub: '#e0a0a0' });
         else if (dock >= 0) {
           const c = NORTH_CITIES[DOCK_CITY[dock]!]!;
-          shows.set(k, `${dock + 1} · ${c.name}`, rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]), { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+          const main = `${dock + 1} · ${c.name}`;
+          const sub = rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]);
+          shows.set(k, main, sub, { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' });
+          this.showText.set(k, [main, sub]);
         } else shows.set(k, 'Robots', `station ${(this.stationOf.get(k) ?? 0) + 1} · doors 21–40`, { bg: '#101114', fg: '#ffffff', sub: '#f6a6d6' });
+        // (Where the work table stands along the loop: the technician keeps clear of it.)
+        this.tableS.push(legS);
         // The table: right under the display, against the pillar, along the loop.
         const tx = this.p.x + this.n.x * 0.62;
         const tz = this.p.z + this.n.z * 0.62;
@@ -3712,6 +4531,7 @@ export class Sorter implements Scene3D {
       desk.build();
       shows.flush();
       this.put(shows.mesh);
+      this.chuteShows = shows;
     }
 
     // To and from the store: off the loop's far bend and back on, tangentially.
@@ -3850,6 +4670,7 @@ export class Sorter implements Scene3D {
     }
     const carton = this.std(0xffffff, 0.88, 0);
     carton.map = cardboardSide();
+    this.realNormal(carton, cardboardNormal(), 0.6);
     // Diagonal bracing between the upright pairs, base plates and yellow end guards.
     const braces: THREE.BufferGeometry[] = [];
     const brace = (x: number, z: number, y0: number, y1: number, dir: 1 | -1) => {
@@ -3948,13 +4769,15 @@ export class Sorter implements Scene3D {
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow;');
     };
     toonify(mat);
+    // Realistic day: every box its own cardboard shade, worn at the edges.
+    parcelWear(mat);
     // Plastic for the polybags: shiny, no cardboard print.
     const plastic = mat.clone();
     plastic.map = null;
     plastic.roughness = 0.35;
     plastic.onBeforeCompile = mat.onBeforeCompile;
     plastic.customProgramCacheKey = () => 'parcel-plastic';
-    const geos = [
+    const geos: THREE.BufferGeometry[] = [
       // Slightly rounded boxes: a softer, more real silhouette than sharp cubes.
       new RoundedBoxGeometry(1, 1, 1, 2, 0.06),
       // Polybags: a soft pillow.
@@ -3962,11 +4785,18 @@ export class Sorter implements Scene3D {
       // Tubes, lying along their length.
       new THREE.CylinderGeometry(0.5, 0.5, 1, 18).rotateX(Math.PI / 2),
     ];
+    // The rubber duck: its own shiny plastic, with an orange beak and black eyes painted on (vertex colours).
+    geos.push(duckGeometry());
+    const duckMat = plastic.clone();
+    duckMat.vertexColors = true;
+    duckMat.roughness = 0.25;
+    duckMat.onBeforeCompile = mat.onBeforeCompile;
+    duckMat.customProgramCacheKey = () => 'parcel-duck';
     geos.forEach((geo, k) => {
       const glow = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARCELS * 3), 3);
       glow.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aGlow', glow);
-      const mesh = new THREE.InstancedMesh(geo, k === 1 ? plastic : mat, MAX_PARCELS);
+      const mesh = new THREE.InstancedMesh(geo, k === 1 ? plastic : k === 3 ? duckMat : mat, k === 3 ? 16 : MAX_PARCELS);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.setColorAt(0, this.white);
       mesh.frustumCulled = false;
@@ -4124,6 +4954,82 @@ export class Sorter implements Scene3D {
   }
 
   /** The day look's own scenery: a light hall, the illustration's workstation, GPU racks, people and signs. */
+  /**
+   * The lit hall of the realistic day look: worn concrete, cladding and a ceiling that
+   * take light and shadow, and shafts of daylight under the roof lights.
+   */
+  private buildRealHall(): void {
+    // Built the first time the look is chosen (it simulates the robots' traffic and draws
+    // large canvases), after setupShadows: so it sets its own shadow flags.
+    const add = (o: THREE.Object3D) => {
+      this.put(o, 'day');
+      this.realOnly.push(o);
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.material instanceof THREE.MeshStandardMaterial) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    };
+    const { map, rough } = realFloorMaps();
+    const fm = map.clone();
+    const fr = rough.clone();
+    for (const t of [fm, fr]) {
+      t.repeat.set(HW / FLOOR_TILE_M, HD / FLOOR_TILE_M);
+      t.needsUpdate = true;
+    }
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d4, map: fm, roughnessMap: fr, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
+    grime(floorMat, 0.22, 9, 'xz');
+    this.realNormal(floorMat, floorJointNormal(), 0.6);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW, HD), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(HCX, 0, HZC);
+    add(floor);
+    const cl = dayWall().clone();
+    cl.repeat.set(1 / 8, 1 / HH);
+    cl.offset.set(0, 0.5);
+    cl.needsUpdate = true;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: cl, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+    grime(wallMat, 0.18, 6, 'xy', 1.2);
+    this.realNormal(wallMat, claddingNormal(), 0.8);
+    for (const z of [NZ, HZ]) {
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), wallMat);
+      w.position.set(HCX, HH / 2, z);
+      add(w);
+    }
+    const side = dayWall().clone();
+    side.repeat.set(HD / 8, 1);
+    side.needsUpdate = true;
+    const sideMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: side, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+    grime(sideMat, 0.18, 6, 'zy', 1.2);
+    this.realNormal(sideMat, claddingNormal(), 0.8);
+    for (const x of [WX, EX]) {
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), sideMat);
+      w.position.set(x, HH / 2, HZC);
+      w.rotation.y = Math.PI / 2;
+      add(w);
+    }
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.8, metalness: 0.3, side: THREE.DoubleSide });
+    // The steel roof deck: a trapezoid rib every 3 m, across the hall (shape UVs are metres).
+    const deck = roofDeckNormal().clone();
+    deck.repeat.set(1 / 3, 1 / 3);
+    deck.rotation = Math.PI / 2;
+    deck.needsUpdate = true;
+    this.realNormal(ceilMat, deck);
+    const ceil = new THREE.Mesh(ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS), ceilMat);
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.set(HCX, HH, HZC);
+    add(ceil);
+    add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
+    // The LED fixtures' light on the floor (they hang every 10 m in four rows; see buildDay).
+    const spots: [number, number][] = [];
+    for (let x = WX + 10; x <= EX - 10; x += 10) for (const z of [-28, -10, 10, 28]) spots.push([x, z]);
+    add(lightPools(spots, 7, 4.5));
+    // Where the roll cages are pushed, the floor shows it.
+    add(wheelTracks(this.docks.cagePaths().map((pts) => ({ pts })), CAGE_TRACKS));
+    // The robots keep to one-way lanes on a grid: the busy lanes show as worn tracks.
+    add(wheelTracks(this.floor.trafficPaths(), ROBOT_TRACKS, 23));
+  }
+
   private buildDay(): void {
     this.only = 'day';
     const grid = canvasTex(64, 64, (g) => {
@@ -4141,6 +5047,7 @@ export class Sorter implements Scene3D {
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(HCX, 0, HZC);
     this.put(floor);
+    this.flatOnly.push(floor);
     // Flat walls and ceiling, as in a drawing.
     // Cladding with a band of high windows.
     const cladding = (len: number) => {
@@ -4162,17 +5069,20 @@ export class Sorter implements Scene3D {
       const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longDay);
       w.position.set(HCX, HH / 2, z);
       this.put(w);
+      this.flatOnly.push(w);
     }
     for (const x of [WX, EX]) {
       const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wall);
       w.position.set(x, HH / 2, HZC);
       w.rotation.y = Math.PI / 2;
       this.put(w);
+      this.flatOnly.push(w);
     }
     const ceil = new THREE.Mesh(ceilingWithLights(HCX, HZC, HW, HD, ROOF_LIGHTS), new THREE.MeshBasicMaterial({ color: DAY.ceiling, side: THREE.DoubleSide }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil);
+    this.flatOnly.push(ceil);
     // Rows of linear LED fixtures between the roof lights, and cable trays along the hall.
     const led = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const housing = this.std(0xb9c0c8, 0.5, 0.6, 0xb9c0c8);
@@ -4190,13 +5100,17 @@ export class Sorter implements Scene3D {
       for (let x = WX + 4; x < EX - 2; x += 6) this.box('ctrayrod', trayMat, x, HH - 0.8, z, 0.02, 1.6, 0.02);
     }
 
-    // Monitoring: a purple workstation in front of the control room.
+    // Monitoring: a purple workstation in front of the control room. The desk, its screens and
+    // chair stay at night too (someone keeps an eye on the hall during the party); the operator
+    // is a day worker.
+    const dayOnly = this.only;
+    this.only = undefined;
     const purple = this.std(DAY.purple, 0.8, 0.05);
     const dx = -48;
     const dz = 20.6;
-    this.box('desk', purple, dx, 1.2, dz, 3.2, 0.12, 1.6);
+    this.box('mdesk', purple, dx, 1.2, dz, 3.2, 0.12, 1.6);
     this.blob(dx, dz - 0.3, 4, 3);
-    for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('desk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
+    for (const sx of [-1.5, 1.5]) for (const sz of [-0.7, 0.7]) this.box('mdesk', purple, dx + sx, 0.6, dz + sz, 0.1, 1.2, 0.1);
     // One big video wall over the desk: a live plan of the hall (chutes, trucks, cleardowns, robots).
     const ink = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
     const vw = new THREE.Group();
@@ -4207,43 +5121,30 @@ export class Sorter implements Scene3D {
     const sc = new THREE.Mesh(new THREE.PlaneGeometry(5.1, 1.84), new THREE.MeshBasicMaterial({ map: this.screens.map }));
     sc.position.z = 0.065;
     vw.add(sc);
-    for (const ox of [-2.2, 2.2]) this.box('wallpost', ink, dx + ox, 0.9, dz + 1.0, 0.1, 1.8, 0.1);
+    for (const ox of [-2.2, 2.2]) this.box('mwallpost', ink, dx + ox, 0.9, dz + 1.0, 0.1, 1.8, 0.1);
     // A small screen on the desk with the numbers.
     const small = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.35), new THREE.MeshBasicMaterial({ map: this.screens.dash }));
     small.position.set(dx + 1.1, 1.5, dz + 0.2);
     small.rotation.set(-0.2, Math.PI - 0.3, 0);
     this.put(small);
-    this.box('kbd', ink, dx, 1.27, dz - 0.25, 0.7, 0.03, 0.22);
-    this.box('kbd', ink, dx + 0.55, 1.27, dz - 0.25, 0.1, 0.03, 0.14);
-    this.box('mug', this.std(0xffffff, 0.5, 0, 0xffffff), dx - 1.1, 1.32, dz - 0.3, 0.1, 0.12, 0.1);
+    this.box('mkbd', ink, dx, 1.27, dz - 0.25, 0.7, 0.03, 0.22);
+    this.box('mkbd', ink, dx + 0.55, 1.27, dz - 0.25, 0.1, 0.03, 0.14);
+    this.box('mmug', this.std(0xffffff, 0.5, 0, 0xffffff), dx - 1.1, 1.32, dz - 0.3, 0.1, 0.12, 0.1);
     // Office chair: star base, pole, seat and back.
     const cz2 = dz - 1.0;
-    for (let k = 0; k < 5; k++) this.box('chair', ink, dx + Math.cos((k * 2 * Math.PI) / 5) * 0.2, 0.06, cz2 + Math.sin((k * 2 * Math.PI) / 5) * 0.2, 0.4, 0.04, 0.05, undefined, (k * 2 * Math.PI) / 5);
-    this.box('chair', ink, dx, 0.3, cz2, 0.06, 0.45, 0.06);
-    this.box('chair', purple, dx, 0.58, cz2, 0.55, 0.1, 0.5);
-    this.box('chair', purple, dx, 0.95, cz2 - 0.26, 0.5, 0.65, 0.08);
+    for (let k = 0; k < 5; k++) this.box('mchair', ink, dx + Math.cos((k * 2 * Math.PI) / 5) * 0.2, 0.06, cz2 + Math.sin((k * 2 * Math.PI) / 5) * 0.2, 0.4, 0.04, 0.05, undefined, (k * 2 * Math.PI) / 5);
+    this.box('mchair', ink, dx, 0.3, cz2, 0.06, 0.45, 0.06);
+    this.box('mchair', purple, dx, 0.58, cz2, 0.55, 0.1, 0.5);
+    this.box('mchair', purple, dx, 0.95, cz2 - 0.26, 0.5, 0.65, 0.08);
+    this.only = dayOnly;
     this.person(dx + 0.3, dz - 1.5, 0.2);
 
-    // Computing: magenta GPU racks next to the control room.
-    const magenta = this.std(DAY.magenta, 0.7, 0.1);
-    const gpu = canvasTex(128, 64, (g) => {
-      g.fillStyle = '#d6339a';
-      g.fillRect(0, 0, 128, 64);
-      g.fillStyle = '#1d1d1f';
-      g.font = `700 34px ${SIGN_FONT}`;
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillText('GPU', 64, 34);
-    });
-    const leds = new THREE.MeshBasicMaterial({ color: 0xffd6ec });
-    for (let k = 0; k < 3; k++) {
-      const x = -58.5 + k * 1.8;
-      this.box('gpu', magenta, x, 2.1, 27.6, 1.5, 4.2, 1.5);
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5), new THREE.MeshBasicMaterial({ map: gpu }));
-      p.position.set(x, 3.5, 26.84);
-      p.rotation.y = Math.PI;
-      this.put(p);
-      for (let j = 0; j < 5; j++) this.box('leds', leds, x, 0.8 + j * 0.45, 26.84, 1.1, 0.05, 0.02);
+    // Computing: a row of server racks against the west wall (see buildRacks), day and night.
+    {
+      const was = this.only;
+      this.only = undefined;
+      this.buildRacks();
+      this.only = was;
     }
 
     // People and parcel trolleys.
@@ -4275,7 +5176,7 @@ export class Sorter implements Scene3D {
       g.strokeRect(-20, -18, 40, 36);
       for (const [x, h] of [[-12, 10], [-3, 20], [6, 14], [14, 24]] as const) g.fillRect(x - 3, 14 - h, 6, h);
     });
-    this.sign('Computing', '#d6339a', -56.7, 6.6, 26, 0, (g) => {
+    this.sign('Computing', '#d6339a', -59.4, 5.2, 24.9, Math.PI / 2, (g) => {
       g.strokeRect(-14, -20, 28, 22);
       g.beginPath();
       g.moveTo(0, 2);
@@ -4322,6 +5223,7 @@ export class Sorter implements Scene3D {
     const white = this.std(0xffffff, 0.8, 0.05);
     const card = this.std(0xffffff, 0.9, 0);
     card.map = cardboardSide();
+    this.realNormal(card, cardboardNormal(), 0.6);
     const black = this.std(0x1d1d1f, 0.6, 0.2);
     this.box('trolley', white, x, 0.32, z, 2.2, 0.08, 1.4);
     this.blob(x, z, 2.8, 2.0);
@@ -4345,7 +5247,12 @@ export class Sorter implements Scene3D {
     y = Math.min(y, SIGN_MAX_Y);
     // A framed sign: printed faces on both sides, an aluminium edge and two hanging eyes.
     const face = new THREE.MeshBasicMaterial({ map: signTex(text, color, icon) });
-    const edge = this.signEdge ?? (this.signEdge = new THREE.MeshBasicMaterial({ color: 0xc3c8ce }));
+    litPaper(face);
+    if (!this.signEdge) {
+      this.signEdge = new THREE.MeshBasicMaterial({ color: 0xc3c8ce });
+      litPaper(this.signEdge);
+    }
+    const edge = this.signEdge;
     const board = new THREE.Mesh(new THREE.BoxGeometry(4.9, 1.3, 0.08), [edge, edge, edge, edge, face, face]);
     board.position.set(x, y, z);
     board.rotation.y = ry;
@@ -4590,7 +5497,7 @@ export class Sorter implements Scene3D {
         },
       },
       // Behind the DJ, over the shoulder: the decks and the crowd beyond.
-      { ...fixed('dj', v(PLATFORM_X - 2.0, PLATFORM_Y + 1.95, 0.45), v(PLATFORM_X + 2.4, PLATFORM_Y + 0.9, -0.15)), hover: 'still', when: 'night' },
+      { ...fixed('dj', v(PLATFORM_X - 2.0, PLATFORM_Y + 1.95, 0.45), v(PLATFORM_X + 2.4, PLATFORM_Y + 0.9, -0.15), 'DJ'), hover: 'still', when: 'night' },
       fixed('break', v(-29, 3.2, 26.8), v(-36.5, 0.8, 31.2)),
       {
         // Standing on a tray: eye height above it, at tray speed, looking ahead.
@@ -4720,17 +5627,61 @@ export class Sorter implements Scene3D {
   }
 
   /** Hall sounds since the last call, with a volume by distance from the camera. */
-  takeSounds(): { kind: 'horn' | 'beep' | 'buzz'; vol: number }[] {
-    const out: { kind: 'horn' | 'beep' | 'buzz'; vol: number }[] = [];
+  takeSounds(): { kind: Sfx; vol: number; n?: number }[] {
+    const out: { kind: Sfx; vol: number; n?: number }[] = [];
     const cam = this.camera.position;
-    for (const list of [this.trucks.sounds, this.yard.sounds] as { kind: 'horn' | 'beep' | 'buzz'; at: V3 }[][]) {
+    for (const list of [this.trucks.sounds, this.yard.sounds, this.eggs.sounds] as { kind: Sfx; at: V3; n?: number }[][]) {
+      const jokes = list === this.eggs.sounds;
       for (const sd of list) {
-        const vol = 1 - cam.distanceTo(sd.at) / 40;
-        if (vol > 0.05 && out.length < 4 && !out.some((o) => o.kind === sd.kind)) out.push({ kind: sd.kind, vol });
+        // (What was tapped is heard from further away: it is right there on the screen.)
+        const vol = jokes ? Math.max(0.35, 1 - cam.distanceTo(sd.at) / 80) : 1 - cam.distanceTo(sd.at) / 40;
+        if (vol > 0.05 && out.length < 4 && !out.some((o) => o.kind === sd.kind && o.kind !== 'tune')) out.push({ kind: sd.kind, vol, n: sd.n });
       }
       list.length = 0;
     }
     return out;
+  }
+
+  /**
+   * A tap on something that is a joke but not a person, robot or forklift (the cat, the
+   * coffee machine, the DJ booth, a runaway parcel): it reacts. True if something was hit.
+   */
+  tapEgg(clientX: number, clientY: number): boolean {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    let best: { kind: 'cat' | 'coffee' | 'dj' | 'runner'; at: V3 } | null = null;
+    let bd = 40;
+    for (const t of this.eggs.targets()) {
+      const w = this.p.copy(t.at);
+      const dist = w.distanceTo(this.camera.position);
+      w.project(this.camera);
+      if (w.z > 1 || w.z < -1) continue;
+      const sx = rect.left + ((w.x + 1) / 2) * rect.width;
+      const sy = rect.top + ((1 - w.y) / 2) * rect.height;
+      const d = Math.hypot(sx - clientX, sy - clientY) * (0.8 + dist / 120);
+      if (d < bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    if (best) this.eggs.tapThing(best.kind, this.bt);
+    return !!best;
+  }
+
+  /** A tapped robot, forklift or person reacts (a wave, a honk, a spin...). */
+  poke(t: { obj: THREE.Object3D; kind: 'robot' | 'forklift' | 'person' }): void {
+    if (t.kind === 'person') {
+      const h = RIGS.get(t.obj);
+      if (h) this.eggs.tapPerson(t.obj, h, this.bt, this.camera.position);
+    } else if (t.kind === 'forklift') this.eggs.tapForklift(t.obj);
+    else {
+      const k = this.floor.robots.findIndex((r) => r.g === t.obj);
+      if (k >= 0) this.eggs.tapRobot(k, t.obj, this.bt);
+    }
+  }
+
+  /** A tapped parcel: a rubber duck quacks. */
+  pokeParcel(p: Parcel): void {
+    if (p.shape === 3) this.eggs.quack(p.pos);
   }
 
   /** How loud the belts hum: with belt speed and how busy the hub is. */
@@ -4831,9 +5782,12 @@ export class Sorter implements Scene3D {
     const kg = `${p.kg.toFixed(1)} kg (vol ${vol.toFixed(1)})`;
     const note =
       p.reason === 'oversize' ? 'Too big or heavy for the sorter: to manual sorting' : p.reason === 'overflow' ? `Its chute stayed full (${p.laps ?? 0} rounds): to manual sorting` : p.noread ? 'Label could not be read: to manual sorting' : p.missorted ? 'Sent to the wrong dock by mistake: it will go back' : '';
+    const address = addressFor(p.id, p.pc, city);
+    // The rubber duck is for whoever wrote all this.
+    if (p.shape === 3) address.name = 'The developer';
     return {
       id: String(p.id).padStart(8, '0'),
-      address: addressFor(p.id, p.pc, city),
+      address,
       route,
       where: this.parcelWhere(p),
       kg,
@@ -4876,15 +5830,16 @@ export class Sorter implements Scene3D {
 
   private readonly ray = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
-  private readonly instParcels: Parcel[][] = [[], [], []];
+  private readonly instParcels: Parcel[][] = [[], [], [], []];
 
   setRate(perMin: number): void {
     this.rate = clamp(perMin, 0, Sorter.MAX_RATE);
   }
 
   /** Departments the camera can go to. */
-  departments(): { id: string; label: string }[] {
-    return this.pois.filter((p) => p.dept).map((p) => ({ id: p.name, label: p.dept! }));
+  /** Stops to go to; `when` keeps one to the day or the night (the dance floor, the DJ). */
+  departments(): { id: string; label: string; when?: 'day' | 'night' }[] {
+    return this.pois.filter((p) => p.dept).map((p) => ({ id: p.name, label: p.dept!, when: p.when }));
   }
 
   /** Fly to (or with `jump`, appear at) a department and stay there (turning slowly) until another camera mode is chosen. */
@@ -4985,7 +5940,11 @@ export class Sorter implements Scene3D {
       return;
     }
     if (t.s < t.len) {
-      t.s = Math.min(t.len, t.s + speed * dt);
+      // Asked for (Go to): there in about two and a half seconds, however far, with the camera
+      // keeping close behind; the free tour cruises at its own pace.
+      const asked = this.camMode === 'visit' && t.poi === this.visitPoi;
+      if (asked) this.camRate = 6;
+      t.s = Math.min(t.len, t.s + (asked ? Math.max(speed, t.len / 2.3) : speed) * dt);
       const u = t.s / t.len;
       t.curve.getPointAt(u, this.want);
       // Look ahead along the way, then settle on the stop.

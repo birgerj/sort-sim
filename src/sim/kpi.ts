@@ -29,6 +29,9 @@ export interface Sample {
   noreadPct: number;
   manualPct: number;
   missorts: number;
+  /** Faults that started, and chutes down at the sample. */
+  faults: number;
+  chutesDown: number;
   /** Chutes full at the moment of the sample, robots busy, parcels queued at the infeed. */
   chutesFull: number;
   robotsBusyPct: number;
@@ -54,10 +57,11 @@ interface Window {
   noread: number;
   manual: number;
   missorts: number;
+  faults: number;
   byCity: Map<string, number>;
 }
 
-const empty = (): Window => ({ inducted: 0, out: 0, dwellSum: 0, recirc: 0, noread: 0, manual: 0, missorts: 0, byCity: new Map() });
+const empty = (): Window => ({ inducted: 0, out: 0, dwellSum: 0, recirc: 0, noread: 0, manual: 0, missorts: 0, faults: 0, byCity: new Map() });
 
 export class Kpi {
   readonly samples: Sample[] = [];
@@ -102,13 +106,19 @@ export class Kpi {
     this.total.missorts++;
   }
 
+  /** A chute went down. */
+  fault(): void {
+    this.w.faults++;
+    this.total.faults++;
+  }
+
   departed(d: Departure): void {
     this.departures.push(d);
     if (this.departures.length > 400) this.departures.shift();
   }
 
   /** Call often; takes a sample every `every` minutes of hub time. */
-  tick(t: number, state: () => { chutesFull: number; robotsBusyPct: number; infeedQueue: number; storeUsed: number; storeSlots: number; batch: string }): void {
+  tick(t: number, state: () => { chutesFull: number; robotsBusyPct: number; infeedQueue: number; chutesDown?: number; storeUsed: number; storeSlots: number; batch: string }): void {
     if (this.lastT === null) this.lastT = t;
     if (t - this.lastT < this.every) return;
     const span = t - this.lastT;
@@ -127,6 +137,8 @@ export class Kpi {
       noreadPct: pct(w.noread, w.inducted),
       manualPct: pct(w.manual, w.inducted),
       missorts: w.missorts,
+      faults: w.faults,
+      chutesDown: st.chutesDown ?? 0,
       chutesFull: st.chutesFull,
       robotsBusyPct: Math.round(st.robotsBusyPct),
       infeedQueue: st.infeedQueue,
@@ -143,7 +155,7 @@ export class Kpi {
   }
 
   /** Totals since the start. */
-  totals(): { inducted: number; out: number; dwell: number; recircPct: number; noreadPct: number; manualPct: number; missorts: number; departures: number; onTimePct: number; loadFactorPct: number } {
+  totals(): { inducted: number; out: number; dwell: number; recircPct: number; noreadPct: number; manualPct: number; missorts: number; faults: number; departures: number; onTimePct: number; loadFactorPct: number } {
     const t = this.total;
     const d = this.departures;
     return {
@@ -154,6 +166,7 @@ export class Kpi {
       noreadPct: pct(t.noread, t.inducted),
       manualPct: pct(t.manual, t.inducted),
       missorts: t.missorts,
+      faults: t.faults,
       departures: d.length,
       onTimePct: d.length ? pct(d.filter((x) => x.onTime).length, d.length) : 100,
       loadFactorPct: d.length ? Math.round((100 * d.reduce((a, x) => a + x.load / x.room, 0)) / d.length) : 0,
@@ -163,7 +176,7 @@ export class Kpi {
   /** The timeline and the departures as CSV (two tables, one after the other). */
   csv(): string {
     const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
-    const cols: (keyof Sample)[] = ['t', 'inPerHour', 'outPerHour', 'dwell', 'recircPct', 'noreadPct', 'manualPct', 'missorts', 'chutesFull', 'robotsBusyPct', 'infeedQueue', 'onTimePct', 'loadFactorPct', 'storeUsed', 'storeSlots', 'topCity', 'topPct', 'batch'];
+    const cols: (keyof Sample)[] = ['t', 'inPerHour', 'outPerHour', 'dwell', 'recircPct', 'noreadPct', 'manualPct', 'missorts', 'faults', 'chutesDown', 'chutesFull', 'robotsBusyPct', 'infeedQueue', 'onTimePct', 'loadFactorPct', 'storeUsed', 'storeSlots', 'topCity', 'topPct', 'batch'];
     const lines = [cols.join(',')];
     for (const s of this.samples) lines.push(cols.map((c) => (c === 't' ? hhmm(s.t) : String(s[c]))).join(','));
     lines.push('', 'door,city,departed,cutoff,load,room,onTime,full');

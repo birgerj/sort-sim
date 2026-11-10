@@ -28,6 +28,8 @@ float linearDepth(vec2 uv) {
 void main() {
   vec4 col = texture2D(tColor, vUv);
   vec4 nC = texture2D(tNormal, vUv);
+  // People are drawn with alpha 2: no lines on them, round them, or through them.
+  if (nC.a > 1.5) { gl_FragColor = col; return; }
   float dC = linearDepth(vUv);
   float edge = 0.0;
   vec2 offs[4];
@@ -38,6 +40,7 @@ void main() {
   for (int i = 0; i < 4; i++) {
     vec2 uv = vUv + offs[i];
     vec4 n = texture2D(tNormal, uv);
+    if (n.a > 1.5) continue;
     float d = linearDepth(uv);
     // Normal crease (both pixels covered by geometry).
     float crease = (n.a > 0.5 && nC.a > 0.5) ? 1.0 - dot(normalize(n.xyz * 2.0 - 1.0), normalize(nC.xyz * 2.0 - 1.0)) : 0.0;
@@ -66,6 +69,10 @@ export class InkPass extends Pass {
   // Double-sided: belts and chutes are single surfaces; seen from behind they must still
   // hide what is behind them, or its outlines show through and they look transparent.
   private normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+  /** People: drawn into the same buffers with alpha 2, which the edge shader leaves alone. */
+  private maskMat = new THREE.MeshNormalMaterial({ opacity: 2 });
+  /** Objects on the mask layer (people), drawn in a second render. */
+  private masked: THREE.Object3D[] | null = null;
   private quad: FullScreenQuad;
   private mat: THREE.ShaderMaterial;
   /** Objects hidden while normals are drawn (lights, lines, particles, glass, shadows). */
@@ -75,6 +82,8 @@ export class InkPass extends Pass {
   constructor(
     private scene: THREE.Scene,
     private camera: THREE.PerspectiveCamera,
+    /** Layer of the objects to draw as a mask (no lines on them). */
+    private maskLayer = -1,
   ) {
     super();
     this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
@@ -109,12 +118,13 @@ export class InkPass extends Pass {
   /** Re-collect the objects that must not get outlines (call after adding objects). */
   refresh(): void {
     this.skip = null;
+    this.masked = null;
   }
 
   private collect(): THREE.Object3D[] {
     const out: THREE.Object3D[] = [];
     this.scene.traverse((o) => {
-      if (o.userData.noInk) out.push(o);
+      if (o.userData.noInk || o.userData.inkMask) out.push(o);
       else if ((o as THREE.Line).isLine || (o as THREE.Points).isPoints || (o as THREE.Sprite).isSprite) out.push(o);
       else if ((o as THREE.Mesh).isMesh) {
         const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[];
@@ -141,6 +151,23 @@ export class InkPass extends Pass {
     renderer.setRenderTarget(this.target);
     renderer.clear();
     renderer.render(this.scene, this.camera);
+    if (this.maskLayer >= 0) {
+      // Then the people, on their own layer, as a mask over what is behind them.
+      if (!this.masked) {
+        const list: THREE.Object3D[] = [];
+        this.scene.traverse((o) => o.userData.inkMask && list.push(o));
+        this.masked = list;
+      }
+      for (const o of this.masked) o.visible = true;
+      const layers = this.camera.layers.mask;
+      const auto = renderer.autoClear;
+      this.camera.layers.set(this.maskLayer);
+      renderer.autoClear = false;
+      this.scene.overrideMaterial = this.maskMat;
+      renderer.render(this.scene, this.camera);
+      this.camera.layers.mask = layers;
+      renderer.autoClear = auto;
+    }
     renderer.setClearColor(clear, alpha);
     this.scene.overrideMaterial = null;
     this.scene.background = bg;
@@ -188,18 +215,20 @@ export function toonify(m: THREE.MeshStandardMaterial): void {
   m.onBeforeCompile = (sh, r) => {
     prev.call(m, sh, r);
     sh.uniforms.uToon = TOON;
+    // How much of the toon steps this material takes (1: all; less keeps some smooth shading).
+    const k = (m.userData.toonK as number | undefined) ?? 1;
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uToon;')
+      .replace('#include <common>', `#include <common>\nuniform float uToon;\nconst float uToonK = ${k.toFixed(3)};`)
       .replace(
         '#include <opaque_fragment>',
         `{
           float base = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)) + 1e-4;
           float lit = dot(outgoingLight - totalEmissiveRadiance, vec3(0.299, 0.587, 0.114)) / base;
           float q = lit < 0.45 ? 0.7 : (lit < 0.85 ? 0.86 : 1.0);
-          outgoingLight = mix(outgoingLight, diffuseColor.rgb * q + totalEmissiveRadiance, uToon);
+          outgoingLight = mix(outgoingLight, diffuseColor.rgb * q + totalEmissiveRadiance, uToon * uToonK);
         }
         #include <opaque_fragment>`,
       );
   };
-  m.customProgramCacheKey = () => 'toon';
+  m.customProgramCacheKey = () => 'toon' + ((m.userData.toonK as number | undefined) ?? 1);
 }

@@ -8,6 +8,9 @@
  * visual events are released when they are heard (output latency included).
  */
 import { BPM, chordOf, Composer, energyOf, STEPS_PER_BAR, type Mood, type NoteEvent } from './composer';
+
+/** Sounds in the hall: work sounds, and the little jokes. */
+export type Sfx = 'horn' | 'beep' | 'buzz' | 'tune' | 'quack' | 'airhorn' | 'meow' | 'boop' | 'sulk';
 import type { NoteRole, RGB } from '../scene/types';
 import { XMAS } from '../sim/season';
 
@@ -106,6 +109,8 @@ export class Music {
     return bar * 4 + (t - b.at) / (60 / b.bpm);
   }
   private last = { kick: -99, snare: -99, hat: -99, bass: -99, pad: -99 };
+  /** The bar on the last frame (a horn played in tune takes its note from the chord there). */
+  private frameBar = 0;
   private timer: ReturnType<typeof setInterval>;
   private ctx: AudioContext | null = null;
   private out: GainNode | null = null;
@@ -143,8 +148,12 @@ export class Music {
     if (this.out && this.ctx && !this.muted) this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
   }
 
-  /** A sound effect from the hall, now: a forklift horn, a reverse beeper, a cleardown buzzer. */
-  sfx(kind: 'horn' | 'beep' | 'buzz', vol = 1): void {
+  /**
+   * A sound effect from the hall, now: a forklift horn, a reverse beeper, a cleardown buzzer; and
+   * the little jokes: a rubber duck, an airhorn, a cat, a robot's happy or sulky bleep, and a horn
+   * played in tune (`n`: which note of the chord now, counting up through the octaves).
+   */
+  sfx(kind: Sfx, vol = 1, n = 0): void {
     if (!this.audible || !this.ctx || !this.out) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.01;
@@ -173,7 +182,57 @@ export class Music {
         tone('square', 466, 0.14, 0.2, st);
       }
     } else if (kind === 'beep') tone('sine', 1250, 0.18, 0.35);
-    else tone('sawtooth', 220, 0.3, 0.25);
+    else if (kind === 'buzz') tone('sawtooth', 220, 0.3, 0.25);
+    else if (kind === 'tune') {
+      // The horn, in tune: a note of the chord that plays now (up an octave every three taps).
+      const chord = chordOf(Math.floor(this.frameBar));
+      const midi = chord[n % chord.length]! + 12 * Math.floor(n / chord.length) + 12;
+      const f = 440 * 2 ** ((midi - 69) / 12);
+      tone('square', f, 0.2, 0.22);
+      tone('square', f * 1.005, 0.2, 0.16);
+    } else {
+      // Pitch sweeps: a quack, an airhorn, a meow, a bleep.
+      const sweep = (type: OscillatorType, f0: number, f1: number, len: number, level: number, start = 0, f2?: number) => {
+        const o = ctx.createOscillator();
+        o.type = type;
+        o.frequency.setValueAtTime(f0, t + start);
+        if (f2 !== undefined) {
+          o.frequency.linearRampToValueAtTime(f1, t + start + len * 0.4);
+          o.frequency.linearRampToValueAtTime(f2, t + start + len);
+        } else o.frequency.exponentialRampToValueAtTime(f1, t + start + len);
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(0, t + start);
+        og.gain.linearRampToValueAtTime(level, t + start + 0.015);
+        og.gain.setValueAtTime(level, t + start + len * 0.7);
+        og.gain.linearRampToValueAtTime(0, t + start + len);
+        let node: AudioNode = o;
+        if (kind === 'quack') {
+          // Nasal: a band-pass on a sawtooth.
+          const bp = ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.value = 1100;
+          bp.Q.value = 3;
+          o.connect(bp);
+          node = bp;
+        }
+        node.connect(og);
+        og.connect(g);
+        o.start(t + start);
+        o.stop(t + start + len + 0.02);
+      };
+      if (kind === 'quack') {
+        sweep('sawtooth', 520, 380, 0.16, 0.9);
+        sweep('sawtooth', 500, 360, 0.14, 0.7, 0.2);
+      } else if (kind === 'airhorn') {
+        // Three blasts, the last one long: detuned saws, slightly bent up.
+        g.gain.value = 0.22 * vol;
+        for (const [st, len] of [[0, 0.16], [0.2, 0.16], [0.4, 0.7]] as const) for (const det of [0, 4, -5]) sweep('sawtooth', 740 + det, 790 + det, len, 0.18, st);
+      } else if (kind === 'meow') sweep('triangle', 600, 900, 0.45, 0.5, 0, 520);
+      else if (kind === 'boop') {
+        sweep('sine', 600, 1200, 0.1, 0.4);
+        sweep('sine', 900, 1500, 0.1, 0.4, 0.12);
+      } else sweep('sine', 700, 260, 0.5, 0.4);
+    }
   }
 
   /** How busy the music is (from the hub's parcels per minute); it changes from the next bar. */
@@ -250,6 +309,7 @@ export class Music {
     }
     const beats = this.beatsAt(t);
     const bar = beats / 4;
+    this.frameBar = bar;
     const env = (at: number, rate: number) => Math.exp(-Math.max(0, t - at) * rate);
     const chord = chordOf(Math.floor(bar));
     return {

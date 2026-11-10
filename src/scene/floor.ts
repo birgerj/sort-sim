@@ -11,9 +11,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { cardboardSide, palletWood } from './textures';
+import { cardboardNormal, cardboardSide, palletWood, palletWoodNormal } from './textures';
 
 import { Fleet, FLOOR, sorterFloor, type Bot, type FleetEvent } from '../sim/robotFleet';
+import { Rng } from '../sim/rng';
 import { rangeOf, rangeText, SOUTH_CITIES, split } from '../sim/postcodes';
 import { Labels } from './labels';
 
@@ -22,6 +23,10 @@ export interface FloorKit {
   put(obj: THREE.Object3D, only?: 'day' | 'night'): void;
   box(key: string, mat: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number, col?: number, ry?: number): void;
   std(color: number, rough?: number, metal?: number, day?: number): THREE.MeshStandardMaterial;
+  /** Relief that shows only in the realistic day look (a normal map, off in the drawn one). */
+  realNormal(m: THREE.MeshStandardMaterial, map: THREE.Texture, scale?: number): void;
+  /** In the realistic day, paint the material this colour instead (supports in RAL blue...). */
+  realColor(m: THREE.MeshStandardMaterial, color: number, rough?: number, metal?: number): void;
   inkify(m: THREE.Mesh, angle?: number): void;
   /** Day outline for rounded shapes. */
   outline(m: THREE.Mesh, width?: number): void;
@@ -137,6 +142,9 @@ interface RobotView {
   beat: number;
   /** Party spin, by night on a parking spot. */
   spin: number;
+  /** A little act of its own: a pirouette, a sulk (turn away, roll off, come back), a shake. Drawn only. */
+  egg: { kind: 'spin' | 'sulk' | 'shake'; t0: number } | null;
+  eggBeat: number;
   /**
    * The curve driven during the current beat: from S, bending at C, to E (a
    * quadratic Bezier). Robots run half a cell behind the grid, from the middle
@@ -189,6 +197,8 @@ export interface BinView {
 
 export class RobotFloor {
   readonly fleet: Fleet;
+  /** Grid columns of the pickup stations. */
+  private cols: number[] = [];
   readonly bins: BinView[] = [];
   /** Boxes taken to a truck so far. */
   shippedBoxes = 0;
@@ -226,6 +236,7 @@ export class RobotFloor {
     private handlers: FloorHandlers,
   ) {
     const cols = stationXs.map((x) => Math.round((x - FLOOR.x0) / FLOOR.cs));
+    this.cols = cols;
     const layout = sorterFloor(cols);
     this.fleet = new Fleet(layout.grid, layout.parks, layout.stations, layout.bins, 40);
     this.fleet.isOpen = (b) => this.bins[b]?.open ?? true;
@@ -248,6 +259,40 @@ export class RobotFloor {
     this.buildProjectors(cages);
     this.buildTable();
     this.buildDetails();
+  }
+
+  /**
+   * Where the robots wear the floor: a stand-in fleet on the same grid runs a few
+   * thousand beats of jobs (no drawing), and every cell-to-cell move is counted.
+   * Returns each driven step with its wear (0…1, the busiest step 1), for the
+   * wheel marks of the realistic day. Seeded, so the floor is the same every load.
+   */
+  trafficPaths(beats = 3000): { pts: [number, number][]; wear: number }[] {
+    const layout = sorterFloor(this.cols);
+    const rng = new Rng(97);
+    const fleet = new Fleet(layout.grid, layout.parks, layout.stations, layout.bins, this.fleet.bots.length, () => rng.next());
+    const count = new Map<string, number>();
+    for (let b = 0; b < beats; b++) {
+      fleet.step(b, () => rng.chance(0.55), b % 4 === 1 || b % 4 === 3);
+      for (const bot of fleet.bots) {
+        if (bot.fi === bot.i && bot.fj === bot.j) continue;
+        // Count both directions of a step as one way (the marks don't show direction).
+        const a = bot.fi * 1000 + bot.fj;
+        const c = bot.i * 1000 + bot.j;
+        const key = a < c ? `${bot.fi},${bot.fj},${bot.i},${bot.j}` : `${bot.i},${bot.j},${bot.fi},${bot.fj}`;
+        count.set(key, (count.get(key) ?? 0) + 1);
+      }
+    }
+    let max = 1;
+    for (const n of count.values()) max = Math.max(max, n);
+    const out: { pts: [number, number][]; wear: number }[] = [];
+    for (const [key, n] of count) {
+      const [i0, j0, i1, j1] = key.split(',').map(Number) as [number, number, number, number];
+      // Robots off the grid's edge (the manual drop) have no floor cell to mark.
+      if (!layout.grid.inside(i0, j0) || !layout.grid.inside(i1, j1)) continue;
+      out.push({ pts: [[cellX(i0), cellZ(j0)], [cellX(i1), cellZ(j1)]], wear: Math.log1p(n) / Math.log1p(max) });
+    }
+    return out;
   }
 
   /** x of the pickup cell of each station, for the chutes to end at. */
@@ -405,6 +450,20 @@ export class RobotFloor {
     this.updateProjectors(dt, bt, s);
   }
 
+  /**
+   * Tapped: a pirouette (once or twice), and on the third tap in a row it sulks (turns its back
+   * and rolls off a little way for a while). One that is driving only shakes its body.
+   */
+  poke(k: number, taps: number, bt: number): 'spin' | 'sulk' | 'shake' {
+    const r = this.robots[k]!;
+    const b = this.fleet.bots.find((x) => x.k === k)!;
+    const parked = b.state === 'idle' && !b.path.length;
+    const kind = !parked ? 'shake' : taps >= 3 ? 'sulk' : 'spin';
+    if (r.egg?.kind === 'sulk' && kind !== 'sulk') return 'sulk';
+    r.egg = { kind, t0: bt };
+    return kind;
+  }
+
   private updateRobots(dt: number, bt: number, s: { kick: number; dayShown: boolean; cols: THREE.Color[]; dance?: boolean }): void {
     const ph = bt - Math.floor(bt);
     for (const b of this.fleet.bots) {
@@ -452,9 +511,40 @@ export class RobotFloor {
       const party = !s.dayShown && s.dance !== false && b.state === 'idle' && !b.path.length;
       r.spin = party ? (Math.floor(bt) + b.k) * (Math.PI / 2) + ease(ph) * (Math.PI / 2) : r.spin * Math.exp(-dt * 6);
       if (!party) r.spin %= Math.PI * 2;
-      r.g.position.set(x, 0, z);
-      r.g.rotation.y = r.yaw + (party ? r.spin : 0);
-      r.top.position.y = TOP_Y + (party ? 0.06 * s.kick : 0);
+      // Bored on its parking spot by day: now and then a pirouette.
+      const parked = b.state === 'idle' && !b.path.length && !moving;
+      if (beat !== r.eggBeat) {
+        r.eggBeat = beat;
+        if (s.dayShown && parked && !r.egg && Math.random() < 1 / 900) r.egg = { kind: 'spin', t0: beat };
+      }
+      let ex = 0;
+      let ez = 0;
+      let eyaw = 0;
+      let hop = 0;
+      if (r.egg) {
+        const u = bt - r.egg.t0;
+        if (r.egg.kind === 'spin') {
+          // A full turn in two beats, with a little hop of the top.
+          eyaw = ease(Math.min(1, u / 2)) * Math.PI * 2;
+          hop = 0.05 * Math.sin(Math.min(1, u / 2) * Math.PI);
+          if (u >= 2) r.egg = null;
+        } else if (r.egg.kind === 'shake') {
+          // Busy: just a shake of the body, no.
+          eyaw = Math.sin(u * Math.PI * 4) * 0.25 * (1 - Math.min(1, u));
+          if (u >= 1) r.egg = null;
+        } else {
+          // Sulk: turn its back, roll off a little way, stay there a while, then come back.
+          const turn = ease(Math.min(1, u / 1.5)) - ease(Math.min(1, Math.max(0, (u - 8.5) / 1.5)));
+          eyaw = turn * Math.PI;
+          const off = ease(Math.min(1, Math.max(0, (u - 1.5) / 1.5))) - ease(Math.min(1, Math.max(0, (u - 6.5) / 2)));
+          ex = Math.sin(r.yaw + eyaw) * 0.6 * off;
+          ez = Math.cos(r.yaw + eyaw) * 0.6 * off;
+          if (u >= 10) r.egg = null;
+        }
+      }
+      r.g.position.set(x + ex, 0, z + ez);
+      r.g.rotation.y = r.yaw + (party ? r.spin : 0) + eyaw;
+      r.top.position.y = TOP_Y + (party ? 0.06 * s.kick : 0) + hop;
       r.glow.copy(s.cols[b.k % s.cols.length]!).multiplyScalar(0.4 + s.kick * (party ? 1.2 : 0.7));
       // Number plates on both sides, and the underglow, follow the robot.
       r.g.updateMatrix();
@@ -604,6 +694,9 @@ export class RobotFloor {
   private buildStations(cols: number[]): void {
     const k = this.kit;
     const alu = k.std(0x6b7078, 0.4, 0.7, 0xc3c8ce);
+    // The legs on their own material: dark RAL blue in the realistic day.
+    const aluLeg = k.std(0x6b7078, 0.4, 0.7, 0xc3c8ce);
+    k.realColor(aluLeg, 0x1e3a66, 0.45, 0.3);
     const roller = k.std(0x9aa0a8, 0.35, 0.8, 0xe6e9ec);
     for (const i of cols) {
       const x = cellX(i);
@@ -614,7 +707,7 @@ export class RobotFloor {
       // (Rollers on top at the robots' deck height, so a parcel slides level onto a robot.)
       const top = DECK_Y;
       k.box('stable', alu, x, top - 0.1, zc, 1.1, 0.08, STATION_TABLE);
-      for (const sx of [-0.5, 0.5]) for (let sz = z0 + 0.1; sz <= z1; sz += 1.5) k.box('stable', alu, x + sx, (top - 0.14) / 2, sz, 0.06, top - 0.14, 0.06);
+      for (const sx of [-0.5, 0.5]) for (let sz = z0 + 0.1; sz <= z1; sz += 1.5) k.box('stableleg', aluLeg, x + sx, (top - 0.14) / 2, sz, 0.06, top - 0.14, 0.06);
       for (let zz = z0 + 0.1; zz < z1; zz += 0.21) k.box('sroll', roller, x, top - 0.03, zz, 1.0, 0.06, 0.06);
       for (const sx of [-0.55, 0.55]) k.box('stable', alu, x + sx, top + 0.04, zc, 0.04, 0.12, STATION_TABLE);
       k.blob(x, zc, 1.6, STATION_TABLE + 0.7);
@@ -627,9 +720,11 @@ export class RobotFloor {
     const k = this.kit;
     const card = k.std(0x8a7050, 0.95, 0, 0xe0b882);
     card.map = cardboardSide();
+    k.realNormal(card, cardboardNormal(), 0.6);
     const inner = k.std(0x4c3e2c, 0.95, 0, 0xb8925f);
     const pallet = k.std(0x6a5038, 0.9, 0, 0xd8b080);
     pallet.map = palletWood();
+    k.realNormal(pallet, palletWoodNormal());
     const fillMat = k.std(0x5b4a35, 0.95, 0, 0xc9a06c);
     const post = k.std(0x50545b, 0.6, 0.3, 0xdfe3e8);
     const boardGeo = new THREE.PlaneGeometry(0.45, 0.3);
@@ -713,6 +808,8 @@ export class RobotFloor {
     const padGeo = mergeGeometries([-0.47, 0.47].flatMap((sx) => [-0.52, 0.52].map((sz) => box(0.1, 0.1, 0.06, sx * 0.9, 0.08, sz))))!;
     const lightGeo = mergeGeometries([box(0.5, 0.05, 0.01, 0, 0.27, 0.485), box(0.5, 0.05, 0.01, 0, 0.27, -0.485)])!;
     const yellow = k.std(0x8a6e00, 0.5, 0.2, 0xf2c200);
+    // (World-space paint wear would slide over a moving robot.)
+    yellow.userData.noWear = true;
     const wheelMat = k.std(0x111111, 0.8, 0.1, 0x2a2c31);
     const lightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.6, 1.8) });
     const ledGeo = new THREE.SphereGeometry(0.04, 10, 8);
@@ -764,7 +861,7 @@ export class RobotFloor {
       const gm = new THREE.Color(0x3a7bff);
       const yaw = b.i === 0 ? Math.PI / 2 : -Math.PI / 2;
       const at = v(cellX(b.i), 0, cellZ(b.j));
-      this.robots.push({ g, top, glow: gm, num, yaw, yawFrom: yaw, yawTo: yaw, beat: -1, spin: 0, S: at.clone(), C: at.clone(), E: at.clone(), ease: { in: false, out: false } });
+      this.robots.push({ g, top, glow: gm, num, yaw, yawFrom: yaw, yawTo: yaw, beat: -1, spin: 0, egg: null, eggBeat: -1, S: at.clone(), C: at.clone(), E: at.clone(), ease: { in: false, out: false } });
     }
   }
 

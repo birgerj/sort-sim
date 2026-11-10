@@ -8,6 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
 import { buildHuman } from './people';
+import { sit } from './motion';
 import { XMAS } from '../sim/season';
 
 export interface ForkliftModel {
@@ -108,7 +109,7 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   let M = mats.get(k);
   if (!M) {
     M = {
-      yellow: k.std(0xe8b400, 0.45, 0.3, 0xf2c200),
+      yellow: noWear(k.std(0xe8b400, 0.45, 0.3, 0xf2c200)),
       black: k.std(0x1b1c1f, 0.7, 0.3, 0x2a2c31),
       steel: k.std(0x50555e, 0.4, 0.8, 0x9aa0a8),
       lights: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.7, 1.4) }),
@@ -140,9 +141,8 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   // The driver, seated.
   const d = buildHuman(k, { shirt: 0x2f3b6b, trousers: 0x22283f, vest: 0xc8ff3a, helmet: 0xffffff });
   d.root.position.set(0, 0.18, -0.2);
-  d.legL.rotation.x = d.legR.rotation.x = -1.4;
-  d.legL.position.y = d.legR.position.y = 0.82;
-  d.armL.rotation.x = d.armR.rotation.x = -0.9;
+  sit(d);
+  d.legL.position.y = d.legR.position.y = -0.1;
   // (No floor shadow for someone on a seat.)
   for (const c of [...d.root.children]) if (c.userData.noInk) d.root.remove(c);
   g.add(d.root);
@@ -166,4 +166,10 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   FORKLIFTS.push(g);
   k.put(g);
   return { g, forks, beacon };
+}
+
+/** Paint wear is drawn in world space, so it would slide over a moving vehicle: none here. */
+function noWear(m: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  m.userData.noWear = true;
+  return m;
 }

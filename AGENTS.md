@@ -47,21 +47,31 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/sim/addresses.ts` | Made-up recipients for the labels, written per country (`line1`, `line2`). |
 | `src/sim/postcodes.ts` | The 36 destinations of the chosen country with their postcode ranges (north doors shared out by volume with `planDoors` → `DOORS_PER_CITY`, `DOCK_CITY`; the next 20 south); `split` into cage/box ranges; `randomPostcode(rnd, south)` (the sorter asks about 12% south, less while the pickup tables fill up). |
 | `src/scene/labels.ts` | `Labels`: many signs with different text in one draw call (canvas atlas + instanced planes): cage boards, door screens, projected postcodes. Each atlas layout needs its own shader cache key. |
-| `src/scene/batch.ts` | `Batcher`: models are built from proxy objects; one `InstancedMesh` per geometry+material, matrices copied every frame (`kit.batch`). Robots, people, forklifts, cages and trailers use it. |
+| `src/scene/batch.ts` | `Batcher`: models are built from proxy objects; one `InstancedMesh` per geometry+material, matrices copied every frame (`kit.batch`). Robots, forklifts, cages and trailers use it (people are skinned meshes, see `people.ts`). |
 | `src/scene/trucks.ts` | `Trucks`: a trailer behind every dock door, and a screen above it. Full (2 cages / 4 boxes) or by hand (`cleardown`) → cleardown (amber lamp flashes; waits while `hold()` says the workers are still loading) → door down → truck leaves → new empty truck → door up. |
 | `src/scene/manualSort.ts` | `ManualSort`: robots tip envelopes into a hopper west of row 2; a roller belt takes them to the table; a worker puts them in pigeonholes and empties full ones into the crates. Day only, few parcels. |
 | `src/scene/boxYard.ts` | `BoxYard`: south dock doors and the forklifts that swap full boxes. Keyframes of whole beats. |
 | `src/scene/forklift.ts` | Forklift with driver (forks point to local +z); parts merged per material. |
-| `src/scene/people.ts` | `buildHuman`: jointed people (hips, waist, neck `head`, shoulders, elbows `foreL`/`foreR`): workers with hi-vis vest, helmet, gloves and radio; staff with cap, short sleeves and badge; three hair styles. |
+| `src/scene/people.ts` | `buildHuman`: jointed people (`pelvis`; hips `legL/R`, knees `kneeL/R`, ankles `footL/R`; waist `torso`, lower back `chest`, neck `head`; shoulders `armL/R`, elbows `foreL/R`, wrists `handL/R`; `eyes`/`mouth` on the head, scaled to blink and talk, `m.talk`; a ponytail `tail`): workers with hi-vis vest, helmet, gloves and radio; staff with cap, short sleeves and badge; suits; three hair styles. Drawn at three levels by distance (`THREE.LOD`, `LOD_DIST`: fine < 6 m, coarse, far > 20 m), each two `SkinnedMesh`es on one skeleton: the body under the clothes (`bodySdf.ts`, shared by everyone of a build: 3 widths × 3 bellies; the fine level is built in spare moments after load) with clothes chosen per pixel by its material (`clothesMaterial`: trousers, belt, shirt, vest with bands, armholes and a V-neck, sleeves, gloves or cuffs, skin above the collar), and the gear (head, face, hair, hands, boots, helmet or cap, badge, tie, radio...), rigid on its joints, colours per vertex, shared material with the face atlas. Flat parts on the body (badge, buttons, tie, buckle, pockets) are laid on its surface (`bodySurfaceZ`). The skeleton is bound with the arms out by REST_SPREAD (the resting pose), so the arms are built clear of the body; the root is then scaled to the person's height. The head is one sculpted surface (`sculptHead`) with a cell of the face atlas (`faceAtlas`: 15 faces); hair is a shell over the skull (`hairShell`), flat under a helmet, cap or hat; the helmet is a hard hat (`helmetGeometry`: ribs, peak, rim, headband). Segments per level in `LEVELS`. Tested in `tests/people.test.ts`. |
+| `src/scene/bodySdf.ts` | The body under the clothes: torso (pelvis, seat, belly, ribcage, chest, armpit folds, back muscles, neck), legs to the ankle and arms to the wrist as distance-field shapes blended per part (`bodyField`), limbs joining the torso only near their joint; turned into a mesh by surface nets on a grid with dense rings at the joints and wide ones along the long parts (`bendStep`), at `BODY_LEVELS` (12.5, 32, 40 mm). Skin weights from a soft minimum over each bone's shapes; the torso follows a limb only near its joint. |
+| `src/scene/bakedBodies.ts` | The coarse and far bodies, made at build time (`vite.config.ts` plugin `bakedBodies`) into `bodies.bin` (about 0.9 MB; normals, colours and weights as bytes) and read at start (`loadBakedBodies`). The fine level is made in the browser after load (`startLaterWork`), as are the fine gear meshes. Tested. |
+| `src/scene/motion.ts` | How people move: `gait` (feet placed, not swung: each stands still on the floor while the body passes over it, then swings forward on an arc, heel to toe; legs by IK; hips rise and fall smoothly, held below what the legs can reach; one step per beat, stride from the speed; `inPlace` for dancing), `crouch` and `reach` (two-bone IK for legs and arms), `sit`, and `settle` last each frame (pelvis, breathing, weight shift, ponytail spring, feet flat, blinking, talking). Tested in `tests/motion.test.ts`. |
 | `src/scene/post.ts` | `InkPass` (screen-space outlines), `toonify`/`TOON` (flat day shading), blob texture. |
 | `src/scene/screens.ts` | Live canvases: dashboard, wall KPI boards, clocks (real time). Fed by `HubStats` from the scene. |
 | `src/scene/life.ts` | Walkers (day), ride-on scrubber, charging station, exit signs, extinguishers, first aid, walkway, break area, floor zone names. |
+| `src/sim/faults.ts` | `FaultPlan`: dock chute faults without drawing (kinds and display text in `FAULT_TEXT`; `tick(bt)` starts random ones, `trigger`, `repairing`, `repaired`, `only` for the chutes the technician can reach). Random numbers come from outside (seeded runs). Tested. |
+| `src/scene/faults.ts` | `FaultCrew`: the technician (a `Human`), his stand-up scooter, toolbox and workbench under the maintenance platform. Tasks of whole beats (walk, ride, repair, bench); rides along the corridor inside the north straight, under the loop beside the chute (east of its belt, or west of the chute where tables are in the way: `Sorter.buildCrew` finds the gap), works on the photo eye on the belt's rail. While a chute is down `Sorter.room()` gives 0, towers flash red (`updateTowers`), the pillar display shows the fault (`updateFaultShows`), the video wall marks it; `onRepaired` flashes green. `Sorter.fault(chute?)` (Hub button), `?faults=0`. |
 | `src/scene/crowd.ts` | Night crowd inside the loop (instanced body parts, a few draw calls for 520 dancers) on an LED tile floor. |
 | `src/ui/walk.ts` | Walk-mode input: keyboard, mouse drag, touch stick and look; feeds `Sorter.walkInput`. |
 | `src/scene/xmas.ts` | Christmas decorations (`XMAS` from `src/sim/season.ts`, read at load): trees, garlands, light strings, wreaths, candy canes, stars, snowflakes, market. Hats and Father Christmas in `people.ts`/`life.ts`, forklift lights in `forklift.ts`, gift parcels (`gift`, `ribbonMesh`) in `sorter.ts`, bells in `music.ts`, countdown in `screens.ts`. |
+| `src/scene/antics.ts` | `ANTICS`: short acts any person can play on top of their own animation (wave, bow, cartwheel, facepalm, stretch, near-stumble, air guitar, phone call, selfie, high five, peek, sip of coffee...). `pre()` at the start of the frame gives back the owner's pose, `post(bt)` after all owners blends the act over it, so owners never notice; props (phones, cups) are batched and hang in a hidden group until a hand takes one. `RIGS` (people.ts) maps a person's root to its joints. |
+| `src/scene/eggs.ts` | `Eggs`: the hidden jokes that are not owned elsewhere (the cat, the runaway parcel, the break-area person, the peeker) and what a tap does to a person, robot, forklift, the cat, the coffee machine or the DJ. Its `sounds` go through `takeSounds`. The others live with their owners: the thrower, dancer, Mexican wave, stretch, stumble, air guitar and facepalm in `docks.ts`; errands (coffee, chasing the runaway parcel), high fives and the scrubber's heart in `life.ts`; robot pirouettes and sulks in `floor.ts`; the conga in `crowd.ts`; the DJ's boost in `party.ts`; the rubber duck (parcel shape 3) and seasick parcels in `sorter.ts`. README lists them all. |
 | `src/scene/nightFx.ts` | What the night shows (`NightFx`): parcel glow 0…1 and a switch per party effect, presets Party / Calm / Dark. `Sorter.setNightFx` applies it; the HUD's Night effects panel (only shown while the night look is on) edits and stores it. |
 | `src/scene/roof.ts` | `Roof`: 18 flat skylights (curb, level glass, glazing bars) in two rows at z ±20, one in every other bay between the roof beams; both ceilings have holes for them (`ceilingWithLights`). Above them a sky dome that follows the camera: light blue with drifting flat clouds by day, stars and grey clouds at night (`uDay`). |
 | `src/scene/party.ts` | Night party: DJ booth on the maintenance platform inside the loop's west end (`PLATFORM_X`), laser fans, mirror-ball floor spots, confetti on the drop. |
+| `src/scene/realDay.ts` | The realistic day look ("Day"): generated worn-concrete floor (`realFloorMaps`), world-space grime that never tiles (`grime`), a generated daylight environment (`dayEnvironment`), daylight shafts under the roof lights (`lightShafts`, one draw call), wheel marks (`wheelTracks`), paint wear (`wear`, `REAL`), colour finish (`gradePass`). Built in `Sorter.buildRealHall`. |
+| (racks) | `Sorter.buildRacks`: six 42U server racks against the west wall; fronts drawn by `rackFront` (servers with drive bays, switches, patch panels, blanks, empty slots), a pull-out console with the live dash screen, blinking status LEDs in one instanced mesh (`blinkRacks`, only near the camera). |
+| `src/scene/stackLights.ts` | `StackLights`: three-colour signal towers in the hub plan's code (`chuteFill`: off empty, green filling, amber over 60 % or truck in cleardown, red full; disco at night), one on each chute's pillar above its display and one on a post at the end of each dock chute and robot station chute. All towers: two draw calls. Driven by `Sorter.updateTowers`. |
 | `src/scene/textures.ts` | Generated, cached textures: cardboard, pallet wood, wire mesh, sectional door, checker plate, hi-vis, day floor and wall cladding, brushed steel. |
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
 | `src/sim/rng.ts` | Seeded random numbers. |
@@ -113,7 +123,9 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   the outside, s 10, 14, 18, 22; lanes come in through the north wall, x set by
   `LANE_OUT`; `LANE_PHASE` lands lanes 1 and 3 half a beat
   later so they fill the odd trays; one parcel per lane per beat; `LANE_Z`;
-  the belt reaches over the tray edge, so there is no gap), `HOLD_S` (queue point), `LANE_QUEUE`.
+  the last stretch is level at `LANE_TOP`, just above the trays' lips, made of short
+  induction belts (dark gaps), and ends mitred square to the loop a hand's width from
+  the trays: `extrude(..., cut)` slides whatever lies past a plane back onto it), `HOLD_S` (queue point), `LANE_QUEUE`.
   Pickup tables: `STATION_TABLE` (floor.ts) long, `STATION_CAP` parcels. `DOCK_X` = dock positions (straight north of each chute end).
 - Hall: `WX`/`EX` west/east wall, `HZ` south wall, `NZ` north wall (further out: room at the docks; `HD` depth, `HZC` middle), `HH` height; `HCX`/`HW`
   centre and width.
@@ -132,12 +144,17 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
 
 - **Ink outlines** are a screen effect (`InkPass` in `post.ts`): the scene is
   drawn once more with normals and depth, and edges are inked where normals
-  turn or depth jumps. Day only. Objects get no outline when they are lines,
+  turn or depth jumps. Day only. People get no lines: their meshes are on
+  `INK_MASK_LAYER` with `userData.inkMask`, drawn in a second render with
+  alpha 2, which the edge shader leaves alone (so nothing behind them draws
+  lines over them either). Objects get no outline when they are lines,
   points, additive or see-through, or have `userData.noInk = true`; call
   `ink.refresh()` after adding objects at runtime. `inkify()` and
   `outline()` are now no-ops kept as hooks.
 - **Toon shading** by day: `toonify(material)` rounds light to three steps;
   every `std()`/themed material has it; `TOON.value` follows the day amount.
+  A material can take only part of it (`material.userData.toonK` 0…1, set
+  before it first compiles; people use 0.45).
 - **Contact shadows:** `blob(x, z, w, d)` (static, batched) and
   `blobUnder(object, w, d)` (moves with it).
 - **Quality** (`setQuality`, HUD, `?quality=`): `low` (pixel ratio 1),
@@ -164,6 +181,53 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   recompiles every material).
 - Night lights are `MeshBasicMaterial` with colours above 1 so bloom picks
   them up. By day, tone mapping is off and walls are flat basic materials.
+- **Three looks:** Minimal (the drawn day above), Day (realistic) and Night.
+  `setRealistic(true)` (HUD, `?look=real`, `settings.look`) keeps the day's
+  objects and colours but drops toon steps and ink, turns on filmic tone
+  mapping and a daylight environment, caps light day colours at a light grey
+  (`realCol`), and swaps the flat hall surfaces (`flatOnly`) for lit ones
+  (`realOnly`). Without the ink pass it draws about half the calls of
+  Minimal. Colours: `REAL_PALETTE` maps the illustration palette to what the
+  parts really are (galvanised and grey steel, dark enclosures, RAL blue,
+  signal orange), for themed and single-colour `std()` materials alike.
+  Shadows (`updateShadows`): Day on quality normal and up uses a **baked**
+  sun shadow over the whole hall: drawn once, again every 30 s; what moves
+  (found by watching every caster for 1.5 s: skinned, moved, or instance
+  matrices updated) casts none and keeps its contact shadow. Minimal and
+  Night keep the **live** camera-following shadow on high. See-through
+  things that write no depth are hidden from the AO pass.
+- **Day details:** wheel marks where roll cages are pushed (`Docks.cagePaths`,
+  following the loader's jobs) and where robots drive (`RobotFloor.trafficPaths`:
+  a stand-in fleet runs 3,000 beats at load and counts every step; busier
+  steps get darker marks), both `wheelTracks` in `realDay.ts`. Relief
+  (normal maps generated from heights in `textures.ts`) is registered with
+  `kit.realNormal(material, map)` and shows only in Day: wall cladding,
+  roof deck, floor joints, checker plate, sectional doors, cartons, pallet
+  wood, stretch film. `realMap(material, map)` swaps a material's picture in
+  Day (the wrapped pallets show cartons through stretch film). Safety
+  yellow (any themed material with day colour `0xf2c200`) and the red column
+  feet get chipped paint and scrapes (`wear`, world space, gated by `REAL`);
+  anything that moves sets `material.userData.noWear = true` (forklifts,
+  robots). The sorter's trays are dark grey in Day, each worn its own way
+  (`trayWear`: shade, streaks, scratches, dirt, worn patch, from `gl_InstanceID`,
+  in tray space). Never name a GLSL variable `patch` (reserved).
+  Belts are grey rubber in Day (`drawBelt(..., real)`) with specks, smears and
+  dust (`beltWear`, in the belt texture's moving space).
+  People in Day (`people.ts`, gated by `REAL`): cloth with soft creases and
+  a little less saturation, skin with a sheen, reflective vest bands that
+  catch the light, hi-vis slightly fluorescent; heads and gear less saturated
+  (`realGear`). Printed signs, cage cards and door numbers take light like
+  paper (`litPaper`: a fixed sun term, no lights in the shader); screens and
+  lamps still glow.
+  More in Day: supports and table legs in dark RAL blue (`kit.realColor`,
+  `RAL_BLUE`), soft light pools under the LED fixtures (`lightPools`, one
+  draw call), SMAA edge smoothing, every parcel its own kraft shade with worn
+  edges (`parcelWear`, seeded from its instance colour), dirty roof glass.
+  A light vignette and warm/cool finish (`gradePass`) runs only in
+  Day. The Day hall is built the first time Day is chosen.
+- **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`
+  walks the scene graph once per frame, just before `composer.render`.
+  Anything posed later in a frame would be drawn a frame late.
 
 ## Next step: nicer, more detailed graphics
 
@@ -198,7 +262,8 @@ the simulation:
   `buildProjectors`, dock doors `buildDockDoor`, cages `Docks.buildCage`,
   workers `Docks.buildWorker`, forklifts `buildForklift`.
 - **Animated models** keep their joints/groups (robot `top`, forklift
-  `forks`, worker `torso/armL/armR/legL/legR`, box `g` + `fill`). A
+  `forks`, people: see `Human` in `people.ts`, box `g` + `fill`); people are
+  posed with `motion.ts` (`gait` → `crouch`/`reach` → `settle`). A
   replacement model must expose the same handles.
 - **Textures:** all textures are generated on canvases (`canvasTex`, `tex`).
   To add image textures, put them in `public/` and load with
@@ -234,3 +299,7 @@ the simulation:
   so they drive continuously and round corners; they only ease when starting
   or stopping.
 - `Reflector` renders the scene again: it exists only at night on high.
+- Shader warm-up (`warmUp`) compiles for the composer's buffer and with the look
+  already applied; compiling for the screen made every program twice.
+- `gait`: a step is at most `MAX_STEP`; faster, it takes 2–4 steps per beat (never
+  longer strides). Standing (speed 0), the feet stay flat on the floor. Tested.

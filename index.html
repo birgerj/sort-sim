@@ -19,6 +19,17 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- Shown at once, before any script runs: building the hall takes a while on a phone. -->
+    <div id="loading" style="position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#0b0910;color:#e8e6ef;font:15px/1.4 system-ui,-apple-system,sans-serif;transition:opacity .6s">
+      <style>
+        @keyframes ss-spin { to { transform: rotate(360deg); } }
+        @keyframes ss-belt { to { background-position: 28px 0; } }
+      </style>
+      <div style="width:44px;height:44px;border-radius:50%;border:3px solid #2a2834;border-top-color:#2fa58f;animation:ss-spin 0.9s linear infinite"></div>
+      <div style="font-size:20px;font-weight:600;letter-spacing:.02em">Sort sim</div>
+      <div class="msg" style="opacity:.75">Building the hall…</div>
+      <div style="width:180px;height:8px;border-radius:4px;background:repeating-linear-gradient(90deg,#2a2834 0 10px,#3a3846 10px 14px);animation:ss-belt .6s linear infinite"></div>
+    </div>
     <noscript>Sort sim needs JavaScript and WebGL.</noscript>
     <script type="module" src="./src/main.ts"></script>
   </body>

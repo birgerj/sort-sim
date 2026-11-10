@@ -1,0 +1,101 @@
+name: Build
+
+# Tests and builds every push and pull request. The result is a self-contained
+# static site (relative paths, base './'), uploaded as the run's artifact:
+# download it from the run page and unzip it into any folder of any static
+# web server — index.html sits at the root of the zip.
+# A tag v* also attaches the same zip to a GitHub Release, which doesn't expire.
+#
+# While the repo is public, main also deploys to GitHub Pages, with a test
+# branch (PREVIEW_BRANCH) built into /next/ on the same site:
+#   https://birgerj.github.io/sort-sim/       main
+#   https://birgerj.github.io/sort-sim/next/  the test branch
+# The test branch's own "Preview" workflow triggers this one when it passes.
+# Once the repo is private the Pages steps skip themselves; the zip stays.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Preview]
+    types: [completed]
+
+env:
+  # Empty = no /next/.
+  PREVIEW_BRANCH: night-shift-game
+  # Pages: only main (or a passed Preview run, which runs from main), only while public.
+  PAGES: ${{ !github.event.repository.private && github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_run') }}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ env.PAGES }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Name the build
+        id: name
+        run: echo "name=sort-sim-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      # GitHub zips the artifact itself, so upload the folder (not a zip, or you get a zip in a zip).
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'workflow_run'
+        with:
+          name: ${{ steps.name.outputs.name }}
+          path: dist/
+          if-no-files-found: error
+      - name: Attach zip to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip_name="sort-sim-${GITHUB_REF_NAME}.zip"
+          (cd dist && zip -qr "../$zip_name" .)
+          gh release create "$GITHUB_REF_NAME" "$zip_name" --generate-notes --title "$GITHUB_REF_NAME" \
+            || gh release upload "$GITHUB_REF_NAME" "$zip_name" --clobber
+      - name: Build the test branch into /next/
+        if: env.PAGES == 'true' && env.PREVIEW_BRANCH != ''
+        run: |
+          if ! git ls-remote --exit-code --heads origin "$PREVIEW_BRANCH" > /dev/null; then
+            echo "No branch $PREVIEW_BRANCH: no /next/ this time."
+            exit 0
+          fi
+          git clone --depth 1 --branch "$PREVIEW_BRANCH" "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" next-src
+          cd next-src
+          npm ci
+          npm run build
+          mkdir -p ../dist/next
+          cp -r dist/. ../dist/next/
+      - uses: actions/upload-pages-artifact@v3
+        if: env.PAGES == 'true'
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.pages == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

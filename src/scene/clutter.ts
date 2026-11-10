@@ -3,6 +3,7 @@
 // cutter, sticky notes, gloves, a water bottle, a phone. Every kind of thing is
 // one instanced mesh for all the tables, so they cost a few draw calls.
 import * as THREE from 'three';
+import { specks } from './realDay';
 
 import type { FloorKit } from './floor';
 import { Rng } from '../sim/rng';
@@ -23,6 +24,8 @@ export class Clutter {
   private white: THREE.Material;
   private shiny: THREE.Material;
   private glow: THREE.Material;
+  /** The tables' own materials, shared by all of them (one batch each). */
+  private tableMats: { top: THREE.MeshStandardMaterial; edge: THREE.MeshStandardMaterial; frame: THREE.MeshStandardMaterial; shelf: THREE.MeshStandardMaterial } | null = null;
 
   constructor(private k: FloorKit) {
     this.white = k.std(0xffffff, 0.75, 0, 0xffffff);
@@ -55,9 +58,19 @@ export class Clutter {
     const base = new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z);
     const at = (lx: number, lz: number) => new THREE.Vector3(lx, 0, lz).applyMatrix4(base);
     // The table: a pale top with a yellow edge, four legs, a shelf below with a crate.
-    const top = k.std(0x6b7078, 0.6, 0.1, 0xe9ecef);
-    const edge = k.std(0x8a6e00, 0.5, 0.2, 0xf2c200);
-    const steel = k.std(0x50545b, 0.4, 0.6, 0xb9c0c8);
+    // (Realistic day: a blue frame and dark grey speckled top and shelf.)
+    if (!this.tableMats) {
+      const top = k.std(0x6b7078, 0.6, 0.1, 0xe9ecef);
+      const shelf = k.std(0x50545b, 0.4, 0.6, 0xb9c0c8);
+      for (const m of [top, shelf]) {
+        k.realColor(m, 0x3b3f45, 0.7, 0.05);
+        specks(m);
+      }
+      const frame = k.std(0x50545b, 0.4, 0.6, 0xb9c0c8);
+      k.realColor(frame, 0x1e3a66, 0.45, 0.3);
+      this.tableMats = { top, edge: k.std(0x8a6e00, 0.5, 0.2, 0xf2c200), frame, shelf };
+    }
+    const { top, edge, frame: steel, shelf } = this.tableMats;
     k.box('ctop', top, x, TOP_Y - 0.02, z, 0.64 * F, 0.04, 1.26 * F, undefined, yaw);
     for (const s of [-1, 1]) {
       const e = at(0.33 * F * s, 0);
@@ -67,7 +80,7 @@ export class Clutter {
       const l = at(sx, sz);
       k.box('cleg', steel, l.x, (TOP_Y - 0.04) / 2, l.z, 0.04, TOP_Y - 0.04, 0.04);
     }
-    k.box('cshelf', steel, x, 0.22, z, 0.56 * F, 0.03, 1.16 * F, undefined, yaw);
+    k.box('cshelf', shelf, x, 0.22, z, 0.56 * F, 0.03, 1.16 * F, undefined, yaw);
     k.blob(x, z, 1.0 * F, 1.6 * F, yaw);
     // Under the top: a crate or a few flat boxes.
     const crate = this.kind('crate', () => new THREE.BoxGeometry(0.4, 0.22, 0.55).translate(0, 0.11, 0));

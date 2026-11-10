@@ -4,6 +4,8 @@
 // The sky is a dome that follows the camera, so it reads as far away and only
 // shows through the glass (the hall's walls and ceiling hide the rest).
 import * as THREE from 'three';
+import { REAL } from './realDay';
+import { canvasTexture } from './textures';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
@@ -150,6 +152,22 @@ export class Roof {
     const inside = k.std(0x2a2c32, 0.85, 0.2, 0xf3f4f6);
     const frame = k.std(0x3a3e45, 0.5, 0.6, 0x1d1d1f);
     this.glassMat = new THREE.MeshBasicMaterial({ color: 0xcfe6f2, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
+    // Realistic day: dust settled on the glass, streaks where rain ran off, dirt in the corners.
+    this.glassMat.map = glassDirt();
+    this.glassMat.onBeforeCompile = (sh) => {
+      sh.uniforms.uReal = REAL;
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float uReal;')
+        .replace(
+          '#include <map_fragment>',
+          `{
+            vec4 dirt = texture2D(map, vMapUv);
+            diffuseColor.rgb = mix(diffuseColor.rgb, dirt.rgb, dirt.a * uReal);
+            diffuseColor.a = mix(diffuseColor.a, min(1.0, diffuseColor.a + 0.55 * dirt.a), uReal);
+          }`,
+        );
+    };
+    this.glassMat.customProgramCacheKey = () => 'roof-glass';
 
     const o = new THREE.Object3D();
     const inst = (g: THREE.BufferGeometry, m: THREE.Material) => {
@@ -194,4 +212,35 @@ export class Roof {
     this.glassMat.opacity = 0.03 + 0.09 * day;
     this.glassMat.color.setHex(0x0a0e1a).lerp(this.glassDay, day);
   }
+}
+
+/** Dirt on a pane of roof glass (colour, and how much in alpha): dust, rain streaks, grimy edges. */
+function glassDirt(): THREE.CanvasTexture {
+  return canvasTexture('roof-glass-dirt', 256, 160, (g) => {
+    g.clearRect(0, 0, 256, 160);
+    let s = 3;
+    const r = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296);
+    // Dust all over, thicker in blotches.
+    for (let k = 0; k < 60; k++) {
+      const x = r() * 256, y = r() * 160, rad = 10 + r() * 40;
+      const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+      gr.addColorStop(0, `rgba(120,115,105,${0.12 + r() * 0.15})`);
+      gr.addColorStop(1, 'rgba(120,115,105,0)');
+      g.fillStyle = gr;
+      g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
+    // Rain streaks down the slope (along the pane's short side).
+    for (let k = 0; k < 70; k++) {
+      g.fillStyle = `rgba(95,90,82,${0.08 + r() * 0.12})`;
+      g.fillRect(r() * 256, r() * 40, 1 + r() * 2, 60 + r() * 100);
+    }
+    // Grime in the edges by the glazing bars.
+    const edge = g.createLinearGradient(0, 0, 0, 160);
+    edge.addColorStop(0, 'rgba(80,76,70,0.45)');
+    edge.addColorStop(0.12, 'rgba(80,76,70,0)');
+    edge.addColorStop(0.88, 'rgba(80,76,70,0)');
+    edge.addColorStop(1, 'rgba(80,76,70,0.5)');
+    g.fillStyle = edge;
+    g.fillRect(0, 0, 256, 160);
+  });
 }

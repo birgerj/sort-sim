@@ -19,7 +19,7 @@ export class Labels {
   private readonly cw: number;
   private readonly ch: number;
   private dirty = false;
-  private readonly mat: THREE.MeshBasicMaterial;
+  readonly mat: THREE.MeshBasicMaterial;
 
   /** `count` labels of w × h metres; each cell is cw × ch pixels. */
   constructor(count: number, w: number, h: number, cw: number, ch: number, opts: { transparent?: boolean } = {}) {
