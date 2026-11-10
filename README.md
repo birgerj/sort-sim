@@ -180,7 +180,7 @@ The menu is a dock of tabs at the bottom, the same on phones and desktops: **Go 
 |---|---|
 | Go to a department | `1`–`9`, `0` |
 | Camera: Auto / Fly / Follow a parcel | `A` / `F` / `P` (next parcel) |
-| Walk and fly | `V`, then `W A S D` / arrows, drag to look, `Shift` run (fly faster), `E` / `Q` or `PgUp` / `PgDn` up and down, `Esc` stop; touch: a stick under the left thumb (at its edge you run), drag on the right half to look, hold **Up** / **Down** at the right edge. Climbing from the floor is flying, coming down to it is walking; **Walk / Fly** at the top lands or takes off. Keep climbing and you fly up through the roof (hidden from above, with everything hung under it) until the whole floor fits on screen; look straight down. **Go to → Top down** goes there at once. The menu stays usable |
+| Walk and fly | `V`, then `W A S D` / arrows, drag to look, `Shift` run (fly faster), `E` / `Q` or `PgUp` / `PgDn` up and down, `Esc` stop; touch: a stick under the left thumb (at its edge you run), drag on the right half to look, hold **Up** / **Down** at the right edge. Climbing from the floor is flying, coming down to it is walking; **Walk / Fly** at the top lands or takes off. Keep climbing and you fly up through the roof (hidden from above, with everything hung under it) until the whole floor fits on screen; look straight down. **Go to → Top down** goes there at once; there, scroll or pinch to zoom in on the floor under the pointer, and drag to move along. The menu stays usable |
 | Time: Day / Night (in Settings) | `D` / `N` |
 | Belt speed: 1.7 / 3.3 / 6.7 / 13.3 m/s | `[` / `]` |
 | Hub: parcels per minute (slider), Cleardown… (pick doors 1–40, start), Fault (a dock chute goes down now) | buttons (`?rate=`, `?faults=0`) |
