@@ -33,6 +33,7 @@ import { DOCK_BELT_END, Docks } from './docks';
 import { FaultCrew, type FaultSite } from './faults';
 import { Inbound, TELESCOPE_BASE, TRAILER_PARCELS, type Stacked } from './inbound';
 import { Canteen, canteenOpenings, canteenStairFoot } from './canteen';
+import { BreakCrew } from './breaks';
 import { FAULT_TEXT, FaultPlan } from '../sim/faults';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -1348,6 +1349,7 @@ export class Sorter implements Scene3D {
   /** The inbound wing's trucks, telescopes and unloaders. */
   private wing!: Inbound;
   private canteen!: Canteen;
+  private breaks!: BreakCrew;
   /** Parcels on their way from a trailer to the start of each lane; when each door may give its next; when the last one reaches each lane. */
   private feeding = INDUCT.map(() => 0);
   /**
@@ -1623,7 +1625,7 @@ export class Sorter implements Scene3D {
       const zi = LOOP_ZH - 2.4;
       const x0 = PLATFORM_X + 7.6;
       // (Its green coating only in Day: Minimal keeps the plain floor between the taped edges.)
-      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4, [-20, -18]));
+      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4, [-20, -18], [-(zi + 1.2), -(zi - 1.2)]));
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
@@ -1642,8 +1644,15 @@ export class Sorter implements Scene3D {
         this.life.addFloorPath(ax0, ax1, az0, bz0, [
           // (Open on the west side by the stair's foot.)
           [ax0, az0, ax1, az0],
-          [ax1, az0, ax1, bz0],
+          // (Open on the east side where the way over to the loop's walkway joins.)
+          [ax1, az0, ax1, -(LOOP_ZH - 2.4) - 1.2],
+          [ax1, -(LOOP_ZH - 2.4) + 1.2, ax1, bz0],
           [ax0, az0 + 2.4, ax0, bz1],
+        ]),
+        // Over from the west wall to the loop's walkway, under the loop's west end.
+        this.life.addFloorPath(ax1, PLATFORM_X + 7.6 - 1.2, -(LOOP_ZH - 2.4) - 1.2, -(LOOP_ZH - 2.4) + 1.2, [
+          [ax1, -(LOOP_ZH - 2.4) - 1.2, PLATFORM_X + 7.6 - 1.2, -(LOOP_ZH - 2.4) - 1.2],
+          [ax1, -(LOOP_ZH - 2.4) + 1.2, PLATFORM_X + 7.6 - 1.2, -(LOOP_ZH - 2.4) + 1.2],
         ]),
         this.life.addFloorPath(ax0, bx1, bz0, bz1, [
           [ax1, bz0, bx1, bz0],
@@ -1664,6 +1673,43 @@ export class Sorter implements Scene3D {
     this.buildCrew();
     // The canteen behind the west wall, with its windows and door in the wall and a stair down inside.
     this.canteen = new Canteen(this, CANTEEN);
+    {
+      // The ways people walk to and from the stair: over the walkways (the dock aisle, south under
+      // the loop, west along the loop's walkway and over to the west wall, north to the stair's foot).
+      const foot = canteenStairFoot(CANTEEN);
+      const ax = WX + 3.7;
+      const sx = WX + 0.7;
+      const rz = -(LOOP_ZH - 2.4);
+      const rx0 = PLATFORM_X + 7.6;
+      const rx1 = LX + STRAIGHT - 1.5;
+      this.canteen.setHallRound([
+        [sx, 0, foot - 0.5],
+        [ax, 0, foot - 0.5],
+        [ax, 0, rz],
+        [rx0, 0, rz],
+        [rx1, 0, rz],
+        [rx1, 0, -rz],
+        [rx0, 0, -rz],
+        [rx0, 0, rz],
+        [ax, 0, rz],
+        [ax, 0, foot - 0.5],
+        [sx, 0, foot - 0.5],
+      ]);
+      this.breaks = new BreakCrew(this, this.canteen, {
+        docks: DOCK_X,
+        toStair: (dx) => [
+          [dx, 0, -32.4],
+          [dx, 0, -33.4],
+          [-19, 0, -33.4],
+          [-19, 0, rz],
+          [ax, 0, rz],
+          [ax, 0, foot - 0.5],
+        ],
+        crew: () => this.staff.list.filter((m) => m.role === 'picker' || m.role === 'loader'),
+        hubTime: () => this.hubTime(),
+        rota: { x: WX, y: 1.7, z: foot - 2.6 },
+      });
+    }
     this.hireStaff();
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
@@ -1945,6 +1991,7 @@ export class Sorter implements Scene3D {
     });
     this.wing.update(dt, bt);
     this.canteen.update(dt, bt);
+    this.breaks.update(dt, bt, this.dayShown !== false);
     this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
       chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),

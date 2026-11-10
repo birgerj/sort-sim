@@ -357,16 +357,38 @@ export class Trucks {
     }
   }
 
+  /**
+   * The screen above each door: number and city, postcodes, and the departure counting down
+   * (`dep 14:35 · 12 min`, with how full it is); in red once the truck is late (past its
+   * departure and still at the door: `LATE +3 min`).
+   */
   private drawScreens(): void {
+    const now = this.clock();
     this.docks.forEach((d, i) => {
       const hhmm = `${String(Math.floor(d.cutoff / 60) % 24).padStart(2, '0')}:${String(Math.floor(d.cutoff % 60)).padStart(2, '0')}`;
-      const status =
-        d.state === 'open' ? `dep ${hhmm} · ${d.cages ? `cages ${Math.round(d.cages() * 100)}%` : `truck ${Math.round(this.fill(d) * 100)}%`}` : d.state === 'cleardown' || d.state === 'closing' ? 'CLEARDOWN' : d.state === 'opening' ? `Opening · dep ${hhmm}` : 'Truck on its way';
+      const left = Math.ceil(d.cutoff - now);
+      const atDoor = d.state === 'open' || d.state === 'cleardown' || d.state === 'closing';
+      const late = atDoor && left < 0;
+      const inMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`);
+      const fill = d.cages ? `cages ${Math.round(d.cages() * 100)}%` : `truck ${Math.round(this.fill(d) * 100)}%`;
+      const status = late
+        ? `LATE +${-left} min · dep ${hhmm}`
+        : d.state === 'open'
+          ? `dep ${hhmm} · ${inMin(left)} · ${fill}`
+          : d.state === 'cleardown' || d.state === 'closing'
+            ? `CLEARDOWN · dep ${hhmm} · ${inMin(left)}`
+            : d.state === 'opening'
+              ? `Opening · dep ${hhmm}`
+              : 'Truck on its way';
       const key = status;
       if (d.shown === key) return;
       d.shown = key;
       const warn = d.state === 'cleardown' || d.state === 'closing';
-      this.screens.set(i, `${d.number} · ${d.city}`, `${d.pc} · ${status}`, { bg: warn ? '#3a1f00' : '#101114', fg: '#ffffff', sub: warn ? '#ffb020' : d.state === 'open' ? '#5be0a0' : '#9aa0a8' });
+      this.screens.set(i, `${d.number} · ${d.city}`, `${d.pc} · ${status}`, {
+        bg: late ? '#4a0d0d' : warn ? '#3a1f00' : '#101114',
+        fg: '#ffffff',
+        sub: late ? '#ff5a4f' : warn ? '#ffb020' : d.state === 'open' ? (left <= 10 ? '#ffd24a' : '#5be0a0') : '#9aa0a8',
+      });
     });
     this.screens.flush();
   }

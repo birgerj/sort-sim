@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { FloorKit } from './floor';
 import { buildHuman, type Human } from './people';
 import { settle, sit } from './motion';
+import { Trip, walkOn, type P3 } from './trips';
 
 export interface CanteenLayout {
   /** The hall's west wall (x); the rooms are west of it. */
@@ -71,10 +72,28 @@ export function canteenOpenings(L: CanteenLayout): { windows: Box4[]; doors: Box
   };
 }
 
+/** A planner's desk, and the walk they are on (null: seated); `pause`: where on it they stop at the window. */
+interface Desk {
+  x: number;
+  z: number;
+  walk: Trip | null;
+  s: number;
+  pause: number;
+  until: number;
+  next: number;
+}
+
 export class Canteen {
   private people: Human[] = [];
-  /** The planners at their computers. */
+  /** The planners at their computers: where each sits, and what each is doing (at the desk, or on a walk). */
   private typists: Human[] = [];
+  private desks: Desk[] = [];
+  /** The way from the foot of the stair onto the hall floor and round the loop's walkway, and back (set by the Sorter). */
+  private hallRound: P3[] | null = null;
+  /** Seats free for people on their break (by the middle aisle), and who has one. */
+  readonly seats: { x: number; z: number; ry: number; taken: boolean }[] = [];
+  private lastBt = 0;
+  private db = 0;
   private readonly x0: number;
 
   constructor(
@@ -89,19 +108,131 @@ export class Canteen {
   }
 
   update(dt: number, bt: number): void {
+    // (Beats since the last frame, from the clock: a slow frame still walks the full way.)
+    this.db = Math.min(2, Math.max(0, bt - this.lastBt));
+    this.lastBt = bt;
     this.people.forEach((h, i) => {
       h.m.talk = Math.sin(bt * 0.5 + i * 1.7) > 0.4 ? 1 : 0;
       h.head.rotation.y = Math.sin(bt * 0.13 + i) * 0.35;
       settle(h, dt, { idle: 0 });
     });
-    // The planners type on the beat, now and then looking up from the screens.
+    // The planners type on the beat, now and then looking up from the screens; now and then
+    // one gets up to look out of the window, or (the second) walks a round over the loop's walkway.
     this.typists.forEach((h, i) => {
+      const d = this.desks[i]!;
+      if (d.walk) {
+        this.walkPlanner(h, d, dt, bt);
+        return;
+      }
+      if (bt >= d.next) this.startWalk(i);
       const t = bt * Math.PI * 2 + i;
       h.foreL.rotation.x = -1.2 + 0.1 * Math.max(0, Math.sin(t));
       h.foreR.rotation.x = -1.2 + 0.1 * Math.max(0, Math.sin(t + 1.6));
       h.head.rotation.x = Math.sin(bt * 0.21 + i * 2) > 0.7 ? -0.12 : 0.1;
       settle(h, dt, { idle: 0 });
     });
+  }
+
+  /** The way from the stair's foot over the hall floor, round the loop's walkway, and back to the foot. */
+  setHallRound(pts: P3[]): void {
+    this.hallRound = pts;
+  }
+
+  /** Where the stair meets the floor (just off its last step), and the stair up to the balcony. */
+  stairUp(): P3[] {
+    const L = this.L;
+    const sx = L.wallX + 0.7;
+    const foot = canteenStairFoot(L);
+    return [
+      [sx, 0, foot - 0.5],
+      [sx, 0, foot],
+      [sx, L.floorY, balcony(L)[0]],
+    ];
+  }
+
+  /** From the top of the stair along the balcony, in at the canteen's door and down the middle aisle to seat `i`. */
+  toSeat(i: number): P3[] {
+    const L = this.L;
+    const y = L.floorY;
+    const st = this.seats[i]!;
+    const dz = (doorOf(L.canteen)[0] + doorOf(L.canteen)[1]) / 2;
+    const aisle = (L.wallX - 1.6 + this.x0 + 2.2) / 2;
+    const sx = L.wallX + 0.7;
+    return [
+      [sx, y, balcony(L)[0]],
+      [sx, y, dz],
+      [L.wallX - 0.6, y, dz],
+      [aisle, y, dz + 0.6],
+      [aisle, y, st.z],
+      [st.x, y, st.z],
+    ];
+  }
+
+  /** Seat a person on seat `i` (hips at seat height, facing the table). */
+  sitAt(h: Human, i: number): void {
+    const st = this.seats[i]!;
+    h.root.position.set(st.x, this.L.floorY - 0.4, st.z);
+    h.root.rotation.y = st.ry;
+    sit(h);
+    h.armL.rotation.x = h.armR.rotation.x = -0.9;
+    h.foreL.rotation.x = h.foreR.rotation.x = -0.9;
+  }
+
+  /** A planner gets up: to the window (both), or down the stair for a round over the loop's walkway (the second, now and then). */
+  private startWalk(i: number): void {
+    const d = this.desks[i]!;
+    const L = this.L;
+    const y = L.floorY;
+    if (i === 1 && this.hallRound && Math.random() < 0.45) {
+      const sx = L.wallX + 0.7;
+      const doorZ = (doorOf(L.office)[0] + doorOf(L.office)[1]) / 2;
+      const out: P3[] = [
+        [d.x, y, d.z],
+        [d.x, y, doorZ + 0.3],
+        [L.wallX - 0.6, y, doorZ],
+        [sx, y, doorZ],
+        ...[...this.stairUp()].reverse(),
+      ];
+      // Out, round the walkway, and the same way back.
+      d.walk = new Trip([...out, ...this.hallRound.slice(1), ...[...out].reverse().slice(1)]);
+      d.pause = -1;
+    } else {
+      const wz = d.z + 1.1;
+      const out: P3[] = [
+        [d.x, y, d.z],
+        [d.x, y, wz],
+        [L.wallX - 0.6, y, wz],
+      ];
+      // To the window, a while looking out over the hall, and back.
+      d.walk = new Trip([...out, ...[...out].reverse().slice(1)]);
+      d.pause = new Trip(out).len;
+    }
+    d.s = 0;
+    d.until = 8 + Math.random() * 10;
+  }
+
+  private walkPlanner(h: Human, d: Desk, dt: number, bt: number): void {
+    const speed = 0.7;
+    const w = d.walk!;
+    // Standing at the window for a while (in beats), looking out over the hall.
+    if (d.pause > 0 && d.s >= d.pause && d.until > 0) {
+      d.until -= this.db;
+      walkOn(h, w, d.pause, dt, bt, 0);
+      h.root.rotation.y = Math.PI / 2;
+      return;
+    }
+    d.s += speed * this.db;
+    if (d.s >= w.len) {
+      // Back at the desk: sit down and type again.
+      d.walk = null;
+      d.next = bt + 60 + Math.random() * 120;
+      h.root.position.set(d.x + 0.05, this.L.floorY - 0.4, d.z);
+      h.root.rotation.y = Math.PI / 2;
+      sit(h);
+      h.armL.rotation.x = h.armR.rotation.x = -0.6;
+      return;
+    }
+    walkOn(h, w, d.s, dt, bt, speed);
   }
 
   /** Both rooms: floors, ceiling, outer walls, the wall between them, glass and frames, doors, lamps. */
@@ -192,6 +323,7 @@ export class Canteen {
       h.armL.rotation.x = h.armR.rotation.x = -0.6;
       k.put(h.root);
       this.typists.push(h);
+      this.desks.push({ x: cx, z: dz, walk: null, s: 0, pause: 0, until: 0, next: 30 + i * 50 + Math.random() * 60 });
     });
     // Filing cabinets and a plant along the back wall, a whiteboard with the shift plan.
     for (let i = 0; i < 3; i++) k.box('ocab', grey, x0 + 0.45, y + 0.65, o0 + 1.0 + i * 0.55, 0.6, 1.3, 0.5);
@@ -274,6 +406,12 @@ export class Canteen {
       // (Facing +x when on the −x side of the table, −x on the other.)
       seats.push([tx - 0.62, tz + (n % 2 ? 0.45 : -0.45), Math.PI / 2]);
       if (n % 2 === 0) seats.push([tx + 0.62, tz - 0.45, -Math.PI / 2]);
+    });
+    // The other tables' seats by the middle aisle are free for people coming up on their break.
+    tables.forEach(([tx, tz], t) => {
+      if ([0, 1, 4, 7, 10, 13, 16].includes(t)) return;
+      const west = tx < (x0 + L.wallX) / 2;
+      for (const dz of [-0.45, 0.45]) this.seats.push(west ? { x: tx + 0.62, z: tz + dz, ry: -Math.PI / 2, taken: false } : { x: tx - 0.62, z: tz + dz, ry: Math.PI / 2, taken: false });
     });
     seats.slice(0, 11).forEach(([x, z, ry], i) => {
       const h = buildHuman(k, looks[i % looks.length]!);

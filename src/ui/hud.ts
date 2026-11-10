@@ -681,7 +681,7 @@ export class Hud {
       ['Robots busy', s ? `${s.robotsBusyPct}%` : '–'],
       ['Infeed queue', s ? String(s.infeedQueue) : '–'],
       ['Inbound docks', `${this.scene.inboundStatus().unloading} of ${this.scene.inboundStatus().docks} unloading`, `${this.scene.inboundStatus().parcels} parcels in the trucks · ${this.scene.inboundStatus().crew} unloader${this.scene.inboundStatus().crew > 1 ? 's' : ''} per truck`],
-      ['Trucks on time', `${t.onTimePct}%`, `${t.departures} left`],
+      ['Trucks on time', `${t.onTimePct}%`, `${t.departures} left${t.departures - Math.round((t.onTimePct / 100) * t.departures) > 0 ? ` · ${t.departures - Math.round((t.onTimePct / 100) * t.departures)} late` : ''}`],
       ['Load factor', `${t.loadFactorPct}%`, 'of trailer room'],
       ['Buffer store', s ? `${Math.round((100 * s.storeUsed) / s.storeSlots)}%` : '–', s ? `${s.storeUsed} of ${s.storeSlots} places` : undefined],
       ['Busiest destination', s?.topCity ? `${s.topCity}` : '–', s?.topCity ? `${s.topPct}% of the parcels in` : undefined],
@@ -690,7 +690,8 @@ export class Hud {
     const grid = el('div', 'tiles');
     for (const [label, value, sub] of tiles) {
       const tile = el('div', 'tile');
-      tile.append(el('span', 'tl', label), el('b', '', value));
+      // (On-time below 100 %: in red.)
+      tile.append(el('span', 'tl', label), el('b', label === 'Trucks on time' && t.departures > 0 && t.onTimePct < 100 ? 'bad' : '', value));
       if (sub) tile.append(el('span', 'ts', sub));
       grid.append(tile);
     }
@@ -721,8 +722,9 @@ export class Hud {
     const deps = el('div', 'deps');
     deps.append(el('div', 'tl', 'Last departures'));
     for (const d of k.departures.slice(-8).reverse()) {
-      const r = el('div', 'dep');
-      r.append(el('span', '', hhmm(d.at)), el('span', '', `${d.door} ${d.city}`), el('span', '', `${d.load}/${d.room}`), el('span', d.onTime ? 'ok' : 'late', d.onTime ? (d.full ? 'full' : 'on time') : 'late'));
+      // (A late truck: the whole row in red, with how late it left.)
+      const r = el('div', d.onTime ? 'dep' : 'dep is-late');
+      r.append(el('span', '', hhmm(d.at)), el('span', '', `${d.door} ${d.city}`), el('span', '', `${d.load}/${d.room}`), el('span', d.onTime ? 'ok' : 'late', d.onTime ? (d.full ? 'full' : 'on time') : `late +${Math.max(1, Math.round(d.at - d.cutoff))} min`));
       deps.append(r);
     }
     // (Keep the list where it was scrolled to: the panel is redrawn every second.)
