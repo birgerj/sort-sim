@@ -15,7 +15,30 @@ export interface ForkliftModel {
   g: THREE.Group;
   forks: THREE.Group;
   beacon: THREE.MeshBasicMaterial;
+  /** The blue warning spots on the floor ahead and behind (hide them on a parked forklift). */
+  spots: THREE.Group;
 }
+
+/** A soft round spot (white in the middle, fading out), for the blue warning lights. */
+let spotTex: THREE.CanvasTexture | null = null;
+function spotTexture(): THREE.CanvasTexture {
+  if (spotTex) return spotTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.45, 'rgba(255,255,255,0.85)');
+  gr.addColorStop(0.75, 'rgba(255,255,255,0.25)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 64, 64);
+  spotTex = new THREE.CanvasTexture(c);
+  return spotTex;
+}
+const spotMats = new WeakMap<FloorKit, THREE.MeshBasicMaterial>();
+const SPOT_G = new THREE.PlaneGeometry(1.1, 0.8).rotateX(-Math.PI / 2);
+const LAMP_G = new THREE.BoxGeometry(0.12, 0.08, 0.1);
 
 /** Fork tips reach this far in front of the forklift centre (where a carried pallet sits). */
 export const FORK_REACH = 1.75;
@@ -159,13 +182,27 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
     });
     add(new THREE.SphereGeometry(0.1, 10, 8).translate(0, 2.0, 1.14), xmasMat(k, 3, new THREE.Color(2.2, 0.12, 0.08)));
   }
+  // Blue warning spots: a lamp on the overhead guard, front and back, throws a blue spot on the
+  // floor about 3 m ahead of the forks and behind, so people on foot see it coming round a corner.
+  let sm = spotMats.get(k);
+  if (!sm) {
+    sm = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.5, 2.2), map: spotTexture(), transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+    spotMats.set(k, sm);
+  }
+  const spots = new THREE.Group();
+  g.add(spots);
+  for (const [z, lz] of [[3.3, 0.66], [-3.0, -0.6]] as const) {
+    add(SPOT_G, sm, spots).position.set(0, 0.02, z);
+    add(LAMP_G, sm, spots).position.set(0, 2.27, lz);
+  }
+  spots.traverse((o) => (o.userData.noInk = true));
   const beacon = new THREE.MeshBasicMaterial({ color: 0x000000 });
   const b = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), beacon);
   b.position.set(0, 2.32, -0.4);
   g.add(b);
   FORKLIFTS.push(g);
   k.put(g);
-  return { g, forks, beacon };
+  return { g, forks, beacon, spots };
 }
 
 /** Paint wear is drawn in world space, so it would slide over a moving vehicle: none here. */

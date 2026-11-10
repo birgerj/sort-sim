@@ -583,6 +583,8 @@ export class Life {
       f.g.position.set(x, 0, z - 2.6);
       f.g.rotation.y = 0;
       f.beacon.color.setRGB(0.2, 1.2, 0.3);
+      // (Parked and charging: the warning lights are off.)
+      f.spots.visible = false;
     }
     k.box('chargesign', green, 108, 2.4, z - 0.02, 1.4, 0.4, 0.04);
     k.blob(108, z - 0.2, 5, 1.4);

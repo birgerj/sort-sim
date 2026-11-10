@@ -369,13 +369,14 @@ export class Trucks {
       const left = Math.ceil(d.cutoff - now);
       const atDoor = d.state === 'open' || d.state === 'cleardown' || d.state === 'closing';
       const late = atDoor && left < 0;
+      const inMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`);
       const fill = d.cages ? `cages ${Math.round(d.cages() * 100)}%` : `truck ${Math.round(this.fill(d) * 100)}%`;
       const status = late
         ? `LATE +${-left} min · dep ${hhmm}`
         : d.state === 'open'
-          ? `dep ${hhmm} · ${left} min · ${fill}`
+          ? `dep ${hhmm} · ${inMin(left)} · ${fill}`
           : d.state === 'cleardown' || d.state === 'closing'
-            ? `CLEARDOWN · dep ${hhmm} · ${left} min`
+            ? `CLEARDOWN · dep ${hhmm} · ${inMin(left)}`
             : d.state === 'opening'
               ? `Opening · dep ${hhmm}`
               : 'Truck on its way';
