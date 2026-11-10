@@ -32,7 +32,7 @@ export const STOP_INFO: Record<string, StopInfo> = {
       'Real-time identification of pieces based on configurable barcode definitions',
       'Flexible deployment, from large sorting environments to compact automation setups',
     ],
-    sim: 'Four infeed lanes feed the loop on the beat; when parcels arrive faster than the lanes take them, they queue at the buffers.',
+    sim: 'Ten inbound docks with telescopic conveyors feed four infeed lanes; the lanes feed the loop on the beat, and when parcels arrive faster than the lanes take them, they queue at the buffers.',
   },
   'scan tunnels': {
     family: 'Vision AI Solutions',

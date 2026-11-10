@@ -20,6 +20,11 @@ export interface HubStats {
 export interface HubMap {
   /** Hall bounds: x0, x1, z0, z1. */
   hall: [number, number, number, number];
+  /** The hall's outline (with the inbound wing), when it is not just the bounds. */
+  outline?: [number, number][];
+  /** The infeed: collectors and lanes as lines, and the inbound trucks (what is still in each, 0…1). */
+  infeed?: [number, number][][];
+  inbound?: { x: number; z: number; state: string; left: number }[];
   loop: [number, number][];
   /** Chute ends with how full they are (0…1) and where they go. */
   chutes: { x: number; z: number; fill: number; dock: boolean; fault?: boolean }[];
@@ -72,7 +77,8 @@ export class Screens {
     [this.dash, this.dashG] = make(512, 288);
     [this.board, this.boardG] = make(1024, 384);
     [this.clock, this.clockG] = make(128, 128);
-    [this.map, this.mapG] = make(1600, 576);
+    // (Taller since the inbound wing: the plan keeps its scale, the wall grew.)
+    [this.map, this.mapG] = make(1600, 688);
   }
 
   /** Call every frame; redraws when due. `now` in seconds. */
@@ -100,7 +106,7 @@ export class Screens {
     const g = this.mapG;
     if (!g) return;
     const W = 1600;
-    const H = 576;
+    const H = 688;
     const [x0, x1, z0, z1] = m.hall;
     const pad = 24;
     const top = 70;
@@ -121,11 +127,35 @@ export class Screens {
     const clear = m.doors.filter((d) => d.state === 'cleardown' || d.state === 'closing').length;
     const away = m.doors.filter((d) => d.state !== 'open' && d.state !== 'cleardown' && d.state !== 'closing').length;
     const full = m.chutes.filter((c) => c.fill >= 1).length;
-    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   ${m.chutes.some((c) => c.fault) ? `FAULT ${m.chutes.filter((c) => c.fault).length}   ·   ` : ''}cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}   ·   infeed queue ${m.queue}   ·   on time ${m.onTime}%   ·   dwell ${m.dwell} min   ·   ${m.clock}`, 330, 27);
-    // Hall outline.
+    g.fillText(`${Math.round(this.rate()).toLocaleString('en')} parcels/h   ·   chutes full ${full}/${m.chutes.length}   ·   ${m.chutes.some((c) => c.fault) ? `FAULT ${m.chutes.filter((c) => c.fault).length}   ·   ` : ''}${m.inbound ? `unloading ${m.inbound.filter((d) => d.state === 'open' && d.left > 0).length}/${m.inbound.length}   ·   ` : ''}cleardown ${clear}   ·   trucks away ${away}   ·   recirculating ${m.recirculating}   ·   infeed queue ${m.queue}   ·   on time ${m.onTime}%   ·   dwell ${m.dwell} min   ·   ${m.clock}`, 330, 27);
+    // Hall outline (with the inbound wing).
     g.strokeStyle = '#3a3d44';
     g.lineWidth = 2;
-    g.strokeRect(X(x0), Z(z0), (x1 - x0) * sx, (z1 - z0) * sz);
+    if (m.outline) {
+      g.beginPath();
+      m.outline.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))));
+      g.closePath();
+      g.stroke();
+    } else g.strokeRect(X(x0), Z(z0), (x1 - x0) * sx, (z1 - z0) * sz);
+    // Collectors and infeed lanes.
+    g.strokeStyle = '#1f6f60';
+    g.lineWidth = 4;
+    for (const line of m.infeed ?? []) {
+      g.beginPath();
+      line.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))));
+      g.stroke();
+    }
+    // Inbound trucks: green while unloading (the white bar is what is still in it), grey when away, amber coming or going.
+    for (const d of m.inbound ?? []) {
+      const w = 22;
+      const col = d.state === 'open' ? '#2fa58f' : d.state === 'away' || d.state === 'leaving' ? '#4a4d55' : '#f2a51a';
+      g.fillStyle = col;
+      g.fillRect(X(d.x) - w / 2, Z(d.z) - 18, w, 16);
+      if (d.left > 0) {
+        g.fillStyle = '#ffffff';
+        g.fillRect(X(d.x) - w / 2, Z(d.z) - 24, w * d.left, 4);
+      }
+    }
     // The loop, and the parcels on it.
     g.strokeStyle = '#2fa58f';
     g.lineWidth = 7;

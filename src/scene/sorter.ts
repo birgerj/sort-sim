@@ -31,6 +31,7 @@ import type { NoteRole, RGB, Scene3D, SceneControl, SceneInput } from './types';
 import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z, TABLE as MANUAL_TABLE } from './floor';
 import { DOCK_BELT_END, Docks } from './docks';
 import { FaultCrew, type FaultSite } from './faults';
+import { Inbound, TELESCOPE_BASE } from './inbound';
 import { FAULT_TEXT, FaultPlan } from '../sim/faults';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -139,12 +140,12 @@ const TRAY_HALF = 0.62;
 /** How far out from the loop's centre line each lane turns onto it (sets the lane's x). */
 const LANE_OUT = 3.6;
 /** z of the scan tunnels (just inside the north wall). */
-const LANE_TUNNEL_Z = -36.4;
+const LANE_TUNNEL_Z = -44.0;
 /** The maintenance platform inside the loop at its west end (the DJ's at night): centre x, top y. */
 const PLATFORM_X = -49;
 const PLATFORM_Y = 2.4;
 /** The buffer: where parcels queue on an infeed lane (metres along it, after the scan tunnel). */
-const HOLD_S = 16;
+const HOLD_S = 18;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
 const LANE_QUEUE = 7;
 /** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
@@ -201,6 +202,27 @@ export type Quality = 'low' | 'normal' | 'high' | 'ultra';
 /** x of the wall columns (south wall; the north ones stand 2.4 m further east). */
 const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }, (_, k) => WX + 19 + 24 * k);
 
+/**
+ * The inbound wing: an L-shaped extension north of the west part of the hall. Ten dock doors in
+ * its north wall, each with a truck and a telescopic conveyor; the telescopes run onto four
+ * collector belts, each merging into one infeed lane (doors 1–3, 4–5, 6–7, 8–10, west to east),
+ * centred over the lanes so the two middle lanes run out alike. The old north wall is open there.
+ */
+const WING = { x0: -66, x1: -22.5, z0: -54 };
+const INBOUND_DOORS = Array.from({ length: 10 }, (_, i) => -63.1 + 4.2 * i);
+const LANE_DOORS = [[0, 1, 2], [3, 4], [5, 6], [7, 8, 9]];
+/** Where each lane starts: the middle of its doors, on its collector. */
+const LANE_MERGE = LANE_DOORS.map((ds) => (INBOUND_DOORS[ds[0]!]! + INBOUND_DOORS[ds[ds.length - 1]!]!) / 2);
+/** The collectors run east–west just past the ends of the telescopes' bases. */
+const COLL_Z = WING.z0 + TELESCOPE_BASE + 0.1 + 0.6;
+/** The lanes run straight south from the collectors to here, then sideways to their own x, then up the ramp. */
+const JOG_Z0 = -39;
+const RAMP_Z = -28;
+/** One parcel off a wall of parcels by one unloader: about this many an hour (manual unloading). */
+const UNLOAD_PER_HOUR = 1000;
+/** The wall columns on the north side, except where the wing opens the wall. */
+const NORTH_COLS = COLUMNS.map((x) => x + 2.4).filter((x) => x < WX || x > WING.x1);
+
 /** Belt speeds the conveyor clock can run at: multiples of the beat, so events stay on 8th and 16th notes. */
 export const BELT_SPEEDS = [0.5, 1, 2, 4];
 /** x of the 20 truck docks on the north wall: straight north of each dock chute's end. */
@@ -212,16 +234,37 @@ const DOOR_W = 3.2;
 const DOOR_H = 3.8;
 
 /** A long wall (HW × HH, centred on its origin) with door openings at the given x. */
-function wallWithDoors(xs: number[]): THREE.ShapeGeometry {
+/** Keep a point (x, z) inside the hall, `m` metres from its walls (the wing included). */
+function inHall(x: number, z: number, m: number): [number, number] {
+  // In the wing (north of the old north wall): its own walls; elsewhere the hall's.
+  if (z < NZ + m && x >= WING.x0 + m && x <= WING.x1 - m) return [x, Math.max(z, WING.z0 + m)];
+  x = clamp(x, (z < NZ ? WING.x0 : WX) + m, EX - m);
+  const inWing = x >= WING.x0 + m && x <= WING.x1 - m;
+  return [x, clamp(z, (inWing ? WING.z0 : NZ) + m, HZ - m)];
+}
+
+function wallWithDoors(xs: number[], opening?: [number, number], cx = HCX, w = HW): THREE.ShapeGeometry {
   const sh = new THREE.Shape();
-  sh.moveTo(-HW / 2, -HH / 2);
-  sh.lineTo(HW / 2, -HH / 2);
-  sh.lineTo(HW / 2, HH / 2);
-  sh.lineTo(-HW / 2, HH / 2);
+  sh.moveTo(-w / 2, -HH / 2);
+  sh.lineTo(w / 2, -HH / 2);
+  sh.lineTo(w / 2, HH / 2);
+  sh.lineTo(-w / 2, HH / 2);
   sh.closePath();
+  if (opening) {
+    // Open from floor to roof (where the wing joins the hall); a sliver keeps it a hole.
+    const h = new THREE.Path();
+    const a = Math.max(opening[0] - cx, -w / 2 + 0.02);
+    const b = Math.min(opening[1] - cx, w / 2 - 0.02);
+    h.moveTo(a, -HH / 2 + 0.02);
+    h.lineTo(a, HH / 2 - 0.02);
+    h.lineTo(b, HH / 2 - 0.02);
+    h.lineTo(b, -HH / 2 + 0.02);
+    h.closePath();
+    sh.holes.push(h);
+  }
   for (const x of xs) {
     const h = new THREE.Path();
-    const lx = x - HCX;
+    const lx = x - cx;
     // (A thin sill at the bottom keeps each opening a proper hole.)
     h.moveTo(lx - DOOR_W / 2, -HH / 2 + 0.02);
     h.lineTo(lx - DOOR_W / 2, -HH / 2 + DOOR_H);
@@ -854,7 +897,7 @@ export interface Parcel {
   manual?: boolean;
   mode: Mode;
   path?: Path;
-  pathKind: 'lane' | 'chute' | 'intake' | 'back' | 'dock' | 'reject';
+  pathKind: 'lane' | 'chute' | 'intake' | 'back' | 'dock' | 'reject' | 'feed';
   /** Its label could not be read yet (it goes to the no-read chute unless a loop scanner reads it). */
   noread?: boolean;
   /** Why it goes to manual sorting: no read, too big or heavy for the sorter, or round too often. */
@@ -1218,6 +1261,14 @@ export class Sorter implements Scene3D {
   private batcher!: Batcher;
   /** Trailers behind the dock doors: north 0–19 (roll cages), then the open south doors (boxes). */
   private trucks!: Trucks;
+  /** The inbound wing's trucks, telescopes and unloaders. */
+  private wing!: Inbound;
+  /** Parcels on their way from a trailer to the start of each lane; when each door may give its next; when the last one reaches each lane. */
+  private feeding = [0, 0, 0, 0];
+  private doorNext = INBOUND_DOORS.map(() => 0);
+  private feedArrive = [0, 0, 0, 0];
+  private readonly fa = new THREE.Vector3();
+  private readonly fb = new THREE.Vector3();
   private manual!: ManualSort;
   private screens = new Screens();
   /** Counters for the screens. */
@@ -1375,6 +1426,7 @@ export class Sorter implements Scene3D {
       const g = this.floor.bins[b]!.g;
       for (const p of this.parcels) if (p.mode === 'held' && p.holder === g) p.dead = true;
     };
+    this.wing = new Inbound(this, { wallZ: WING.z0, doors: INBOUND_DOORS, firstNumber: 41, beltY: LANE_Y });
     this.trucks = new Trucks(this, [
       ...NORTH_DOORS.map((x, k) => ({ x, wallZ: NZ, dir: 1 as const, cargo: 'cage' as const, number: k + 1, city: NORTH_CITIES[DOCK_CITY[k]!]!.name, pc: pcs(NORTH_CITIES[DOCK_CITY[k]!]!), hold: () => this.docks.pending(x), cages: () => (this.docks ? this.docks.cageFill(x) : 0) })),
       ...SOUTH_DOORS.map((x, k) => ({ x, wallZ: HZ, dir: -1 as const, cargo: 'box' as const, number: 21 + k, city: SOUTH_CITIES[k]!.name, pc: pcs(SOUTH_CITIES[k]!) })),
@@ -1463,7 +1515,7 @@ export class Sorter implements Scene3D {
       rackHalf: BAYS * BAY,
       levels: LEVELS,
       controlRoom: [-48, 23.5],
-      columnsNorth: COLUMNS.map((x) => x + 2.4),
+      columnsNorth: NORTH_COLS,
       columnsSouth: COLUMNS,
     });
     this.party = new Party(this, v(PLATFORM_X - 0.6, PLATFORM_Y + 0.0, 0), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
@@ -1722,6 +1774,9 @@ export class Sorter implements Scene3D {
     this.updateClub(dt, bar);
     this.updateForklifts(dt, prev);
     this.trucks.update(bt);
+    // One unloader per truck while that keeps up with the rate (about UNLOAD_PER_HOUR each), else two.
+    this.wing.crewSize = (this.rate * 60) / INBOUND_DOORS.length > UNLOAD_PER_HOUR ? 2 : 1;
+    this.wing.update(dt, bt);
     this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
       chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),
@@ -1789,7 +1844,7 @@ export class Sorter implements Scene3D {
     }
     for (let tries = 0; this.backlog > 0 && tries < 4; tries++) {
       const k = this.quietestLane();
-      if (k < 0 || !this.spawn(k, null, false)) break;
+      if (k < 0 || !this.feed(k, null, false)) break;
       this.backlog--;
     }
   }
@@ -1797,7 +1852,9 @@ export class Sorter implements Scene3D {
   /** The lane with the fewest parcels waiting, if one has room for another (−1 if all are full). */
   private quietestLane(): number {
     let best = -1;
-    for (let k = 0; k < this.lanes.length; k++) if (this.waiting[k]! < LANE_QUEUE && (best < 0 || this.waiting[k]! < this.waiting[best]!)) best = k;
+    const n = (k: number) => this.waiting[k]! + this.feeding[k]!;
+    // (Only lanes with a truck at one of their doors that has parcels left.)
+    for (let k = 0; k < this.lanes.length; k++) if (n(k) < LANE_QUEUE && this.feedDoor(k) >= 0 && (best < 0 || n(k) < n(best))) best = k;
     return best;
   }
 
@@ -2050,7 +2107,7 @@ export class Sorter implements Scene3D {
       lane.doorFlash = 0.6 + vel * 0.4;
       lane.doorCol.setRGB(...color);
       // A lead parcel is one of the due ones (taken early), so the rate stays as set.
-      if (this.ct - lane.lastSpawn >= 0.5 && this.backlog + this.due >= 1 && this.waiting[k]! < 2 && this.spawn(k, color, true)) {
+      if (this.ct - lane.lastSpawn >= 0.5 && this.backlog + this.due >= 1 && this.waiting[k]! + this.feeding[k]! < 2 && this.feed(k, color, true)) {
         if (this.backlog > 0) this.backlog--;
         else this.due--;
         return;
@@ -2250,13 +2307,64 @@ export class Sorter implements Scene3D {
   }
 
   /** Puts a parcel on a lane, timed to land on a free tray on a beat. Returns false if the lane is full. */
+  /**
+   * A door of lane k that can give a parcel (a truck with parcels left), the one free soonest; −1 if none.
+   */
+  private feedDoor(k: number): number {
+    let d = -1;
+    for (const i of LANE_DOORS[k]!) if (this.wing.ready(i) && (d < 0 || this.doorNext[i]! < this.doorNext[d]!)) d = i;
+    return d;
+  }
+
+  /**
+   * A parcel for lane k, off the wall of parcels in one of its trucks: the unloader puts it on the
+   * telescope, which runs onto the collector and into the lane (then on as `spawn`). Spaced so no
+   * two meet on the collector, and each unloader keeps a human pace.
+   */
+  private feed(k: number, color: RGB | null, lead: boolean): boolean {
+    if (this.waiting[k]! + this.feeding[k]! >= LANE_QUEUE) return false;
+    const d = this.feedDoor(k);
+    if (d < 0) return false;
+    const p = this.newParcel();
+    if (!p) return false;
+    const who = this.wing.take(d, this.fa, this.fb);
+    const dx = INBOUND_DOORS[d]!;
+    const mx = LANE_MERGE[k]!;
+    const pts = [this.fa.clone(), this.fb.clone(), v(dx, LANE_Y, WING.z0 + 0.6), v(dx, LANE_Y, COLL_Z)];
+    if (Math.abs(dx - mx) > 0.01) pts.push(v(mx, LANE_Y, COLL_Z));
+    const path = Path.fillet(pts, 0.5);
+    const run = path.len / BEAT_M;
+    // A parcel off the wall every few seconds per unloader (in belt beats at this tempo and speed).
+    const gap = (3600 / (UNLOAD_PER_HOUR * this.wing.crewSize)) * (this.bpmNow / 60) * this.speed;
+    const t0 = Math.max(this.ct, this.doorNext[d]!, this.feedArrive[k]! + 0.6 - run);
+    this.doorNext[d] = t0 + gap;
+    this.feedArrive[k] = t0 + run;
+    p.lane = k;
+    p.lead = lead;
+    if (lead && color) p.glow.setRGB(...color);
+    this.feedColor.set(p, color);
+    p.pos.copy(this.fa);
+    this.onPath(p, path, 'feed', t0, t0 + run, 0);
+    this.feeding[k]!++;
+    this.wing.carrying(d, who, p, this.fa.distanceTo(this.fb));
+    return true;
+  }
+
+  /** The lead colour a fed parcel brings to its lane (null: none). */
+  private feedColor = new Map<Parcel, RGB | null>();
+
   private spawn(k: number, color: RGB | null, lead: boolean): boolean {
-    const lane = this.lanes[k]!;
-    const bt = this.ct;
-    let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M) + LANE_PHASE[k]!, lane.lastArrive + 1);
     if (this.waiting[k]! >= LANE_QUEUE) return false;
     const p = this.newParcel();
     if (!p) return false;
+    return this.toLane(k, p, color, lead);
+  }
+
+  /** Onto lane k at its start, now, with a tray kept for it at the loop. */
+  private toLane(k: number, p: Parcel, color: RGB | null, lead: boolean): boolean {
+    const lane = this.lanes[k]!;
+    const bt = this.ct;
+    let arrive = Math.max(Math.ceil(bt + lane.path.len / BEAT_M) + LANE_PHASE[k]!, lane.lastArrive + 1);
     // A parcel longer than a tray takes the one behind it too.
     const long = p.d > 0.9;
     const behind = (t: number) => (t - 1 + TRAYS) % TRAYS;
@@ -2571,6 +2679,14 @@ export class Sorter implements Scene3D {
 
   private pathEnd(p: Parcel): void {
     switch (p.pathKind) {
+      case 'feed': {
+        // Off the collector into the lane.
+        this.feeding[p.lane] = Math.max(0, this.feeding[p.lane]! - 1);
+        const color = this.feedColor.get(p) ?? null;
+        this.feedColor.delete(p);
+        if (!this.toLane(p.lane, p, color, p.lead)) this.backlog++;
+        break;
+      }
       case 'lane':
         this.stats.inducted++;
         this.kpi.inducted(CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '');
@@ -2643,6 +2759,12 @@ export class Sorter implements Scene3D {
   private showNow = new Map<number, string>();
   /** Beat until which a repaired chute's lamps flash green. */
   private fixedFlash = new Map<number, number>();
+
+  /** The inbound docks now: trucks being unloaded, all docks, parcels still in the trucks, unloaders per truck. */
+  inboundStatus(): { unloading: number; docks: number; parcels: number; crew: number } {
+    const l = this.wing.list();
+    return { unloading: l.filter((d) => d.state === 'open' && d.left > 0).length, docks: l.length, parcels: l.reduce((a, _, i) => a + this.wing.left(i), 0), crew: this.wing.crewSize };
+  }
 
   /** Take a dock chute down now (a random running one without `chute`); false when none could. */
   fault(chute?: number): boolean {
@@ -3219,7 +3341,7 @@ export class Sorter implements Scene3D {
       let t = 1e9;
       if (dx) t = Math.min(t, ((dx > 0 ? EX - 0.1 : WX + 0.1) - B.x) / dx);
       if (dy) t = Math.min(t, ((dy > 0 ? HH - 0.05 : 0.03) - B.y) / dy);
-      if (dz) t = Math.min(t, ((dz > 0 ? HZ - 0.1 : NZ + 0.1) - B.z) / dz);
+      if (dz) t = Math.min(t, ((dz > 0 ? HZ - 0.1 : (B.x > WING.x0 && B.x < WING.x1 ? WING.z0 : NZ) + 0.1) - B.z) / dz);
       this.sparkPos[k * 3] = B.x + dx * t;
       this.sparkPos[k * 3 + 1] = B.y + dy * t;
       this.sparkPos[k * 3 + 2] = B.z + dz * t;
@@ -3302,8 +3424,7 @@ export class Sorter implements Scene3D {
     this.follow = null;
     this.tour = null;
     const d = this.t.subVectors(this.look, this.camera.position);
-    this.walk.x = clamp(this.camera.position.x, WX + 1, EX - 1);
-    this.walk.z = clamp(this.camera.position.z, NZ + 1, HZ - 1);
+    [this.walk.x, this.walk.z] = inHall(this.camera.position.x, this.camera.position.z, 1);
     this.walk.yaw = Math.atan2(d.x, d.z);
     this.walk.pitch = 0;
     this.walk.alt = 0;
@@ -3354,8 +3475,7 @@ export class Sorter implements Scene3D {
     // Forward along the heading, sideways to the right of it.
     const mx = (fx * i.fwd - fz * i.side) / len;
     const mz = (fz * i.fwd + fx * i.side) / len;
-    w.x = clamp(w.x + mx * w.speed * dt, WX + 0.6, EX - 0.6);
-    w.z = clamp(w.z + mz * w.speed * dt, NZ + 0.6, HZ - 0.6);
+    [w.x, w.z] = inHall(w.x + mx * w.speed * dt, w.z + mz * w.speed * dt, 0.6);
     // Footsteps bob the view, two steps per beat when walking to the music.
     w.step += w.speed * dt * 1.6;
     const bob = flying ? Math.sin(this.time * 1.3) * 0.04 : Math.sin(w.step * Math.PI) * 0.035 * Math.min(1, w.speed);
@@ -3419,8 +3539,7 @@ export class Sorter implements Scene3D {
     } else this.flyTour(dt, travel);
     // Stay inside the hall, and under the ceiling's ducts, cable trays and lamps.
     this.want.y = Math.min(this.want.y, FLY_MAX_Y);
-    this.want.x = clamp(this.want.x, WX + 1.5, EX - 1.5);
-    this.want.z = clamp(this.want.z, NZ + 1.5, HZ - 1.5);
+    [this.want.x, this.want.z] = inHall(this.want.x, this.want.z, 1.5);
     const k = this.first ? 1 : 1 - Math.exp(-dt * (p ? 2.6 : th ? 1.2 : this.camRate));
     this.camera.position.lerp(this.want, k);
     this.look.lerp(this.wantLook, this.first ? 1 : 1 - Math.exp(-dt * 3.2));
@@ -3901,7 +4020,7 @@ export class Sorter implements Scene3D {
     ribsM.needsUpdate = true;
     const longNight = new THREE.MeshStandardMaterial({ map: ribsM, roughness: 0.85, metalness: 0.3, side: THREE.DoubleSide });
     for (const z of [NZ, HZ]) {
-      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longNight);
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS, z < 0 ? [WX, WING.x1] : undefined), longNight);
       w.position.set(HCX, HH / 2, z);
       this.put(w, 'night');
     }
@@ -3921,6 +4040,7 @@ export class Sorter implements Scene3D {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil, 'night');
+    this.buildWing(floor.material, 6.2, longNight, ceil.material, (o) => this.put(o, 'night'));
 
     const steel = this.std(0x4c515a, 0.5, 0.7, DAY.steel);
     for (let x = WX + 2; x <= EX - 2; x += 10) this.box('steel', steel, x, HH - 0.5, HZC, 0.35, 0.8, HD);
@@ -3934,6 +4054,8 @@ export class Sorter implements Scene3D {
       // North: halfway between truck docks (x −13.6 + 6k); south: between the box doors (x −16 + 6k).
       for (const [z, dx] of [[NZ + 0.4, 2.4], [HZ - 0.4, 0]] as const) {
         const cx = x + dx;
+        // (None where the wing opens the north wall.)
+        if (z < 0 && !NORTH_COLS.includes(cx)) continue;
         this.box('colred', colRed, cx, 0.9, z, 0.76, 1.8, 0.76);
         this.box('col', col, cx, 1.8 + (HH - 1.8) / 2, z, 0.7, HH - 1.8, 0.7);
       }
@@ -4015,14 +4137,16 @@ export class Sorter implements Scene3D {
     };
     // (North wall east of x 12: truck docks; south wall east of x −8: box forklift aisle.)
     // (Not where the infeed lanes come in through the north wall, x −52 … −35.)
-    for (let x = -60; x < -18; x += 1.6) if ((x < -53 || x > -34) && Math.random() < 0.65) stack(x, NZ + 1.4);
-    for (let k = 0; k < 14; k++) stack(rnd(-33, -21), rnd(-28, -14));
+    // (Not where the wing opens the north wall: the infeeds' collectors and lanes are there now.)
+    for (let x = WING.x1 + 1.2; x < -17; x += 1.6) if (Math.random() < 0.65) stack(x, NZ + 1.4);
+    for (let k = 0; k < 12; k++) stack(rnd(-27, -21), rnd(-24, -14));
     // (South wall west of the box doors: the break area.)
   }
 
 
 
   private mapLoop: [number, number][] | null = null;
+  private mapInfeed: [number, number][][] | null = null;
 
   /** Everything the video wall shows, gathered from the hall. */
   /** How full a chute is, 0…1 (the hub plan's bars and the signal towers both read this). */
@@ -4055,8 +4179,22 @@ export class Sorter implements Scene3D {
       if (p.mode === 'loop') parcels.push([p.pos.x, p.pos.z]);
       if ((p.laps ?? 0) > 0 && p.mode === 'loop') recirculating++;
     }
-    // (The plan shows the sorter, the docks and the robot floor: the infeed and store ends are cropped.)
-    return { hall: [LX - 12, LX + STRAIGHT + 12, NZ - 1, HZ + 1], loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
+    // The hall with its inbound wing, the collectors and lanes (once), and the inbound trucks.
+    if (!this.mapInfeed) {
+      this.mapInfeed = [];
+      for (const ds of LANE_DOORS) this.mapInfeed.push([[INBOUND_DOORS[ds[0]!]!, COLL_Z], [INBOUND_DOORS[ds[ds.length - 1]!]!, COLL_Z]]);
+      for (const lane of this.lanes) {
+        const line: [number, number][] = [];
+        for (let s = 0; s <= lane.path.len; s += 2) {
+          lane.path.at(s, this.p);
+          line.push([this.p.x, this.p.z]);
+        }
+        this.mapInfeed.push(line);
+      }
+    }
+    const outline: [number, number][] = [[LX - 12, HZ], [LX - 12, NZ], [WING.x0, NZ], [WING.x0, WING.z0], [WING.x1, WING.z0], [WING.x1, NZ], [LX + STRAIGHT + 12, NZ], [LX + STRAIGHT + 12, HZ]];
+    // (The plan shows the sorter, the docks, the robot floor and the inbound wing: the store end is cropped.)
+    return { hall: [LX - 12, LX + STRAIGHT + 12, WING.z0 - 3, HZ + 1], outline, infeed: this.mapInfeed, inbound: this.wing.list(), loop: this.mapLoop, chutes, doors, robots, boxes, parcels, recirculating, queue: this.backlog + this.waiting.reduce((a, b) => a + b, 0), clock: hhmmOf(this.hubTime()), onTime: this.kpi.totals().onTimePct, dwell: this.kpi.totals().dwell };
   }
 
   /**
@@ -4149,7 +4287,7 @@ export class Sorter implements Scene3D {
     // Wall things go between the columns (north ones stand 2.4 m further east): moved to the
     // middle of the bay they are in when they would touch a column.
     const clear = (x: number, z: number, half: number) => {
-      const cols = z < HZC ? COLUMNS.map((c) => c + 2.4) : COLUMNS;
+      const cols = z < HZC ? NORTH_COLS : COLUMNS;
       const hit = cols.find((c) => Math.abs(c - x) < half + 0.6);
       if (hit === undefined) return x;
       const left = Math.max(...cols.filter((c) => c < hit), WX);
@@ -4168,7 +4306,7 @@ export class Sorter implements Scene3D {
       sc.position.z = 0.07;
       g.add(sc);
     };
-    place(-40, 7.2, NZ + 0.12, 0);
+    place(LANE_MERGE.reduce((a, b) => a + b, 0) / 4, 7.2, WING.z0 + 0.12, 0);
     place(-45, 7.2, HZ - 0.12, Math.PI);
     place(EX - 6, 7.2, NZ + 0.12, 0);
     const clock = new THREE.MeshBasicMaterial({ map: this.screens.clock, transparent: true });
@@ -4179,7 +4317,7 @@ export class Sorter implements Scene3D {
       this.put(m);
     };
     clk(WX + 0.1, 8.4, 4, Math.PI / 2);
-    clk(-22, 8.4, NZ + 0.1, 0);
+    clk(-19.5, 8.4, NZ + 0.1, 0);
     clk(-30, 8.4, HZ - 0.1, Math.PI);
   }
 
@@ -4320,8 +4458,10 @@ export class Sorter implements Scene3D {
       corner.y = LANE_TOP;
       end.y = LANE_TOP;
       const x = corner.x;
-      const z0 = NZ - 1;
-      const path = Path.fillet([v(x, y, z0), v(x, y, -23.5), v(x, corner.y, corner.z), end], 3);
+      // From its collector in the wing straight south, sideways to its own x, then up the ramp.
+      const z0 = COLL_Z;
+      const mx = LANE_MERGE[k]!;
+      const path = Path.fillet([v(mx, y, z0), v(mx, y, JOG_Z0), v(x, y, RAMP_Z), v(x, corner.y, corner.z), end], 3);
       // The belt ends at the loop's side, cut square to it (mitred at the 30° of the join),
       // a hand's width from the trays, so parcels slide across onto their tray.
       outward(this.t, this.n);
@@ -4340,12 +4480,19 @@ export class Sorter implements Scene3D {
       const tunnelS = LANE_TUNNEL_Z - z0;
       const tunnel = this.tunnel(path, tunnelS, 1.2);
       const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-      // Lit opening in the north wall where the lane comes in.
-      this.box('dark', new THREE.MeshBasicMaterial({ color: 0x020203 }), x, y + 0.6, NZ + 0.05, 1.8, 1.8, 0.05);
-      this.box(`door${k}`, doorMat, x, y + 1.55, NZ + 0.1, 2.0, 0.1, 0.08);
-      this.box(`door${k}`, doorMat, x - 0.95, y + 0.6, NZ + 0.1, 0.1, 1.9, 0.08);
-      this.box(`door${k}`, doorMat, x + 0.95, y + 0.6, NZ + 0.1, 0.1, 1.9, 0.08);
+      // A lit gate over the lane where it leaves its collector.
+      const gz = COLL_Z + 1.3;
+      this.box(`door${k}`, doorMat, mx, y + 1.55, gz, 2.0, 0.1, 0.08);
+      this.box(`door${k}`, doorMat, mx - 0.95, y + 0.6, gz, 0.1, 1.9, 0.08);
+      this.box(`door${k}`, doorMat, mx + 0.95, y + 0.6, gz, 0.1, 1.9, 0.08);
       this.lanes.push({ path, tunnelS, lastArrive: -99, lastSpawn: -99, tunnel, door: doorMat, doorFlash: 0, doorCol: new THREE.Color(1, 1, 1) });
+    }
+    // Collectors: under the ends of the telescopes, each into the start of its lane.
+    for (const ds of LANE_DOORS) {
+      const a = INBOUND_DOORS[ds[0]!]! - 0.7;
+      const b = INBOUND_DOORS[ds[ds.length - 1]!]! + 0.7;
+      const cp = new Path([v(a, LANE_Y, COLL_Z), v(b, LANE_Y, COLL_Z)]);
+      belt(cp, 0, cp.len, stripIn);
     }
     // A maintenance walkway along the infeeds (east of them), with a stair up to where the belts are high.
     {
@@ -4355,7 +4502,7 @@ export class Sorter implements Scene3D {
       loopAt(INDUCT[3]!, this.p, this.t);
       const wx = this.p.x - LANE_OUT / Math.tan(Math.PI / 6) + 1.7;
       const wy = LOOP_Y - 1.0;
-      const z1 = -23.5 + ((wy - LANE_Y) / (LANE_TOP - LANE_Y)) * (-8.5 - LANE_OUT + 23.5);
+      const z1 = RAMP_Z + ((wy - LANE_Y) / (LANE_TOP - LANE_Y)) * (-LOOP_ZH - LANE_OUT - RAMP_Z);
       const z0 = z1 - 6;
       this.box('grate', grate, wx, wy - 0.05, (z0 + z1) / 2, 1.1, 0.1, z1 - z0);
       for (const z of [z0, (z0 + z1) / 2, z1]) this.box('steel', steel, wx, (wy - 0.1) / 2, z, 0.12, wy - 0.1, 0.12);
@@ -4992,7 +5139,7 @@ export class Sorter implements Scene3D {
     grime(wallMat, 0.18, 6, 'xy', 1.2);
     this.realNormal(wallMat, claddingNormal(), 0.8);
     for (const z of [NZ, HZ]) {
-      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), wallMat);
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS, z < 0 ? [WX, WING.x1] : undefined), wallMat);
       w.position.set(HCX, HH / 2, z);
       add(w);
     }
@@ -5019,6 +5166,7 @@ export class Sorter implements Scene3D {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
+    this.buildWing(floorMat, FLOOR_TILE_M, wallMat, ceilMat, add, (m) => grime(m, 0.22, 9, 'xz'));
     add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
     // The LED fixtures' light on the floor (they hang every 10 m in four rows; see buildDay).
     const spots: [number, number][] = [];
@@ -5028,6 +5176,56 @@ export class Sorter implements Scene3D {
     add(wheelTracks(this.docks.cagePaths().map((pts) => ({ pts })), CAGE_TRACKS));
     // The robots keep to one-way lanes on a grid: the busy lanes show as worn tracks.
     add(wheelTracks(this.floor.trafficPaths(), ROBOT_TRACKS, 23));
+  }
+
+  /**
+   * The wing's floor, walls (the north one with the inbound doors, the short one west where the
+   * wing is wider than the hall) and ceiling, in one look's materials. Shapes, so UVs are metres.
+   */
+  private buildWing(floor: THREE.Material | THREE.Material[], tile: number, wall: THREE.Material, ceil: THREE.Material | THREE.Material[], add: (o: THREE.Object3D) => void, fix?: (m: THREE.MeshStandardMaterial) => void): void {
+    const w = WING.x1 - WING.x0;
+    const d = NZ - WING.z0;
+    const cx = (WING.x0 + WING.x1) / 2;
+    const cz = (WING.z0 + NZ) / 2;
+    const fm = (floor as THREE.MeshStandardMaterial).clone();
+    for (const key of ['map', 'roughnessMap'] as const) {
+      const t = fm[key];
+      if (!t) continue;
+      const c = t.clone();
+      c.repeat.set(1 / tile, 1 / tile);
+      c.needsUpdate = true;
+      fm[key] = c;
+    }
+    fix?.(fm);
+    const rect = (rw: number, rh: number) => {
+      const sh = new THREE.Shape();
+      sh.moveTo(-rw / 2, -rh / 2);
+      sh.lineTo(rw / 2, -rh / 2);
+      sh.lineTo(rw / 2, rh / 2);
+      sh.lineTo(-rw / 2, rh / 2);
+      sh.closePath();
+      return new THREE.ShapeGeometry(sh);
+    };
+    const f = new THREE.Mesh(rect(w, d), fm);
+    f.rotation.x = -Math.PI / 2;
+    f.position.set(cx, 0, cz);
+    add(f);
+    const north = new THREE.Mesh(wallWithDoors(INBOUND_DOORS, undefined, cx, w), wall);
+    north.position.set(cx, HH / 2, WING.z0);
+    add(north);
+    for (const x of [WING.x0, WING.x1]) {
+      const m = new THREE.Mesh(wallWithDoors([], undefined, 0, d), wall);
+      m.position.set(x, HH / 2, cz);
+      m.rotation.y = Math.PI / 2;
+      add(m);
+    }
+    const stub = new THREE.Mesh(wallWithDoors([], undefined, 0, WX - WING.x0), wall);
+    stub.position.set((WX + WING.x0) / 2, HH / 2, NZ);
+    add(stub);
+    const c = new THREE.Mesh(ceilingWithLights(cx, cz, w, d, []), ceil);
+    c.rotation.x = Math.PI / 2;
+    c.position.set(cx, HH, cz);
+    add(c);
   }
 
   private buildDay(): void {
@@ -5066,7 +5264,7 @@ export class Sorter implements Scene3D {
     cl.needsUpdate = true;
     const longDay = new THREE.MeshBasicMaterial({ color: DAY.wall, map: cl, side: THREE.DoubleSide });
     for (const z of [NZ, HZ]) {
-      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS), longDay);
+      const w = new THREE.Mesh(wallWithDoors(z < 0 ? NORTH_DOORS : SOUTH_DOORS, z < 0 ? [WX, WING.x1] : undefined), longDay);
       w.position.set(HCX, HH / 2, z);
       this.put(w);
       this.flatOnly.push(w);
@@ -5083,6 +5281,10 @@ export class Sorter implements Scene3D {
     ceil.position.set(HCX, HH, HZC);
     this.put(ceil);
     this.flatOnly.push(ceil);
+    this.buildWing(floor.material, 6, longDay, ceil.material, (o) => {
+      this.put(o);
+      this.flatOnly.push(o);
+    });
     // Rows of linear LED fixtures between the roof lights, and cable trays along the hall.
     const led = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const housing = this.std(0xb9c0c8, 0.5, 0.6, 0xb9c0c8);
@@ -5114,11 +5316,12 @@ export class Sorter implements Scene3D {
     // One big video wall over the desk: a live plan of the hall (chutes, trucks, cleardowns, robots).
     const ink = this.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f);
     const vw = new THREE.Group();
-    vw.position.set(dx, 2.75, dz + 0.95);
+    // (Its bottom edge where it always was; it grew upwards when the plan got the inbound wing.)
+    vw.position.set(dx, 2.93, dz + 0.95);
     vw.rotation.y = Math.PI;
     this.put(vw);
-    vw.add(new THREE.Mesh(new RoundedBoxGeometry(5.3, 2.0, 0.12, 2, 0.04), ink));
-    const sc = new THREE.Mesh(new THREE.PlaneGeometry(5.1, 1.84), new THREE.MeshBasicMaterial({ map: this.screens.map }));
+    vw.add(new THREE.Mesh(new RoundedBoxGeometry(5.3, 2.36, 0.12, 2, 0.04), ink));
+    const sc = new THREE.Mesh(new THREE.PlaneGeometry(5.1, 2.2), new THREE.MeshBasicMaterial({ map: this.screens.map }));
     sc.position.z = 0.065;
     vw.add(sc);
     for (const ox of [-2.2, 2.2]) this.box('mwallpost', ink, dx + ox, 0.9, dz + 1.0, 0.1, 1.8, 0.1);
@@ -5323,7 +5526,8 @@ export class Sorter implements Scene3D {
     const FX1 = PAN_X1;
     this.pois = [
       { ...fixed('infeeds', v(-33, 7.4, -17), v(-40, 3.6, -9.5), 'Infeed'), hover: 'still' },
-      fixed('scan tunnels', v(-36, 4.2, -22), v(-44, 1.4, -30.5), 'Scanning'),
+      fixed('inbound', v(-38, 5.2, -41), v(-46, 1.4, -54), 'Inbound docks'),
+      fixed('scan tunnels', v(-36, 4.4, -37), v(-46, 1.2, -45), 'Scanning'),
       {
         // One lap above the inside edge of the loop, at cruise height, looking ahead and down.
         name: 'loop',

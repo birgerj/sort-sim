@@ -25,6 +25,15 @@ sound is generated in code.
                       south wall: 20 dock doors (box trucks)
 ```
 
+0. **Inbound wing (north-west).** An L-shaped extension of the hall, 43.5 × 14 m, with
+   ten dock doors (41–50) in its north wall. A truck full of parcels stands at each; a
+   telescopic conveyor reaches into the trailer up to the wall of parcels, and an
+   unloader takes them off one at a time (about 1,000 an hour each; a second unloader
+   joins when the rate needs more). The telescopes run onto four collector belts (doors
+   41–43, 44–45, 46–47, 48–50), each the start of one infeed lane, centred over the lanes.
+   An empty truck leaves and a full one backs in. The video wall in the control room
+   shows the wing, the lanes and the inbound trucks (it grew taller; the plan kept its
+   scale).
 1. **Infeed (north-west).** Four lanes, 4 m apart, come through the north
    wall at floor level, each through a scan tunnel just inside it, then a
    buffer (where parcels queue), then down a ramp to loop height and, one

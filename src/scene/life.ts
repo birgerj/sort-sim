@@ -498,7 +498,8 @@ export class Life {
     };
     for (const z of [-24, 20]) place(L.wx + 0.1, 3.2, z, Math.PI / 2);
     for (const z of [-20, 20]) place(L.ex - 0.1, 3.2, z, -Math.PI / 2);
-    place(-30, 4.2, L.nz + 0.1, 0);
+    // (On the north wall east of the inbound wing, which opens the wall further west.)
+    place(-19.5, 4.2, L.nz + 0.1, 0);
     place(-46, 4.2, L.hz - 0.1, Math.PI);
     // Fire extinguishers with a sign, on the columns.
     const red = k.std(0x8a1a14, 0.4, 0.3, 0xe2231a);

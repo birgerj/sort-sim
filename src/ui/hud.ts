@@ -633,6 +633,7 @@ export class Hud {
       ['Chutes full', s ? `${s.chutesFull}` : '–'],
       ['Robots busy', s ? `${s.robotsBusyPct}%` : '–'],
       ['Infeed queue', s ? String(s.infeedQueue) : '–'],
+      ['Inbound docks', `${this.scene.inboundStatus().unloading} of ${this.scene.inboundStatus().docks} unloading`, `${this.scene.inboundStatus().parcels} parcels in the trucks · ${this.scene.inboundStatus().crew} unloader${this.scene.inboundStatus().crew > 1 ? 's' : ''} per truck`],
       ['Trucks on time', `${t.onTimePct}%`, `${t.departures} left`],
       ['Load factor', `${t.loadFactorPct}%`, 'of trailer room'],
       ['Buffer store', s ? `${Math.round((100 * s.storeUsed) / s.storeSlots)}%` : '–', s ? `${s.storeUsed} of ${s.storeSlots} places` : undefined],
