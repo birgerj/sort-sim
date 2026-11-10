@@ -168,6 +168,8 @@ function frame(now: number): void {
   const f = music.frame();
   if (music.paused) {
     f.notes.length = 0;
+    // The hall stands still, but you can still walk, fly and look around.
+    scene.renderPaused(dt);
     hud.update();
     game?.frame(dt);
     requestAnimationFrame(frame);

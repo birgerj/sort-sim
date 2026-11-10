@@ -1716,6 +1716,22 @@ export class Sorter implements Scene3D {
     }
   }
 
+  /**
+   * While paused: nothing in the hall moves, but the camera does: walk, fly, look around,
+   * follow (round a still target), the tour holds where it is.
+   */
+  renderPaused(dtIn: number, travel = 0.4): void {
+    const dt = clamp(dtIn, 0, 0.1);
+    this.time += dt;
+    this.updateCamera(dt, this.bt / 4, travel);
+    if (this.shadowMode === 'live') {
+      this.keyLight.position.copy(this.look).add(this.t.set(25, 45, 30));
+      this.keyLight.target.position.copy(this.look);
+    }
+    this.batcher.update();
+    this.composer.render(dt);
+  }
+
   render(i: SceneInput): void {
     const dt = clamp(i.dt, 0, 0.1);
     this.time += dt;
