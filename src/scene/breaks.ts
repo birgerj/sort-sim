@@ -1,9 +1,10 @@
-// Breaks and the shift change. Now and then a few of the dock crew go on their break: they walk
-// from their door along the walkways (the dock aisle, south under the loop, along the loop's
-// walkway, the west wall), up the stair and into the canteen, sit down at a free table (you see
-// them through the window), and after a while go back the same way. (A colleague covers the
-// door meanwhile, so the docks keep working.) Every few hours of hub time the shift changes:
-// the early shift goes up to the lockers, the late shift comes down to the docks.
+// Breaks and the shift change. A few of the dock crew are always on their break in the canteen
+// (you see them through the window). Now and then each of them, rested, goes down to a door to
+// relieve a colleague: down the stair and over the walkways (the west wall, the loop's walkway,
+// south under the loop, the dock aisle) to them, a word at the door, and the colleague walks the
+// same way up to a free seat, while the one who came carries on with the job (the door never
+// stops). So the crew takes turns. Every few hours of hub time the shift changes: the early shift
+// goes up to the lockers, the late shift comes down to the docks.
 //
 // A rota on the hall's wall by the stair says who is on their break, until when, and when the
 // next break and the next shift change are. By day only (at night the hall is a party).
@@ -17,8 +18,11 @@ import { Trip, walkOn, type P3 } from './trips';
 
 /** Walking speed (metres per beat), break length and the time between breaks and shifts (beats). */
 const SPEED = 1.0;
-const SIT = [140, 220] as const;
-const BREAK_EVERY = 260;
+/** Beats on a break before someone is rested enough to relieve a colleague, and between reliefs. */
+const SIT = 160;
+const BREAK_EVERY = 120;
+/** People on their break (in the canteen, or on the way) besides the ones working. */
+const SPARES = 4;
 const SHIFT_EVERY = 2400;
 const GROUP = 3;
 const SHIFT_GROUP = 6;
@@ -35,7 +39,13 @@ const LOOKS = [
 
 interface Walker {
   h: Human;
-  state: 'off' | 'up' | 'sit' | 'down';
+  /** up: to the canteen; sit: on their break; down: on the way to relieve someone; meet: with them, taking over. */
+  state: 'off' | 'up' | 'sit' | 'down' | 'meet';
+  /** Whom they go to relieve (door and job), and since when they are on their break (hub minutes). */
+  dock: number;
+  role: 0 | 1;
+  since: number;
+  spare: boolean;
   trip: Trip | null;
   s: number;
   seat: number;
@@ -52,8 +62,11 @@ export interface BreakSetup {
   docks: number[];
   /** The way over the hall floor from a door to the foot of the stair (ends where `Canteen.stairUp` starts). */
   toStair: (dockX: number) => P3[];
-  /** Names and doors of the dock crew, for the rota. */
-  crew: () => { name: string; place: string }[];
+  /** Who is working at a door (picker 0, loader 1), and a colleague taking over there (gives back the one who stops). */
+  body: (dock: number, role: 0 | 1) => Human;
+  swap: (dock: number, role: 0 | 1, h: Human) => Human;
+  /** The name of a person (by their body), for the rota. */
+  name: (h: Human) => string;
   /** Hub time (minutes) and how to write it. */
   hubTime: () => number;
   /** Where the rota hangs: on the west wall (x), centred at z, facing east. */
@@ -73,11 +86,23 @@ export class BreakCrew {
     private canteen: Canteen,
     private set: BreakSetup,
   ) {
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 12 + SPARES; i++) {
       const h = buildHuman(k, LOOKS[i % LOOKS.length]!);
       h.root.visible = false;
       k.put(h.root);
-      this.walkers.push({ h, state: 'off', trip: null, s: 0, seat: -1, until: 0, who: '', back: 0, shift: false });
+      this.walkers.push({ h, state: 'off', trip: null, s: 0, seat: -1, until: 0, who: '', back: 0, shift: false, dock: -1, role: 0, since: 0, spare: i >= 12 });
+    }
+    // The ones on their break at the start: seated in the canteen, rested at different times.
+    for (const w of this.walkers.filter((x) => x.spare)) {
+      const seat = this.canteen.seats.findIndex((x) => !x.taken);
+      if (seat < 0) break;
+      this.canteen.seats[seat]!.taken = true;
+      w.seat = seat;
+      w.state = 'sit';
+      w.until = 40 + this.walkers.indexOf(w) * 30;
+      w.since = set.hubTime();
+      w.h.root.visible = true;
+      this.canteen.sitAt(w.h, seat);
     }
     // The rota: a white board with a dark frame, its sheet drawn on a canvas.
     this.canvas = document.createElement('canvas');
@@ -110,14 +135,24 @@ export class BreakCrew {
       if (w.state === 'off') continue;
       if (w.state === 'sit') {
         settle(w.h, dt, { idle: 0 });
-        if (bt >= w.until) this.goBack(w);
+        continue;
+      }
+      if (w.state === 'meet') {
+        this.meet(w, dt, bt, beats);
         continue;
       }
       w.s += SPEED * beats;
       if (w.s >= w.trip!.len) {
         if (w.state === 'up' && !w.shift) {
           w.state = 'sit';
+          w.until = bt + SIT;
           this.canteen.sitAt(w.h, w.seat);
+          continue;
+        }
+        if (w.state === 'down' && !w.shift) {
+          // At the dock aisle by their door: over to the colleague.
+          w.state = 'meet';
+          w.until = -1;
           continue;
         }
         // Back at the door (a colleague takes over again), or gone to the lockers: off the floor.
@@ -132,25 +167,75 @@ export class BreakCrew {
     this.draw();
   }
 
-  /** A few of the dock crew go on their break: each from their own door to a free seat. */
+  /** Those rested go down to relieve a colleague each, at a door nobody is going to yet. */
   private sendOnBreak(bt: number): void {
-    const crew = this.set.crew();
-    const now = this.set.hubTime();
-    for (let n = 0; n < GROUP; n++) {
-      const w = this.walkers.find((x) => x.state === 'off');
-      const seat = this.canteen.seats.findIndex((s) => !s.taken);
-      if (!w || seat < 0 || !crew.length) return;
-      const d = Math.floor(Math.random() * this.set.docks.length);
-      const who = crew[(d * 2 + n) % crew.length]!;
-      this.canteen.seats[seat]!.taken = true;
-      const sit = SIT[0] + Math.random() * (SIT[1] - SIT[0]);
-      const trip = this.wayUp(this.set.docks[d]!, seat);
-      this.start(w, trip, false, seat, `${who.name} · ${who.place.replace(/ ·.*/, '')}`);
+    const rested = this.walkers.filter((w) => w.spare && w.state === 'sit' && bt >= w.until);
+    let n = 0;
+    for (const w of rested.slice(0, GROUP)) {
+      let d = -1;
+      let role: 0 | 1 = 0;
+      for (let tries = 0; tries < 20; tries++) {
+        d = Math.floor(Math.random() * this.set.docks.length);
+        role = Math.random() < 0.5 ? 0 : 1;
+        if (!this.walkers.some((x) => x !== w && x.dock === d && x.role === role && (x.state === 'down' || x.state === 'meet'))) break;
+      }
+      w.dock = d;
+      w.role = role;
+      this.canteen.seats[w.seat]!.taken = false;
+      const trip = this.wayUp(this.set.docks[d]!, w.seat).reversed();
+      w.trip = trip;
+      w.state = 'down';
       // (Each sets off a few steps behind the one before.)
-      w.s = -n * 3;
-      w.until = bt + trip.len / SPEED + sit;
-      w.back = now + (trip.len / SPEED + sit + trip.len / SPEED) * HUB_MIN_PER_BEAT;
+      w.s = -n++ * 3;
     }
+  }
+
+  /**
+   * At the door: up to the colleague, a word (two beats), and they swap: the one who came takes
+   * over the job where it stands, the other walks off on their break, up to a free seat.
+   */
+  private meet(w: Walker, dt: number, bt: number, beats: number): void {
+    const other = this.set.body(w.dock, w.role);
+    const r = w.h.root;
+    const to = other.root.position;
+    const dx = to.x - r.position.x;
+    const dz = to.z - r.position.z;
+    const dist = Math.hypot(dx, dz);
+    const yaw = Math.atan2(dx, dz);
+    if (w.until < 0 && dist > 0.9) {
+      // Straight to them (they may be moving about their work).
+      const step = Math.min(dist - 0.85, SPEED * beats);
+      r.position.x += (dx / dist) * step;
+      r.position.z += (dz / dist) * step;
+      walkOn(w.h, new Trip([[r.position.x, 0, r.position.z], [r.position.x + dx, 0, r.position.z + dz]]), 0, dt, bt, SPEED);
+      return;
+    }
+    if (w.until < 0) w.until = bt + 2;
+    r.rotation.y = yaw;
+    walkOn(w.h, new Trip([[r.position.x, 0, r.position.z], [to.x, 0, to.z]]), 0, dt, bt, 0);
+    w.h.m.talk = 1;
+    if (bt < w.until) return;
+    w.h.m.talk = 0;
+    // Swap: the one who came carries on with the job; the one who stops is now on their break.
+    const old = this.set.swap(w.dock, w.role, w.h);
+    w.h = old;
+    old.m.talk = 0;
+    const seat = this.canteen.seats.findIndex((x) => !x.taken);
+    if (seat < 0) {
+      // (No free seat: they stay on, and the one who came goes back up.)
+      const back = this.set.swap(w.dock, w.role, old);
+      w.h = back;
+    }
+    const s = seat >= 0 ? seat : w.seat;
+    this.canteen.seats[s]!.taken = true;
+    w.seat = s;
+    w.since = this.set.hubTime();
+    const up = this.wayUp(this.set.docks[w.dock]!, s);
+    // From where they stand, onto the dock aisle and the way up.
+    w.trip = new Trip([[w.h.root.position.x, 0, w.h.root.position.z], ...up.pts]);
+    w.s = 0;
+    w.state = 'up';
+    w.dock = -1;
   }
 
   /** The shift changes: one group up to the lockers in the canteen, the other down to the docks. */
@@ -180,10 +265,9 @@ export class BreakCrew {
     trip.at(0, w.h.root.position);
   }
 
-  private goBack(w: Walker): void {
-    w.trip = w.trip!.reversed();
-    w.s = 0;
-    w.state = 'down';
+  /** The people on their break now (and later: they take turns with the ones working). */
+  spares(): Human[] {
+    return this.walkers.filter((w) => w.spare).map((w) => w.h);
   }
 
   private wayUp(dockX: number, seat: number): Trip {
@@ -194,8 +278,8 @@ export class BreakCrew {
   private draw(): void {
     const now = this.set.hubTime();
     const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
-    const away = this.walkers.filter((w) => w.who && w.state !== 'off');
-    const lines = away.map((w) => `${w.who}  ·  back ${hhmm(w.back)}`);
+    const away = this.walkers.filter((w) => w.spare && (w.state === 'up' || w.state === 'sit'));
+    const lines = away.map((w) => `${this.set.name(w.h)}  ·  since ${hhmm(w.since)}`);
     const nextBreak = now + Math.max(0, this.nextBreak - this.lastBt()) * HUB_MIN_PER_BEAT;
     const nextShift = now + Math.max(0, this.nextShift - this.lastBt()) * HUB_MIN_PER_BEAT;
     const key = `${lines.join('|')}|${hhmm(nextBreak)}|${hhmm(nextShift)}`;

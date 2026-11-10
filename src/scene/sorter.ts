@@ -1713,7 +1713,22 @@ export class Sorter implements Scene3D {
           [ax, 0, rz],
           [ax, 0, foot - 0.5],
         ],
-        crew: () => this.staff.list.filter((m) => m.role === 'picker' || m.role === 'loader'),
+        body: (d, role) => this.docks.body(d, role),
+        // A colleague takes over: the job, the door and the staff card's place go with the one who came.
+        swap: (d, role, h) => {
+          const old = this.docks.swapBody(d, role, h);
+          const mNew = this.staff.find(h.root);
+          const mOld = this.staff.find(old.root);
+          if (mNew && mOld) {
+            mNew.place = mOld.place;
+            mNew.busy = mOld.busy;
+            mNew.role = mOld.role;
+            mOld.place = 'Canteen · on break';
+            mOld.busy = () => false;
+          }
+          return old;
+        },
+        name: (h) => this.staff.find(h.root)?.name ?? '',
         hubTime: () => this.hubTime(),
         rota: { x: WX, y: 1.7, z: foot - 2.6 },
       });
@@ -7109,6 +7124,8 @@ export class Sorter implements Scene3D {
     }
     const crew = this.crew;
     if (crew) hire('technician', 'Workbench · maintenance platform', crew.h, crew.h.root, 97, () => crew.doing !== 'bench');
+    // The dock crew on their break (they take turns with the ones at the doors; see BreakCrew).
+    this.breaks.spares().forEach((h, n) => hire(n % 2 ? 'loader' : 'picker', 'Canteen · on break', h, h.root, 301 + n, () => false));
     hire('manual', 'Manual sort table', this.manual.worker, this.manual.worker.root, 131, () => this.manual.busy);
     hire('manual', 'No-read table · new labels', this.relabel.worker, this.relabel.worker.root, 137, () => this.relabel.busy);
     this.yard.lifts.forEach((l, k) => {

@@ -1150,6 +1150,31 @@ export class Docks {
   }
 
   /** Is this dock's picker (role 0) or loader (1) at work: a parcel in hand or a job planned? */
+  /** The body now working at a door: the picker (role 0) or the loader (1). */
+  body(dock: number, role: 0 | 1): Human {
+    const d = this.docks[dock]!;
+    return role ? d.loader : d.worker;
+  }
+
+  /**
+   * A colleague takes over at a door: the job (its steps, its parcel, its place) carries on with
+   * the new body `h`, standing where the old one stood; the old body is given back (to walk off
+   * on its break).
+   */
+  swapBody(dock: number, role: 0 | 1, h: Human): Human {
+    const w = this.body(dock, role) as unknown as Record<string, unknown>;
+    const old: Record<string, unknown> = {};
+    for (const key of Object.keys(h)) {
+      old[key] = w[key];
+      w[key] = (h as unknown as Record<string, unknown>)[key];
+    }
+    const o = old as unknown as Human;
+    h.root.position.copy(o.root.position);
+    h.root.rotation.copy(o.root.rotation);
+    h.root.visible = true;
+    return o;
+  }
+
   busy(dock: number, role: 0 | 1): boolean {
     const d = this.docks[dock]!;
     const w = role ? d.loader : d.worker;
