@@ -1,7 +1,7 @@
 // Life around the machines: people walking their rounds, a cleaner on a
 // scrubber, a forklift charging
 // station, safety details (exit signs, extinguishers, first aid, walkway),
-// a break area and painted zone names on the floor.
+// a coffee machine, painted zone names on the floor, and the walkway round the inside of the loop.
 //
 // Walkers and vehicles move by day (by night the hall belongs to the party).
 // Steps land on the beat: two steps per beat for walkers.
@@ -400,6 +400,36 @@ export class Life {
     this.group.add(this.trail);
   }
 
+  /**
+   * A walkway on the floor: a band `w` wide round the rectangle x0…x1, −z…z (its centre line),
+   * both edges marked with black and yellow diagonal stripes. Day only (at night the inside of
+   * the loop is the dance floor).
+   */
+  addWalkway(x0: number, x1: number, z: number, w: number): void {
+    const tex = hazardStripes();
+    const strip = (ax: number, az: number, bx: number, bz: number) => {
+      const len = Math.hypot(bx - ax, bz - az);
+      const t = tex.clone();
+      t.repeat.set(len / 0.6, 1);
+      t.needsUpdate = true;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.12), new THREE.MeshBasicMaterial({ map: t, polygonOffset: true, polygonOffsetFactor: -2 }));
+      m.rotation.set(-Math.PI / 2, 0, -Math.atan2(bz - az, bx - ax));
+      m.position.set((ax + bx) / 2, 0.014, (az + bz) / 2);
+      m.userData.noInk = true;
+      this.k.put(m, 'day');
+    };
+    // Both edges of each side of the rectangle (the corners overlap a little: that is how tape is laid).
+    for (const o of [-w / 2, w / 2]) {
+      const zo = z + o;
+      const xo0 = x0 - o;
+      const xo1 = x1 + o;
+      strip(xo0 - 0.06, -zo, xo1 + 0.06, -zo);
+      strip(xo0 - 0.06, zo, xo1 + 0.06, zo);
+      strip(xo0, -zo, xo0, zo);
+      strip(xo1, -zo, xo1, zo);
+    }
+  }
+
   /** Someone walking a round along `pts` (metres per beat), for routes the scene knows best. */
   addWalker(look: Parameters<typeof buildHuman>[1], pts: V2[], speed: number): void {
     const h = buildHuman(this.k, look);
@@ -532,7 +562,7 @@ export class Life {
     for (const y of [0.5, 1.0]) k.box('wrail', rail, -43, y, 14.1, 34, 0.05, 0.05);
   }
 
-  /** Odds and ends of a working hall: cardboard baler, waste bins, empty pallets, a vending machine, a notice board. */
+  /** Odds and ends of a working hall: cardboard baler, waste bins, empty pallets, a vending machine. */
   private buildExtras(): void {
     const k = this.k;
     const grey = k.std(0x50545b, 0.5, 0.4, 0xb9c0c8);
@@ -572,64 +602,17 @@ export class Life {
       k.box('venditem', k.std(0x444444, 0.6, 0, [0xe2231a, 0xf2c200, 0x1755fe, 0xd6339a][(r + c) % 4]!), -43.45 + c * 0.13, 0.75 + r * 0.26, 31.24, 0.08, 0.12, 0.04);
     }
     k.box('vendpad', dark, -42.8, 1.2, 31.21, 0.16, 0.35, 0.02);
-    // Notice board with schedules on the south wall.
-    k.box('board', k.std(0x6a5038, 0.8, 0, 0xc49a6c), -35, 1.7, 33.93, 2.4, 1.2, 0.04);
-    for (let i = 0; i < 9; i++) {
-      k.box('note', k.std(0x777777, 0.8, 0, [0xffffff, 0xf2c200, 0x86d3c3, 0xf3f4f6][i % 4]!), -35.9 + (i % 4) * 0.55 + (i > 3 ? 0.2 : 0), 2.0 - Math.floor(i / 4) * 0.42, 33.9, 0.36, 0.3, 0.01, undefined, ((i * 37) % 7 - 3) * 0.02);
-    }
   }
 
+  /**
+   * What is left of the old break area (people take their breaks in the canteen now): the coffee
+   * machine against the south wall, where people still come for a quick one (tap it).
+   */
   private buildBreakArea(): void {
     const k = this.k;
-    const wood = k.std(0x8a6a44, 0.7, 0, 0xe0c89a);
-    const grey = k.std(0x50545b, 0.5, 0.4, 0xb9c0c8);
-    const teal = k.std(0x1f5f4f, 0.6, 0.1, 0x2fa58f);
-    // (Just south of the robots' parking area.)
-    for (const [tx, tz] of [[-38, 30.4], [-33, 30.4]] as const) {
-      k.box('btable', wood, tx, 0.75, tz, 1.8, 0.06, 0.9);
-      k.box('btleg', grey, tx, 0.37, tz, 0.08, 0.74, 0.08);
-      k.box('btleg', grey, tx, 0.02, tz, 0.6, 0.04, 0.6);
-      for (const sx of [-0.55, 0.55]) for (const sz of [-0.75, 0.75]) {
-        k.box('bchair', teal, tx + sx, 0.46, tz + sz, 0.45, 0.06, 0.45);
-        k.box('bchair', teal, tx + sx, 0.75, tz + sz + Math.sign(sz) * 0.22, 0.45, 0.5, 0.05);
-        k.box('bcleg', grey, tx + sx, 0.22, tz + sz, 0.04, 0.44, 0.04);
-      }
-      k.box('bmug', k.std(0xffffff, 0.5, 0, 0xffffff), tx + 0.3, 0.83, tz - 0.1, 0.08, 0.1, 0.08);
-      k.blob(tx, tz, 2.6, 2.6);
-    }
-    // Coffee machine, water cooler, lockers and a plant.
     k.box('coffee', k.std(0x1d1d1f, 0.4, 0.4, 0x1d1d1f), -41.5, 0.9, 31.6, 0.7, 1.8, 0.6);
     k.box('coffeescreen', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 0.8, 1.2) }), -41.5, 1.3, 31.28, 0.4, 0.25, 0.02);
-    k.box('cooler', k.std(0xdddddd, 0.5, 0.1, 0xffffff), -40.4, 0.6, 31.7, 0.4, 1.2, 0.4);
-    const water = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.45, 16), new THREE.MeshStandardMaterial({ color: 0x6fb6ff, transparent: true, opacity: 0.7 }));
-    water.position.set(-40.4, 1.43, 31.7);
-    k.put(water);
-    for (let i = 0; i < 6; i++) {
-      const x = -38.6 + i * 0.62;
-      k.box('locker', [teal, grey][i % 2]!, x, 0.95, 33.4, 0.6, 1.9, 0.5);
-      k.box('lockerv', k.std(0x1d1d1f, 0.5, 0.3, 0x1d1d1f), x, 1.6, 33.14, 0.3, 0.04, 0.02);
-    }
-    k.box('pot', k.std(0x5a4430, 0.8, 0, 0xd6339a), -30.5, 0.3, 31.5, 0.5, 0.6, 0.5);
-    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), k.std(0x1f5f2f, 0.8, 0, 0x5fb84a));
-    leaves.position.set(-30.5, 1.05, 31.5);
-    k.put(leaves);
-    k.blob(-36, 32.5, 10, 2.5);
-    const was = k.only;
-    k.only = 'day';
-    k.sign('Break', '#2fa58f', -36, 8.8, 29, 0, (g) => {
-      g.beginPath();
-      g.moveTo(-10, -10);
-      g.lineTo(10, -10);
-      g.lineTo(8, 14);
-      g.lineTo(-8, 14);
-      g.closePath();
-      g.fill();
-      g.lineWidth = 4;
-      g.beginPath();
-      g.arc(14, 0, 6, -1.5, 1.5);
-      g.stroke();
-    });
-    k.only = was;
+    k.blob(-41.5, 31.6, 1.2, 1.0);
   }
 
   private buildFloorNames(): void {
@@ -740,4 +723,29 @@ function floorText(text: string, color: string): THREE.CanvasTexture {
     g.textBaseline = 'middle';
     g.fillText(text, 512, 110);
   });
+}
+
+/** Black and yellow diagonal stripes (floor tape), one repeat 0.6 m long. */
+function hazardStripes(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 96;
+  c.height = 16;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#f2c200';
+  g.fillRect(0, 0, 96, 16);
+  g.fillStyle = '#1d1d1f';
+  for (let x = -32; x < 96 + 32; x += 32) {
+    g.beginPath();
+    g.moveTo(x, 16);
+    g.lineTo(x + 16, 16);
+    g.lineTo(x + 32, 0);
+    g.lineTo(x + 16, 0);
+    g.closePath();
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
 }

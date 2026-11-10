@@ -36,10 +36,11 @@ sound is generated in code.
    over the lanes.
    An empty truck leaves and a full one backs in. The video wall in the control room
    shows the wing, the lanes and the inbound trucks (it grew taller; the plan kept its
-   scale). On a first floor over the docks is the **canteen**: a steel mezzanine on
-   columns between the collectors, a room with a glass front looking out over the hall
-   (tables, a counter with coffee, a fridge, plants, people on their break), and a stair
-   up along the wing's east wall to a landing with the door.
+   scale). The **canteen** is a room on the first floor outside the hall, against the
+   west wall beside the wing: from the hall you see its band of windows (tables, lockers,
+   a counter with coffee, plants, people on their break) and its door onto a landing, with
+   a stair down along the wall. The old break area by the robots is gone; its coffee
+   machine and vending machine stay.
 1. **Infeed (north-west).** Five lanes, 4 m apart, start at the collectors in
    the inbound wing, each through a scan tunnel, then a buffer (where parcels
    queue), sideways to its place, then up a ramp to loop height and, one
@@ -98,7 +99,7 @@ sound is generated in code.
 
 8. Life: people walking their rounds, a ride-on scrubber, a reach truck at
    the rack, a forklift charging station, live screens with the hub's
-   numbers, wall clocks, exit signs, extinguishers, a break area.
+   numbers, wall clocks, exit signs, extinguishers, a coffee machine and a vending machine (breaks are in the canteen).
    **Faults:** now and then a dock chute goes down (a blocked photo eye, a
    tripped belt drive, a parcel jammed at the exit). Its signal towers flash
    red, its display says what is wrong, the video wall marks it, and the sorter

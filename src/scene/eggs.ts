@@ -40,8 +40,6 @@ interface Spot {
 }
 
 const CAT_SPOTS: Spot[] = [
-  // On a chair in the break area.
-  { at: v(-38.55, 0.49, 29.65), from: [-39.25, 29.65], ry: 0.6 },
   // On top of a stack of empty pallets.
   { at: v(-59.6, 1.25, 31.6), from: [-59.6, 30.55], ry: 1.9 },
   // On the finished cardboard bale by the baler.

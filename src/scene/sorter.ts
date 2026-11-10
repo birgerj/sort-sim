@@ -32,7 +32,7 @@ import { BOX_FULL, BOX_M3, DECK_Y, DROP, RobotFloor, STATION_START_Z, TABLE as M
 import { DOCK_BELT_END, Docks } from './docks';
 import { FaultCrew, type FaultSite } from './faults';
 import { Inbound, TELESCOPE_BASE, TRAILER_PARCELS, type Stacked } from './inbound';
-import { Canteen } from './canteen';
+import { Canteen, canteenOpenings, canteenStairFoot } from './canteen';
 import { FAULT_TEXT, FaultPlan } from '../sim/faults';
 import { BoxYard, DOORS } from './boxYard';
 import { buildForklift } from './forklift';
@@ -214,8 +214,9 @@ const COLUMNS = Array.from({ length: Math.floor((EX - 6 - (WX + 19)) / 24) + 1 }
 const WING = { x0: WX, x1: -22.2, z0: -54 };
 // (3.95 m apart: the ten fit between the hall's west wall, which runs straight on, and centred over the lanes.)
 const INBOUND_DOORS = Array.from({ length: 10 }, (_, i) => -59.98 + 3.95 * i);
-/** The canteen's floor over the inbound docks: its height and front edge (just south of the telescopes' bases). */
-const CANTEEN = { floorY: 6.2, front: -47.6 };
+/** The canteen: a room on the first floor outside the hall, against the west wall beside the wing (windows into the hall, a stair down inside). */
+const CANTEEN = { wallX: WX, z0: -52.5, z1: -36.3, depth: 7.5, floorY: 4.6 };
+const CANTEEN_OPEN = canteenOpenings(CANTEEN);
 const LANE_DOORS = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
 /** Where each lane starts: the middle of its doors, on its collector. */
 const LANE_MERGE = LANE_DOORS.map((ds) => (INBOUND_DOORS[ds[0]!]! + INBOUND_DOORS[ds[ds.length - 1]!]!) / 2);
@@ -247,6 +248,35 @@ function inHall(x: number, z: number, m: number): [number, number] {
   x = clamp(x, (z < NZ ? WING.x0 : WX) + m, EX - m);
   const inWing = x >= WING.x0 + m && x <= WING.x1 - m;
   return [x, clamp(z, (inWing ? WING.z0 : NZ) + m, HZ - m)];
+}
+
+/**
+ * The west wall from z0 to z1 (north to south) as a shape, with the canteen's windows and door
+ * cut out; placed at (WX, HH / 2, (z0 + z1) / 2) turned a quarter (+π/2 about y), UVs in metres.
+ */
+function westWall(z0: number, z1: number): THREE.ShapeGeometry {
+  const w = z1 - z0;
+  const cz = (z0 + z1) / 2;
+  const sh = new THREE.Shape();
+  sh.moveTo(-w / 2, -HH / 2);
+  sh.lineTo(w / 2, -HH / 2);
+  sh.lineTo(w / 2, HH / 2);
+  sh.lineTo(-w / 2, HH / 2);
+  sh.closePath();
+  // (Turned +π/2 about y, the shape's x runs to −z: local x = cz − z.)
+  for (const [a, b, y0, y1] of [...CANTEEN_OPEN.windows, CANTEEN_OPEN.door]) {
+    const za = Math.max(a, z0 + 0.02);
+    const zb = Math.min(b, z1 - 0.02);
+    if (zb <= za) continue;
+    const h = new THREE.Path();
+    h.moveTo(cz - zb, y0 - HH / 2);
+    h.lineTo(cz - za, y0 - HH / 2);
+    h.lineTo(cz - za, y1 - HH / 2);
+    h.lineTo(cz - zb, y1 - HH / 2);
+    h.closePath();
+    sh.holes.push(h);
+  }
+  return new THREE.ShapeGeometry(sh);
 }
 
 function wallWithDoors(xs: number[], opening?: [number, number], cx = HCX, w = HW): THREE.ShapeGeometry {
@@ -1500,7 +1530,8 @@ export class Sorter implements Scene3D {
         beams,
         northDoors: NORTH_DOORS,
         southDoors: SOUTH_DOORS,
-        wing: { ...WING, doors: INBOUND_DOORS, front: CANTEEN.front },
+        wing: { ...WING, doors: INBOUND_DOORS },
+        westGap: [CANTEEN.z0 - 1, canteenStairFoot(CANTEEN) + 0.5],
         loopEdge: edge,
         trees: [
           { x: -55.8, z: 21.2, h: 7 },
@@ -1537,28 +1568,18 @@ export class Sorter implements Scene3D {
       columnsSouth: COLUMNS,
     });
     this.party = new Party(this, v(PLATFORM_X - 0.6, PLATFORM_Y + 0.0, 0), v(LCX, 9.2, 0), [LX, LX + STRAIGHT, -LOOP_ZH - 4, LOOP_ZH + 4]);
-    // The manager (in a suit, no helmet) walks a round inside the loop, past the chute tables.
+    // The manager (in a suit, no helmet) walks a round inside the loop, past the chute tables, on
+    // the walkway marked out on the floor there (clear of the work tables and the platform's stair).
     {
-      const zi = LOOP_ZH - 2.1;
-      const x0 = PLATFORM_X + 5.5;
+      const zi = LOOP_ZH - 2.0;
+      const x0 = PLATFORM_X + 7.6;
+      this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 1.6);
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
     this.buildCrew();
-    // The canteen on a first floor over the inbound docks, with a stair along the wing's east wall.
-    {
-      const between = LANE_DOORS.slice(1).map((ds, i) => (INBOUND_DOORS[LANE_DOORS[i]![1]!]! + INBOUND_DOORS[ds[0]!]!) / 2);
-      this.canteen = new Canteen(this, {
-        x0: WING.x0,
-        x1: WING.x1,
-        z0: WING.z0,
-        front: CANTEEN.front,
-        floorY: CANTEEN.floorY,
-        columns: [WING.x0 + 0.3, ...between, WING.x1 - 1.6],
-        stairX: WING.x1 - 0.75,
-        stairFootZ: CANTEEN.front + Math.ceil(CANTEEN.floorY / 0.19) * 0.26,
-      });
-    }
+    // The canteen behind the west wall, with its windows and door in the wall and a stair down inside.
+    this.canteen = new Canteen(this, CANTEEN);
     this.hireStaff();
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
@@ -4231,9 +4252,13 @@ export class Sorter implements Scene3D {
       this.put(w, 'night');
     }
     // (The trailers behind the openings are the Trucks'.)
-    for (const x of [WX, EX]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wz);
-      w.position.set(x, HH / 2, HZC);
+    {
+      const e = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wz);
+      e.position.set(EX, HH / 2, HZC);
+      e.rotation.y = Math.PI / 2;
+      this.put(e, 'night');
+      const w = new THREE.Mesh(westWall(NZ, HZ), longNight);
+      w.position.set(WX, HH / 2, HZC);
       w.rotation.y = Math.PI / 2;
       this.put(w, 'night');
     }
@@ -5364,15 +5389,24 @@ export class Sorter implements Scene3D {
       w.position.set(HCX, HH / 2, z);
       add(w);
     }
+    // The west wall (a shape with the canteen's openings, UVs in metres): the long walls' cladding,
+    // its grime laid along the wall (z) instead of across it.
+    const westMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: cl, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
+    grime(westMat, 0.18, 6, 'zy', 1.2);
+    this.realNormal(westMat, claddingNormal(), 0.8);
     const side = dayWall().clone();
     side.repeat.set(HD / 8, 1);
     side.needsUpdate = true;
     const sideMat = new THREE.MeshStandardMaterial({ color: 0xb4b8be, map: side, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide });
     grime(sideMat, 0.18, 6, 'zy', 1.2);
     this.realNormal(sideMat, claddingNormal(), 0.8);
-    for (const x of [WX, EX]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), sideMat);
-      w.position.set(x, HH / 2, HZC);
+    {
+      const e = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), sideMat);
+      e.position.set(EX, HH / 2, HZC);
+      e.rotation.y = Math.PI / 2;
+      add(e);
+      const w = new THREE.Mesh(westWall(NZ, HZ), westMat);
+      w.position.set(WX, HH / 2, HZC);
       w.rotation.y = Math.PI / 2;
       add(w);
     }
@@ -5387,7 +5421,7 @@ export class Sorter implements Scene3D {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
-    this.buildWing(floorMat, wallMat, ceilMat, add);
+    this.buildWing(floorMat, wallMat, ceilMat, add, westMat);
     add(lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position)));
     // The LED fixtures' light on the floor (they hang every 10 m in four rows; see buildDay).
     const spots: [number, number][] = [];
@@ -5403,7 +5437,7 @@ export class Sorter implements Scene3D {
    * The wing's floor, walls (the north one with the inbound doors, the short one west where the
    * wing is wider than the hall) and ceiling, in one look's materials. Shapes, so UVs are metres.
    */
-  private buildWing(floor: THREE.Material | THREE.Material[], wall: THREE.Material, ceil: THREE.Material | THREE.Material[], add: (o: THREE.Object3D) => void): void {
+  private buildWing(floor: THREE.Material | THREE.Material[], wall: THREE.Material, ceil: THREE.Material | THREE.Material[], add: (o: THREE.Object3D) => void, side = wall): void {
     const w = WING.x1 - WING.x0;
     const d = NZ - WING.z0;
     const cx = (WING.x0 + WING.x1) / 2;
@@ -5427,7 +5461,7 @@ export class Sorter implements Scene3D {
     north.position.set(cx, HH / 2, WING.z0);
     add(north);
     for (const x of [WING.x0, WING.x1]) {
-      const m = new THREE.Mesh(wallWithDoors([], undefined, 0, d), wall);
+      const m = new THREE.Mesh(x === WX ? westWall(WING.z0, NZ) : wallWithDoors([], undefined, 0, d), side);
       m.position.set(x, HH / 2, cz);
       m.rotation.y = Math.PI / 2;
       add(m);
@@ -5484,9 +5518,14 @@ export class Sorter implements Scene3D {
       this.put(w);
       this.flatOnly.push(w);
     }
-    for (const x of [WX, EX]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wall);
-      w.position.set(x, HH / 2, HZC);
+    {
+      const e = new THREE.Mesh(new THREE.PlaneGeometry(HD, HH), wall);
+      e.position.set(EX, HH / 2, HZC);
+      e.rotation.y = Math.PI / 2;
+      this.put(e);
+      this.flatOnly.push(e);
+      const w = new THREE.Mesh(westWall(NZ, HZ), longDay);
+      w.position.set(WX, HH / 2, HZC);
       w.rotation.y = Math.PI / 2;
       this.put(w);
       this.flatOnly.push(w);
@@ -5743,7 +5782,7 @@ export class Sorter implements Scene3D {
     this.pois = [
       { ...fixed('infeeds', v(-33, 7.4, -17), v(-40, 3.6, -9.5), 'Infeed'), hover: 'still' },
       fixed('inbound', v(-38, 4.6, -40), v(-46, 1.4, -54), 'Inbound docks'),
-      fixed('canteen', v(-38, 7.2, -42), v(-46, 6.9, -51), 'Canteen'),
+      fixed('canteen', v(-50, 6.2, -38), v(-62, 5.6, -45), 'Canteen'),
       fixed('scan tunnels', v(-36, 4.4, -37), v(-46, 1.2, -45), 'Scanning'),
       {
         // One lap above the inside edge of the loop, at cruise height, looking ahead and down.

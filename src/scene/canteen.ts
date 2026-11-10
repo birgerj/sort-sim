@@ -1,10 +1,10 @@
-// The canteen: a first floor over the inbound docks, across the whole width of the wing. A steel
-// mezzanine on columns between the collector belts carries a room with a glass front that looks
-// out over the hall: tables and chairs, a counter with a coffee machine, a fridge, plants, lamps,
-// and a few people on their break. A straight stair along the wing's east wall goes up to a
-// landing at the east end, with a door into the room.
+// The canteen: a room on the first floor outside the hall, against its west wall, beside the
+// inbound wing. From the hall you see a band of windows high in the west wall with the room
+// behind it (tables, chairs, a counter with coffee, plants, lamps, people on their break), and a
+// door at its south end onto a landing, with a steel stair down along the wall.
 //
-// All static except the people (who sit and talk); both looks: drawn by day, lit windows at night.
+// The windows and the door are holes in the west wall (`windows()`, `door()`; the Sorter cuts
+// them); this module builds what is behind and in front of them. Static apart from the people.
 import * as THREE from 'three';
 
 import type { FloorKit } from './floor';
@@ -12,159 +12,170 @@ import { buildHuman, type Human } from './people';
 import { settle, sit } from './motion';
 
 export interface CanteenLayout {
-  /** The wing's walls: west and east (x), north (z). */
-  x0: number;
-  x1: number;
+  /** The hall's west wall (x); the room is west of it. */
+  wallX: number;
+  /** The room's extent along the wall (z, north to south), its depth out from the wall, and its floor's height. */
   z0: number;
-  /** Front edge of the mezzanine (z), and its floor's height. */
-  front: number;
+  z1: number;
+  depth: number;
   floorY: number;
-  /** x of the columns along the front edge (clear of the telescopes and collectors). */
-  columns: number[];
-  /** The stair: along the east wall, its foot (z) on the hall floor. */
-  stairX: number;
-  stairFootZ: number;
 }
 
-/** Room height, and the width of the landing at the east end (the stair comes up there). */
-const ROOM_H = 2.9;
-const LANDING = 2.4;
+/** Where the canteen's stair reaches the hall floor (z). */
+export function canteenStairFoot(L: CanteenLayout): number {
+  return L.z1 - 0.9 + DOOR_W / 2 + 0.9 + Math.ceil(L.floorY / RISE) * TREAD;
+}
+
+/** The openings the room needs in the west wall: windows and the door, each [z0, z1, y0, y1]. */
+export function canteenOpenings(L: CanteenLayout): { windows: [number, number, number, number][]; door: [number, number, number, number] } {
+  const dz = L.z1 - 0.9;
+  const door: [number, number, number, number] = [dz - DOOR_W / 2, dz + DOOR_W / 2, L.floorY + 0.02, L.floorY + 2.2];
+  const a = L.z0 + 0.8;
+  const b = door[0] - 0.8;
+  const n = Math.max(1, Math.round((b - a) / 1.6));
+  const pane = (b - a) / n;
+  const windows: [number, number, number, number][] = [];
+  for (let i = 0; i < n; i++) windows.push([a + i * pane + 0.08, a + (i + 1) * pane - 0.08, L.floorY + WIN[0], L.floorY + WIN[1]]);
+  return { windows, door };
+}
+
+/** Room height, window band (above the room's floor), door width and the stair's step. */
+const ROOM_H = 3.0;
+const WIN = [0.85, 2.55] as const;
+const DOOR_W = 1.1;
+const RISE = 0.19;
+const TREAD = 0.27;
 
 export class Canteen {
-  private people: { h: Human; talk: number }[] = [];
+  private people: Human[] = [];
 
   constructor(
     private k: FloorKit,
     private L: CanteenLayout,
   ) {
-    this.buildFloor();
     this.buildRoom();
     this.buildFurniture();
     this.buildStair();
   }
 
-  /** The people at the tables: they talk now and then (the rest is breathing and blinking). */
+  /** The door's z range (at the room's south end). */
+  door(): [number, number] {
+    const d = canteenOpenings(this.L).door;
+    return [d[0], d[1]];
+  }
+
+  /** Window openings in the west wall: [z0, z1, y0, y1]. */
+  windows(): [number, number, number, number][] {
+    return canteenOpenings(this.L).windows;
+  }
+
+  /** Where the stair reaches the hall floor (z). */
+  stairFoot(): number {
+    return canteenStairFoot(this.L);
+  }
+
   update(dt: number, bt: number): void {
-    this.people.forEach((p, i) => {
-      p.h.m.talk = Math.sin(bt * 0.5 + i * 1.7) > 0.4 ? 1 : 0;
-      p.h.head.rotation.y = Math.sin(bt * 0.13 + i) * 0.35;
-      settle(p.h, dt, { idle: 0 });
+    this.people.forEach((h, i) => {
+      h.m.talk = Math.sin(bt * 0.5 + i * 1.7) > 0.4 ? 1 : 0;
+      h.head.rotation.y = Math.sin(bt * 0.13 + i) * 0.35;
+      settle(h, dt, { idle: 0 });
     });
   }
 
-  private buildFloor(): void {
-    const { k, L } = this;
-    const y = L.floorY;
-    const steel = k.std(0x3a3d44, 0.5, 0.5, 0x1755fe);
-    const deck = k.std(0x50545b, 0.7, 0.3, 0xb9c0c8);
-    const yellow = k.std(0x8a6e00, 0.5, 0.3, 0xf2c200);
-    const w = L.x1 - L.x0;
-    const d = L.front - L.z0;
-    const cx = (L.x0 + L.x1) / 2;
-    const cz = (L.z0 + L.front) / 2;
-    // The deck (0.3 m deep), and a beam along its front edge.
-    k.box('mezz', deck, cx, y - 0.15, cz, w, 0.3, d);
-    k.box('mezzbeam', steel, cx, y - 0.3, L.front - 0.12, w, 0.3, 0.24);
-    // Columns along the front edge.
-    for (const x of L.columns) {
-      k.box('mezzcol', steel, x, (y - 0.45) / 2, L.front - 0.15, 0.25, y - 0.45, 0.25);
-      k.box('mezzfoot', steel, x, 0.01, L.front - 0.15, 0.45, 0.02, 0.45);
-      k.blob(x, L.front - 0.15, 0.7, 0.7);
-    }
-    // Yellow edge of the landing, with a railing (open where the stair comes up).
-    const lx0 = L.x1 - LANDING;
-    k.box('mezzedge', yellow, (lx0 + L.x1) / 2, y + 0.02, L.front - 0.05, LANDING, 0.04, 0.1);
-    const railX0 = lx0;
-    const railX1 = L.stairX - 0.7;
-    for (const yy of [0.55, 1.05]) k.box('mezzrail', yellow, (railX0 + railX1) / 2, y + yy, L.front - 0.05, railX1 - railX0, 0.05, 0.05);
-    for (let x = railX0; x <= railX1 + 0.01; x += (railX1 - railX0) / 2) k.box('mezzrail', yellow, x, y + 0.53, L.front - 0.05, 0.05, 1.05, 0.05);
-  }
-
-  /** The room: a glass front with mullions, a partition with a door at the landing, a ceiling and lamps. */
+  /** The box behind the wall: floor, ceiling, outer walls; glass and sills in the openings; lamps. */
   private buildRoom(): void {
     const { k, L } = this;
     const y = L.floorY;
-    const rx0 = L.x0 + 0.1;
-    const rx1 = L.x1 - LANDING;
-    const fz = L.front - 0.3;
-    const w = rx1 - rx0;
-    const cx = (rx0 + rx1) / 2;
+    const x0 = L.wallX - L.depth;
+    const x1 = L.wallX;
+    const cx = (x0 + x1) / 2;
+    const cz = (L.z0 + L.z1) / 2;
+    const len = L.z1 - L.z0;
     const wall = k.std(0x3a3d44, 0.6, 0.3, 0xf3f4f6);
-    const frame = k.std(0x1d1d1f, 0.5, 0.4, 0x1d1d1f);
     const floorM = k.std(0x5a4430, 0.8, 0, 0xc9a26a);
-    // Floor finish and ceiling.
-    k.box('cfloor', floorM, cx, y + 0.01, (L.z0 + fz) / 2, w, 0.02, fz - L.z0);
-    k.box('cceil', wall, cx, y + ROOM_H + 0.06, (L.z0 + fz) / 2, w + 0.2, 0.12, fz - L.z0 + 0.1);
-    // Front: a sill, the window band, a header; mullions every 1.5 m.
-    k.box('cfront', wall, cx, y + 0.4, fz, w, 0.8, 0.12);
-    k.box('cfront', wall, cx, y + ROOM_H - 0.2, fz, w, 0.4, 0.12);
-    const n = Math.round(w / 1.5);
-    for (let i = 0; i <= n; i++) k.box('cmull', frame, rx0 + (w * i) / n, y + 1.65, fz, 0.07, 1.7, 0.14);
-    k.box('cmull', frame, cx, y + 0.82, fz, w, 0.05, 0.14);
-    // The glass: see-through, a little blue, so the room shows from the hall.
-    const glass = new THREE.MeshStandardMaterial({ color: 0xbfd8e8, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(w, 1.65), glass);
-    g.position.set(cx, y + 1.65, fz);
-    g.userData.noInk = true;
-    k.put(g);
-    // Partition at the landing, with a door (a gap and a frame).
-    const pz0 = L.z0;
-    const doorZ = fz - 1.2;
-    k.box('cpart', wall, rx1, y + ROOM_H / 2, (pz0 + doorZ - 0.55) / 2, 0.12, ROOM_H, doorZ - 0.55 - pz0);
-    k.box('cpart', wall, rx1, y + ROOM_H / 2, (doorZ + 0.55 + fz) / 2, 0.12, ROOM_H, fz - doorZ - 0.55);
-    k.box('cpart', wall, rx1, y + ROOM_H - 0.3, doorZ, 0.12, 0.6, 1.1);
-    for (const dz of [-0.55, 0.55]) k.box('cdoorf', frame, rx1, y + 1.15, doorZ + dz, 0.16, 2.3, 0.06);
-    // Lamps under the ceiling: lit panels (they glow at night, through the glass).
+    const frame = k.std(0x1d1d1f, 0.5, 0.4, 0x1d1d1f);
+    k.box('cfloor', floorM, cx, y - 0.05, cz, L.depth, 0.1, len);
+    k.box('cceil', wall, cx, y + ROOM_H + 0.06, cz, L.depth, 0.12, len);
+    // The box's walls (the hall's west wall closes it on the east).
+    k.box('cwall', wall, x0 + 0.06, y + ROOM_H / 2, cz, 0.12, ROOM_H + 0.2, len);
+    for (const z of [L.z0 + 0.06, L.z1 - 0.06]) k.box('cwall', wall, cx, y + ROOM_H / 2, z, L.depth, ROOM_H + 0.2, 0.12);
+    // Under the room, down to the ground, and its roof: a closed box outside the hall.
+    k.box('cbase', wall, cx, (y - 0.1) / 2, cz, L.depth, y - 0.1, len);
+    // Glass in every window, with a frame and a sill.
+    const glass = new THREE.MeshStandardMaterial({ color: 0xbfd8e8, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
+    for (const [z0, z1, y0, y1] of this.windows()) {
+      const g = new THREE.Mesh(new THREE.PlaneGeometry(z1 - z0, y1 - y0), glass);
+      g.position.set(L.wallX - 0.05, (y0 + y1) / 2, (z0 + z1) / 2);
+      g.rotation.y = Math.PI / 2;
+      g.userData.noInk = true;
+      k.put(g);
+      k.box('csill', frame, L.wallX, y0 - 0.03, (z0 + z1) / 2, 0.3, 0.06, z1 - z0 + 0.1);
+      k.box('cframe', frame, L.wallX, y1 + 0.03, (z0 + z1) / 2, 0.22, 0.06, z1 - z0 + 0.1);
+      for (const z of [z0, z1]) k.box('cframe', frame, L.wallX, (y0 + y1) / 2, z, 0.22, y1 - y0, 0.05);
+    }
+    // The door: a frame in the opening, the door leaf standing open into the room.
+    const [d0, d1] = this.door();
+    for (const z of [d0, d1]) k.box('cdoorf', frame, L.wallX, y + 1.1, z, 0.24, 2.2, 0.06);
+    k.box('cdoorf', frame, L.wallX, y + 2.22, (d0 + d1) / 2, 0.24, 0.06, d1 - d0 + 0.12);
+    k.box('cdoor', k.std(0x6b2b6b, 0.6, 0.1, 0x6b3fd1), L.wallX - 0.55, y + 1.05, d0 + 0.05, DOOR_W - 0.05, 2.1, 0.05);
+    // Lamps under the ceiling: lit panels, they glow at night through the windows.
     const lamp = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.35, 1.2) });
-    for (let x = rx0 + 3; x < rx1 - 1; x += 5) for (const z of [L.z0 + 1.8, fz - 1.6]) k.box('clamp', lamp, x, y + ROOM_H - 0.02, z, 1.2, 0.03, 0.3);
+    for (let z = L.z0 + 2; z < L.z1 - 1; z += 3.5) for (const x of [x0 + 1.8, x1 - 1.8]) k.box('clamp', lamp, x, y + ROOM_H - 0.02, z, 0.3, 0.03, 1.2);
   }
 
-  /** Tables with chairs in two rows, a counter with a coffee machine and a fridge, plants, a few people. */
+  /** Tables with chairs, a counter with coffee at the far end, plants under the windows, people on their break. */
   private buildFurniture(): void {
     const { k, L } = this;
     const y = L.floorY;
-    const rx0 = L.x0 + 0.1;
-    const rx1 = L.x1 - LANDING;
-    const fz = L.front - 0.3;
+    const x0 = L.wallX - L.depth;
     const wood = k.std(0x6b5a44, 0.8, 0, 0xe0c49a);
     const grey = k.std(0x3a3d44, 0.5, 0.5, 0x6b7078);
     const chairs = [k.std(0x0f5c4f, 0.7, 0, 0x2fa58f), k.std(0x8a6e00, 0.7, 0, 0xf2c200), k.std(0x6b2b6b, 0.7, 0, 0xd6339a)];
     const white = k.std(0xdddddd, 0.5, 0.1, 0xffffff);
     const dark = k.std(0x1d1d1f, 0.4, 0.4, 0x1d1d1f);
     const green = k.std(0x1f5a2a, 0.9, 0, 0x2f9a4a);
-    // Counter along the west end: a coffee machine, a fridge and a microwave.
-    const cx0 = rx0 + 0.45;
-    k.box('ccounter', white, cx0, y + 0.45, (L.z0 + fz) / 2, 0.7, 0.9, fz - L.z0 - 1.6);
-    k.box('ccoffee', dark, cx0, y + 1.15, L.z0 + 1.5, 0.4, 0.5, 0.4);
-    k.box('ccoffee', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 0.8, 1.2) }), cx0 + 0.21, y + 1.25, L.z0 + 1.5, 0.02, 0.15, 0.25);
-    k.box('cmicro', grey, cx0, y + 1.07, L.z0 + 2.5, 0.45, 0.32, 0.55);
-    k.box('cfridge', white, cx0, y + 0.95, fz - 0.6, 0.7, 1.9, 0.7);
-    // Tables: a row along the windows and one along the back wall, four chairs each.
-    let seat = 0;
+    // Counter along the north end: coffee machine, microwave, fridge.
+    const cz = L.z0 + 0.5;
+    k.box('ccounter', white, (x0 + L.wallX) / 2 - 0.4, y + 0.45, cz, L.depth - 1.6, 0.9, 0.7);
+    k.box('ccoffee', dark, x0 + 1.5, y + 1.15, cz, 0.4, 0.5, 0.4);
+    k.box('ccoffee', new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 0.8, 1.2) }), x0 + 1.5, y + 1.25, cz + 0.21, 0.25, 0.15, 0.02);
+    k.box('cmicro', grey, x0 + 2.6, y + 1.07, cz, 0.55, 0.32, 0.45);
+    k.box('cfridge', white, L.wallX - 0.9, y + 0.95, cz, 0.7, 1.9, 0.7);
+    // Tables in two rows along the room: one by the windows, one by the back wall.
     const tables: [number, number][] = [];
-    for (let x = rx0 + 2.6; x < rx1 - 1.2; x += 3.2) for (const z of [L.z0 + 1.5, fz - 1.4]) tables.push([x, z]);
+    for (let z = L.z0 + 2.6; z < this.door()[0] - 1.2; z += 3.0) for (const x of [L.wallX - 1.6, x0 + 2.2]) tables.push([x, z]);
     tables.forEach(([tx, tz], i) => {
-      k.box('ctable', wood, tx, y + 0.75, tz, 1.6, 0.05, 0.9);
+      k.box('ctable', wood, tx, y + 0.75, tz, 0.9, 0.05, 1.6);
       k.box('ctleg', grey, tx, y + 0.37, tz, 0.08, 0.74, 0.08);
       k.box('ctleg', grey, tx, y + 0.02, tz, 0.5, 0.04, 0.5);
-      for (const sx of [-0.45, 0.45]) {
-        for (const sz of [-0.65, 0.65]) {
-          const m = chairs[(i + seat++) % chairs.length]!;
+      let n = 0;
+      for (const sx of [-0.65, 0.65]) {
+        for (const sz of [-0.45, 0.45]) {
+          const m = chairs[(i + n++) % chairs.length]!;
           k.box('cchair', m, tx + sx, y + 0.46, tz + sz, 0.44, 0.05, 0.44);
-          k.box('cchair', m, tx + sx, y + 0.74, tz + sz + Math.sign(sz) * 0.21, 0.44, 0.5, 0.05);
+          k.box('cchair', m, tx + sx + Math.sign(sx) * 0.21, y + 0.74, tz + sz, 0.05, 0.5, 0.44);
           k.box('ccleg', grey, tx + sx, y + 0.22, tz + sz, 0.04, 0.44, 0.04);
         }
       }
-      // Something on most tables: a mug, a lunch box, a phone.
-      if (i % 3 !== 2) k.box('cmug', white, tx + 0.3, y + 0.83, tz - 0.1, 0.08, 0.1, 0.08);
-      if (i % 2) k.box('clunch', chairs[i % 3]!, tx - 0.35, y + 0.82, tz + 0.12, 0.25, 0.08, 0.16);
+      if (i % 3 !== 2) k.box('cmug', white, tx - 0.1, y + 0.83, tz + 0.3, 0.08, 0.1, 0.08);
+      if (i % 2) k.box('clunch', chairs[i % 3]!, tx + 0.12, y + 0.82, tz - 0.35, 0.16, 0.08, 0.25);
     });
-    // Plants at the windows.
-    for (let x = rx0 + 4.2; x < rx1 - 1; x += 9.6) {
-      k.box('cpot', dark, x, y + 0.25, fz - 0.35, 0.4, 0.5, 0.4);
-      k.box('cplant', green, x, y + 0.85, fz - 0.35, 0.6, 0.7, 0.5);
+    // Lockers along the back wall, between the tables' chairs and the wall.
+    const teal = k.std(0x1f5f4f, 0.6, 0.1, 0x2fa58f);
+    const lz0 = L.z0 + 1.6;
+    for (let i = 0; i < 16; i++) {
+      const z = lz0 + i * 0.62;
+      k.box('locker', [teal, grey][i % 2]!, x0 + 0.38, y + 0.95, z, 0.5, 1.9, 0.6);
+      k.box('lockerv', dark, x0 + 0.64, y + 1.6, z, 0.02, 0.04, 0.3);
     }
-    // A few people on their break, sitting at the tables (facing across them).
+    // A notice board with schedules beside them.
+    k.box('cboard', k.std(0x6a5038, 0.8, 0, 0xc49a6c), x0 + 0.15, y + 1.7, lz0 + 16 * 0.62 + 1.2, 0.04, 1.0, 1.8);
+    // Plants under the windows, between the tables.
+    for (let z = L.z0 + 4.1; z < this.door()[0] - 1; z += 6) {
+      k.box('cpot', dark, L.wallX - 0.35, y + 0.25, z, 0.4, 0.5, 0.4);
+      k.box('cplant', green, L.wallX - 0.35, y + 0.85, z, 0.5, 0.7, 0.6);
+    }
+    // People on their break, sitting at the tables (across from each other, facing along x).
     const looks = [
       { shirt: 0x3a3d44, trousers: 0x22283f, vest: 0xf2a51a },
       { shirt: 0xf3f4f6, trousers: 0x22283f, cap: 0x2fa58f },
@@ -172,58 +183,78 @@ export class Canteen {
       { shirt: 0x6b3fd1, trousers: 0x22283f },
       { shirt: 0x22283f, trousers: 0x22283f, vest: 0x1d4ed8 },
     ];
-    const spots: [number, number, number][] = [];
-    const pickT = [0, 1, 4, 7, 8].filter((t) => t < tables.length);
-    pickT.forEach((t, n) => {
-      const [tx, tz] = tables[t]!;
-      const sz = n % 2 ? 0.62 : -0.62;
-      spots.push([tx + (n % 3 ? 0.45 : -0.45), tz + sz, sz > 0 ? Math.PI : 0]);
-      if (n % 2 === 0) spots.push([tx - 0.45, tz - sz, sz > 0 ? 0 : Math.PI]);
+    const seats: [number, number, number][] = [];
+    [0, 1, 4, 5, 8].forEach((t, n) => {
+      const tb = tables[t];
+      if (!tb) return;
+      const [tx, tz] = tb;
+      // (Facing +x when on the −x side of the table, −x on the other.)
+      seats.push([tx - 0.62, tz + (n % 2 ? 0.45 : -0.45), Math.PI / 2]);
+      if (n % 2 === 0) seats.push([tx + 0.62, tz - 0.45, -Math.PI / 2]);
     });
-    spots.slice(0, 7).forEach(([x, z, ry], i) => {
+    seats.slice(0, 7).forEach(([x, z, ry], i) => {
       const h = buildHuman(k, looks[i % looks.length]!);
-      h.root.position.set(x, y + 0.03, z);
+      // (The hips at seat height: the skeleton stands with its hips at about 0.92 m.)
+      h.root.position.set(x, y - 0.4, z);
       h.root.rotation.y = ry;
       sit(h);
-      // Hands on the table.
       h.armL.rotation.x = h.armR.rotation.x = -0.9;
       h.foreL.rotation.x = h.foreR.rotation.x = -0.9;
       k.put(h.root);
-      this.people.push({ h, talk: 0 });
+      this.people.push(h);
     });
   }
 
-  /** A straight steel stair along the east wall, from the hall floor up to the landing. */
+  /** A landing in front of the door, inside the hall, and a straight stair down along the wall (south). */
   private buildStair(): void {
     const { k, L } = this;
     const steel = k.std(0x3a3e45, 0.6, 0.7, 0xc9ced4);
     const yellow = k.std(0x8a6e00, 0.5, 0.3, 0xf2c200);
-    const top = L.front;
-    const n = Math.ceil(L.floorY / 0.19);
-    const rise = L.floorY / n;
-    const run = (L.stairFootZ - top) / n;
-    const x = L.stairX;
-    for (let i = 0; i < n; i++) {
-      const z = L.stairFootZ - (i + 0.5) * run;
-      k.box('stairstep', steel, x, (i + 1) * rise - 0.03, z, 1.2, 0.05, run + 0.04);
+    const [d0, d1] = this.door();
+    const x = L.wallX + 0.7;
+    const y = L.floorY;
+    // Landing: from the door's north side to a little past its south side.
+    const l0 = d0 - 0.2;
+    const l1 = d1 + 0.9;
+    k.box('landing', steel, x, y - 0.04, (l0 + l1) / 2, 1.4, 0.08, l1 - l0);
+    k.box('landing', steel, x, y - 0.2, (l0 + l1) / 2, 1.4, 0.2, 0.1);
+    for (const z of [l0 + 0.1, l1 - 0.1]) k.box('landpost', steel, x + 0.6, (y - 0.1) / 2, z, 0.12, y - 0.1, 0.12);
+    // Railing round the landing's open sides (north end and hall side; open towards the stair).
+    for (const yy of [0.55, 1.05]) {
+      k.box('lrail', yellow, x + 0.68, y + yy, (l0 + l1) / 2, 0.05, 0.05, l1 - l0);
+      k.box('lrail', yellow, x, y + yy, l0, 1.4, 0.05, 0.05);
     }
-    // Stringers and handrails, both sides (as sloped boxes: one per stretch of steps).
-    const len = Math.hypot(L.stairFootZ - top, L.floorY);
-    const ang = Math.atan2(L.floorY, L.stairFootZ - top);
+    for (const z of [l0, (l0 + l1) / 2, l1]) k.box('lrail', yellow, x + 0.68, y + 0.53, z, 0.05, 1.05, 0.05);
+    // The stair: steps going down to the south.
+    const n = Math.ceil(y / RISE);
+    const rise = y / n;
+    const foot = this.stairFoot();
+    for (let i = 0; i < n; i++) {
+      const z = l1 + (i + 0.5) * TREAD;
+      k.box('stairstep', steel, x, y - (i + 1) * rise + 0.02, z, 1.2, 0.05, TREAD + 0.03);
+    }
+    const len = Math.hypot(foot - l1, y);
+    const ang = Math.atan2(y, foot - l1);
     for (const sx of [-0.62, 0.62]) {
       const s = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, len), steel);
-      s.position.set(x + sx, L.floorY / 2 - 0.1, (L.stairFootZ + top) / 2);
-      s.rotation.x = ang;
+      s.position.set(x + sx, y / 2 - 0.1, (l1 + foot) / 2);
+      s.rotation.x = -ang;
       k.put(s);
+      if (sx < 0) continue;
+      // A handrail on the open side (the wall has one fixed to it too).
       const r = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, len), yellow);
-      r.position.set(x + sx, L.floorY / 2 + 0.95, (L.stairFootZ + top) / 2);
-      r.rotation.x = ang;
+      r.position.set(x + sx, y / 2 + 0.95, (l1 + foot) / 2);
+      r.rotation.x = -ang;
       k.put(r);
       for (let i = 0; i <= 4; i++) {
         const f = i / 4;
-        k.box('stairpost', yellow, x + sx, f * L.floorY + 0.5, L.stairFootZ - f * (L.stairFootZ - top), 0.04, 0.95, 0.04);
+        k.box('stairpost', yellow, x + sx, (1 - f) * y + 0.5, l1 + f * (foot - l1), 0.04, 0.95, 0.04);
       }
     }
-    k.blob(x, L.stairFootZ - 0.6, 1.6, 1.4);
+    const wr = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, len), yellow);
+    wr.position.set(L.wallX + 0.06, y / 2 + 0.95, (l1 + foot) / 2);
+    wr.rotation.x = -ang;
+    k.put(wr);
+    k.blob(x, foot - 0.6, 1.6, 1.4);
   }
 }

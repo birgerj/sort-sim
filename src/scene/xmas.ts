@@ -28,7 +28,9 @@ export interface XmasLayout {
   /** The Christmas market: stall and stable, side by side, backs to the south wall. */
   market: { x: number; z: number };
   /** The inbound wing north of the north wall (x0…x1, back wall at z0): the garlands follow its walls, its doors get wreaths. */
-  wing?: { x0: number; x1: number; z0: number; doors: number[]; front: number };
+  wing?: { x0: number; x1: number; z0: number; doors: number[] };
+  /** Along the west wall, no garland from z0 to z1 (the canteen's windows and stair). */
+  westGap?: [number, number];
 }
 
 const RED = 0xc8102e;
@@ -191,15 +193,17 @@ export class Xmas {
     }
     if (L.wing) {
       const W = L.wing;
-      // (Above the docks is the canteen: the garland runs along the west wall to its floor, then
-      // under the front edge of its floor; not along the east wall, where the stair goes up.)
-      along(W.x0 + 0.25, L.nz + 2, W.x0 + 0.25, W.front, 0);
-      along(W.x0 + 0.25, W.front + 0.15, W.x1 - 2.6, W.front + 0.15, 0.3, 5.6, 0.45);
+      // (Its west wall has the canteen's windows: no garland there.)
+      along(W.x0 + 0.25, W.z0 + 0.25, W.x1 - 0.25, W.z0 + 0.25);
+      along(W.x1 - 0.25, W.z0 + 0.25, W.x1 - 0.25, L.nz + 0.25);
       // On the north wall again from the wing's east wall to the first full swag.
       const first = L.wx + 2 + step * Math.ceil((W.x1 + 0.5 - (L.wx + 2)) / step);
       along(W.x1 - 0.25, L.nz + 0.25, first, L.nz + 0.25, 0);
     }
-    for (let z = L.nz + 2; z + step <= L.hz - 1; z += step) swag(new THREE.Vector3(L.wx + 0.25, y, z), new THREE.Vector3(L.wx + 0.25, y, z + step), 0.9);
+    for (let z = L.nz + 2; z + step <= L.hz - 1; z += step) {
+      if (L.westGap && z + step > L.westGap[0] && z < L.westGap[1]) continue;
+      swag(new THREE.Vector3(L.wx + 0.25, y, z), new THREE.Vector3(L.wx + 0.25, y, z + step), 0.9);
+    }
     const green = this.k.std(0x14532d, 0.9, 0, GREEN);
     this.k.put(new THREE.Mesh(merge(tubes), green));
     // Red and gold baubles where the swags meet, each with a small bow.
