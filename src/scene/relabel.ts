@@ -129,8 +129,10 @@ export class Relabel {
         const f = Math.min(1, (bt - this.t0) / 1);
         const it = this.queue[0];
         if (it) {
-          reach(h, 'L', this.v.copy(it.pos).setY(it.pos.y + it.h / 2).add(new THREE.Vector3(0, 0, 0.12)), f);
-          reach(h, 'R', this.v.copy(it.pos).setY(it.pos.y + it.h / 2).add(new THREE.Vector3(0, 0, -0.12)), f);
+          // Hands on the parcel's two sides, each on its own side of the body (never crossed).
+          const right = this.right();
+          reach(h, 'L', this.v.copy(it.pos).setY(it.pos.y + it.h / 2).addScaledVector(right, -0.12), f);
+          reach(h, 'R', this.v.copy(it.pos).setY(it.pos.y + it.h / 2).addScaledVector(right, 0.12), f);
         }
         if (bt >= this.t0 + 1) {
           this.hand = this.queue.shift() ?? null;
@@ -168,8 +170,9 @@ export class Relabel {
         this.stand(w, this.set.face, dt);
         const f = Math.min(1, (bt - this.t0) / 1);
         crouch(h, 0.15 * f);
-        reach(h, 'L', this.v.copy(this.set.belt).setY(this.set.belt.y + 0.3), f);
-        reach(h, 'R', this.v.copy(this.set.belt).setY(this.set.belt.y + 0.3), f);
+        const right = this.right();
+        reach(h, 'L', this.v.copy(this.set.belt).setY(this.set.belt.y + 0.3).addScaledVector(right, -0.13), f);
+        reach(h, 'R', this.v.copy(this.set.belt).setY(this.set.belt.y + 0.3).addScaledVector(right, 0.13), f);
         if (this.hand && f >= 1) {
           if (this.set.onPlace(this.hand)) {
             this.hand = null;
@@ -188,6 +191,13 @@ export class Relabel {
     this.t0 = Math.ceil(bt);
   }
 
+  /** The worker's own right, along the floor (the right hand's side; the left is opposite). */
+  private right(): THREE.Vector3 {
+    const y = this.worker.root.rotation.y;
+    return this.r.set(Math.cos(y), 0, -Math.sin(y));
+  }
+  private readonly r = new THREE.Vector3();
+
   /** Stand still at a spot, turned that way. */
   private stand(at: P3, yaw: number, dt: number): void {
     const r = this.worker.root;
@@ -205,7 +215,8 @@ export class Relabel {
     if (!it) return;
     const r = this.worker.root;
     r.updateMatrixWorld(true);
-    for (const [side, off] of [['L', 0.14], ['R', -0.14]] as const) {
+    // (The left arm is on the body's −x side, the right on +x.)
+    for (const [side, off] of [['L', -0.14], ['R', 0.14]] as const) {
       this.v.set(off, 0.95, 0.4).applyMatrix4(r.matrixWorld);
       reach(this.worker, side, this.v, 1);
     }

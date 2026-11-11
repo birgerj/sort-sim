@@ -198,8 +198,9 @@ const CHUTES: [number, number][] = [
   // To manual sorting (too big or heavy, or round too often): off the south-east bend, down to the
   // belt to the manual sort table (east of the robots).
   [174, 1],
-  // No-reads: on the north straight just east of the infeeds, down to the relabelling table.
-  [30, 1],
+  // No-reads: on the north straight just east of the infeeds and past the loop's scan tunnel
+  // there (s 28.7–31.3: the chute's mouth starts clear of it), down to the relabelling table.
+  [32, 1],
 ];
 /** The chute to manual sorting, and the no-read chute (the last two in CHUTES). */
 const REJECT = 40;
@@ -6607,6 +6608,19 @@ export class Sorter implements Scene3D {
           return true;
         },
       },
+      {
+        // The no-read chute's end: the relabelling table, its printer and the worker, from the east.
+        name: 'rejects',
+        dept: 'Rejects',
+        hover: 'still',
+        at: (p, l) => {
+          const e = this.noreadEnd;
+          if (!e) return false;
+          p.set(e.x + 4.2, 3.1, e.z - 0.6);
+          l.set(e.x - 0.3, 1.0, e.z - 1.5);
+          return true;
+        },
+      },
       { ...fixed('control room', v(-48, 2.85, 17.2), v(-48, 2.75, 21.6), 'Control room'), hover: 'still' },
       // The server racks against the west wall, square on from the hall.
       { ...fixed('computing', v(WX + 6.5, 2.2, 25.2), v(WX + 0.7, 1.2, 25.2), 'Computing'), hover: 'arc' },
@@ -7133,8 +7147,9 @@ export class Sorter implements Scene3D {
     this.relabel = new Relabel(this, {
       end,
       way: [
-        [-19.4, 0, end.z - 2.65],
-        [-19.4, 0, -33.4],
+        // (Up the worker's side of the table, east of it.)
+        [end.x + 1.0, 0, end.z - 2.65],
+        [end.x + 1.0, 0, -33.4],
         [stand.x, 0, -33.4],
         [stand.x, 0, stand.z],
       ],

@@ -12,7 +12,7 @@
 /** Groups and the departments in each (by `Poi.name`), in order. */
 export const DEPT_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Inbound", ids: ["inbound", "infeeds", "scan tunnels"] },
-  { title: "Sorting", ids: ["loop", "chutes", "store", "manual sorting"] },
+  { title: "Sorting", ids: ["loop", "chutes", "rejects", "store", "manual sorting"] },
   { title: "Outbound", ids: ["docks", "pickup stations", "bins", "boxes"] },
   { title: "Office & staff", ids: ["control room", "office", "canteen", "computing"] },
 ];
@@ -40,6 +40,9 @@ export const DEPT_ICONS: Record<string, string> = {
   loop: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
   // move-down-right
   chutes: '<path d="M19 13V19H13"/><path d="M5 5L19 19"/>',
+  // tag
+  rejects:
+    '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
   // hand
   "manual sorting":
     '<path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',

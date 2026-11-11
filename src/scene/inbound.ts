@@ -409,8 +409,10 @@ export class Inbound {
       const y = 1.1 + 0.25 * Math.sin(bt * Math.PI * 0.5 + b.number + n * 2);
       const kk = Math.min(1, dt * 6);
       const x0 = b.x + u.side * 0.5;
-      reach(h, 'L', this.v.set(x0 - 0.22, y, face + 0.05), kk, 0);
-      reach(h, 'R', this.v.set(x0 + 0.22, y - 0.15, face + 0.05), kk, 0);
+      // (Each hand on its own side of the body, whichever way they face: arms never crossed.)
+      const right = this.v2.set(Math.cos(u.yaw), 0, -Math.sin(u.yaw));
+      reach(h, 'L', this.v.set(x0, y, face + 0.05).addScaledVector(right, -0.22), kk, 0);
+      reach(h, 'R', this.v.set(x0, y - 0.15, face + 0.05).addScaledVector(right, 0.22), kk, 0);
     } else {
       swingArms(h, swing, k);
       relaxArms(h, k);
