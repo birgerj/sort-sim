@@ -1650,39 +1650,63 @@ export class Sorter implements Scene3D {
       const zi = LOOP_ZH - 2.4;
       const x0 = PLATFORM_X + 7.6;
       // (Its green coating only in Day: Minimal keeps the plain floor between the taped edges.)
-      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4, undefined, [-(zi + 1.2), -(zi - 1.2)]));
+      // (Its west side open where the way over from the west wall joins: see below.)
+      this.realOnly.push(this.life.addWalkway(x0, LX + STRAIGHT - 1.5, zi, 2.4, undefined, [-(zi + 1.0), -(zi - 1.2)]));
       const x1 = LX + STRAIGHT - 1.5;
       this.life.addWalker({ shirt: 0x2b2f3a, trousers: 0x2b2f3a, suit: { tie: 0xb3122a }, skin: 0xe8c4a0, hair: 0x3a2a1c, hairStyle: 0 }, [[x0, -zi], [x1, -zi], [x1, zi], [x0, zi]], 0.55);
     }
-    // More walkways, where people walk (checked clear of machines, belts and parked things):
-    // from the canteen's stair down the west wall, under the loop's west end, to the corridor
-    // south of the loop by the manual sorting and control room, and over to the loop's walkway.
-    // (None in front of the north doors, where roll cages are pushed.) Coating in Day only.
+    // More walkways, where people walk (checked clear of machines, belts, parked things and the
+    // loop's legs): from the canteen's stair foot over to the west wall's walkway, down it to the
+    // loop's north-west bend, east under the bend to the loop's walkway; from there south inside
+    // the loop's west end (between its west legs and the platform) and out under the south
+    // straight between two legs to the corridor south of the loop by the manual sorting and
+    // control room. (None in front of the north doors, where roll cages are pushed.) Coating in
+    // Day only.
     {
       const ax0 = WX + 2.6;
       const ax1 = WX + 4.8;
-      const az0 = canteenStairFoot(CANTEEN) - 1.7;
+      const foot = canteenStairFoot(CANTEEN);
+      const az0 = foot - 1.7;
+      // The way over to the loop's walkway: 2.2 m, its north edge clear of the bend's leg.
+      const oz0 = -(LOOP_ZH - 2.4) - 1.0;
+      const oz1 = -(LOOP_ZH - 2.4) + 1.2;
+      // South inside the loop: east of the west legs (x LX - LOOP_R), west of the platform, and
+      // under the south straight between the bend's last leg and the straight's first.
+      const cx0 = LX - 1.6;
+      const cx1 = LX + 0.6;
       const bz0 = 11.9;
       const bz1 = 13.9;
       const bx1 = -24;
+      // (The stair comes down against the wall, 1.2 m wide, at WX + 0.7.)
+      const sx1 = WX + 1.3;
+      const wx = WX + 0.15;
       this.realOnly.push(
-        this.life.addFloorPath(ax0, ax1, az0, bz0, [
-          // (Open on the west side by the stair's foot.)
-          [ax0, az0, ax1, az0],
-          // (Open on the east side where the way over to the loop's walkway joins.)
-          [ax1, az0, ax1, -(LOOP_ZH - 2.4) - 1.2],
-          [ax1, -(LOOP_ZH - 2.4) + 1.2, ax1, bz0],
-          [ax0, az0 + 2.4, ax0, bz1],
+        // At the stair's foot, over to the west wall's walkway.
+        this.life.addFloorPath(wx, ax0, az0, foot, [
+          [wx, az0, ax1, az0],
+          [wx, az0, wx, foot],
+          [sx1, foot, ax0, foot],
         ]),
-        // Over from the west wall to the loop's walkway, under the loop's west end.
-        this.life.addFloorPath(ax1, PLATFORM_X + 7.6 - 1.2, -(LOOP_ZH - 2.4) - 1.2, -(LOOP_ZH - 2.4) + 1.2, [
-          [ax1, -(LOOP_ZH - 2.4) - 1.2, PLATFORM_X + 7.6 - 1.2, -(LOOP_ZH - 2.4) - 1.2],
-          [ax1, -(LOOP_ZH - 2.4) + 1.2, PLATFORM_X + 7.6 - 1.2, -(LOOP_ZH - 2.4) + 1.2],
+        this.life.addFloorPath(ax0, ax1, az0, oz1, [
+          // (Open on the east side where the way over to the loop's walkway turns off.)
+          [ax1, az0, ax1, oz0],
+          [ax0, foot, ax0, oz1],
+          [ax0, oz1, cx0, oz1],
         ]),
-        this.life.addFloorPath(ax0, bx1, bz0, bz1, [
-          [ax1, bz0, bx1, bz0],
+        // Over from the west wall to the loop's walkway, under the loop's north-west bend.
+        this.life.addFloorPath(ax1, PLATFORM_X + 7.6 - 1.2, oz0, oz1, [
+          [ax1, oz0, PLATFORM_X + 7.6 - 1.2, oz0],
+          // (Open where the way south turns off.)
+          [cx1, oz1, PLATFORM_X + 7.6 - 1.2, oz1],
+        ]),
+        this.life.addFloorPath(cx0, cx1, oz1, bz0, [
+          [cx0, oz1, cx0, bz1],
+          [cx1, oz1, cx1, bz0],
+        ]),
+        this.life.addFloorPath(cx0, bx1, bz0, bz1, [
+          [cx1, bz0, bx1, bz0],
           // (Open where the walkway to the staff door turns off south.)
-          [ax0, bz1, SDX - SDW, bz1],
+          [cx0, bz1, SDX - SDW, bz1],
           [SDX + SDW, bz1, bx1, bz1],
         ]),
         // South past the control room to the staff door in the south wall, over the forklift
@@ -1702,11 +1726,12 @@ export class Sorter implements Scene3D {
     this.canteen = new Canteen(this, CANTEEN);
     {
       // The ways people walk to and from the stair: from the cages between the belts, under the
-      // loop into it, west along its walkway and over to the west wall, north to the stair's foot.
+      // loop into it, west along its walkway and over to the west wall, north to the stair's foot
+      // (the walkways above).
       const foot = canteenStairFoot(CANTEEN);
       const ax = WX + 3.7;
       const sx = WX + 0.7;
-      const rz = -(LOOP_ZH - 2.4);
+      const rz = -(LOOP_ZH - 2.4) + 0.1;
       const rx0 = PLATFORM_X + 7.6;
       const rx1 = LX + STRAIGHT - 1.5;
       this.canteen.setHallRound([
