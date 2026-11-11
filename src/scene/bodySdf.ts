@@ -9,6 +9,7 @@
 // shader (`clothes` in people.ts) from where a point is on the body at rest, so their edges
 // stay sharp at any level.
 import * as THREE from 'three';
+import { BODY } from './proportions';
 
 /** Detail levels: the grid the surface is sampled on (metres; finer = more triangles). */
 export const BODY_LEVELS = { fine: 0.0125, coarse: 0.032, far: 0.04 } as const;
@@ -36,7 +37,9 @@ const KNEE_Y = 0.5;
 const ANKLE_Y = 0.1;
 const CHEST_Y = 1.17;
 const NECK_Y = 1.52;
-const SHOULDER_Y = 1.385;
+/** Shoulders, armpits and the slope up to the neck sit this much higher (see proportions.ts). */
+const L = BODY.lift;
+const SHOULDER_Y = 1.385 + L;
 const UPPER_ARM = 0.29;
 const FORE = 0.265;
 
@@ -107,19 +110,19 @@ export function bodyField(width: number, belly: number, spread: number) {
   for (const s of [-1, 1]) ell('torso', 'pelvis', [0.068 * w * s, 0.895, -0.055], [0.085, 0.09, 0.075]);
   ell('torso', 'torso', [0, 1.07, 0.008], [0.145 * w, 0.12, 0.104 * d]);
   if (belly > 0.02) ell('torso', 'torso', [0, 1.05, 0.035 + 0.035 * belly], [0.125 * w, 0.11, 0.07 + 0.045 * belly]);
-  ell('torso', 'chest', [0, 1.25, -0.005], [0.166 * w, 0.16, 0.108 * d]);
+  ell('torso', 'chest', [0, 1.25 + L / 2, -0.005], [0.166 * w, 0.16 + L / 2, 0.108 * d]);
   for (const s of [-1, 1]) {
-    ell('torso', 'chest', [0.068 * w * s, 1.28, 0.045], [0.072, 0.06, 0.05]);
-    cone('torso', 'chest', [0.02 * s, 1.42, -0.02], [(F.shoulderX - 0.023) * s, 1.39, -0.01], 0.056, 0.047);
+    ell('torso', 'chest', [0.068 * w * s, 1.28 + L / 2, 0.045], [0.072, 0.06, 0.05]);
+    cone('torso', 'chest', [0.02 * s, 1.42 + L, -0.02], [(F.shoulderX - 0.023) * s, 1.39 + L, -0.01], 0.056, 0.047);
     // The armpit, as on a real body: the chest muscle's lower edge runs up and out to the
     // front of the upper arm, the broad back muscle's edge (lower, further back) to its back,
     // with a hollow between them; the back muscles also widen the back under the shoulder blades.
-    cone('torso', 'chest', [0.05 * w * s, 1.28, 0.07], [(F.shoulderX - 0.015) * s, 1.33, 0.03], 0.036, 0.03);
-    cone('torso', 'chest', [0.07 * w * s, 1.155, -0.07], [(F.shoulderX - 0.02) * s, 1.31, -0.035], 0.044, 0.031);
-    ell('torso', 'chest', [0.1 * w * s, 1.215, -0.04], [0.065, 0.13, 0.055]);
+    cone('torso', 'chest', [0.05 * w * s, 1.28 + L / 2, 0.07], [(F.shoulderX - 0.015) * s, 1.33 + L, 0.03], 0.036, 0.03);
+    cone('torso', 'chest', [0.07 * w * s, 1.155, -0.07], [(F.shoulderX - 0.02) * s, 1.31 + L, -0.035], 0.044, 0.031);
+    ell('torso', 'chest', [0.1 * w * s, 1.215 + L / 2, -0.04], [0.065, 0.13 + L / 2, 0.055]);
   }
   // The neck: its lower part on the chest, its upper part (into the head) on the head.
-  cone('torso', 'chest', [0, 1.4, -0.01], [0, NECK_Y, -0.004], 0.054, 0.05);
+  cone('torso', 'chest', [0, 1.4 + L, -0.01], [0, NECK_Y, -0.004], 0.054, 0.05);
   cone('torso', 'head', [0, NECK_Y, -0.004], [0, 1.63, 0.0], 0.05, 0.046);
   for (const [k, s] of [['L', -1], ['R', 1]] as const) {
     const hip: V3 = [F.hipX * s, HIP_Y, 0];
@@ -137,7 +140,7 @@ export function bodyField(width: number, belly: number, spread: number) {
     const el: V3 = s < 0 ? F.elbow : mx(F.elbow);
     const wr: V3 = s < 0 ? F.wrist : mx(F.wrist);
     const arm = ('arm' + k) as Part;
-    ell(arm, ('arm' + k) as Bone, [(F.shoulderX - 0.003) * s, 1.365, -0.002], [0.058 * lw, 0.075, 0.06 * lw]);
+    ell(arm, ('arm' + k) as Bone, [(F.shoulderX - 0.003) * s, 1.365 + L, -0.002], [0.058 * lw, 0.075, 0.06 * lw]);
     cone(arm, ('arm' + k) as Bone, sh, el, 0.055 * lw, 0.042 * lw);
     const bi = lerp3(sh, el, 0.45);
     ell(arm, ('arm' + k) as Bone, [bi[0], bi[1], bi[2] + 0.012], [0.048 * lw, 0.08, 0.05 * lw]);
@@ -150,7 +153,7 @@ export function bodyField(width: number, belly: number, spread: number) {
     return r;
   };
   const near = (x: number, y: number, z: number, j: V3, r: number) => Math.max(0, 1 - Math.hypot(x - j[0], y - j[1], z - j[2]) / r);
-  const pits: V3[] = [[-(F.shoulderX - 0.023), 1.295, 0], [F.shoulderX - 0.023, 1.295, 0]];
+  const pits: V3[] = [[-(F.shoulderX - 0.023), 1.295 + L * 0.75, 0], [F.shoulderX - 0.023, 1.295 + L * 0.75, 0]];
   const shoulders: V3[] = [F.shoulder, mx(F.shoulder)];
   const hips: V3[] = [[-F.hipX, HIP_Y, 0], [F.hipX, HIP_Y, 0]];
   // Arms and legs join the torso near their joint only (and softly in the armpit), so an arm
@@ -253,7 +256,7 @@ export function buildBody(width: number, belly: number, spread: number, level: B
   const nrm = new Float32Array(n * 3), col = new Float32Array(n * 3), prt = new Float32Array(n * 4);
   const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
   const e = 0.002;
-  const pits: V3[] = [[-(F.shoulderX - 0.02), 1.3, 0], [F.shoulderX - 0.02, 1.3, 0]];
+  const pits: V3[] = [[-(F.shoulderX - 0.02), 1.3 + L * 0.75, 0], [F.shoulderX - 0.02, 1.3 + L * 0.75, 0]];
   for (let i = 0; i < n; i++) {
     const x = pos[i * 3]!, y = pos[i * 3 + 1]!, z = pos[i * 3 + 2]!;
     let gx = body(x + e, y, z) - body(x - e, y, z), gy = body(x, y + e, z) - body(x, y - e, z), gz = body(x, y, z + e) - body(x, y, z - e);
@@ -276,7 +279,7 @@ export function buildBody(width: number, belly: number, spread: number, level: B
       // joint (further down the flank, it stays with the ribs, however close the arm hangs).
       for (const [k, sg] of [['L', -1], ['R', 1]] as const) {
         const hipD = Math.hypot(x - F.hipX * sg, y - 0.92, z);
-        const shD = Math.hypot(x - F.shoulderX * sg, y - 1.385, z);
+        const shD = Math.hypot(x - F.shoulderX * sg, y - SHOULDER_Y, z);
         per[('leg' + k) as Bone] = Math.min(per[('leg' + k) as Bone] ?? 1e9, part(('leg' + k) as Part, x, y, z) + 0.035 + 0.6 * Math.max(0, hipD - 0.14));
         per[('arm' + k) as Bone] = Math.min(per[('arm' + k) as Bone] ?? 1e9, part(('arm' + k) as Part, x, y, z) + 0.03 + 0.6 * Math.max(0, shD - 0.1));
       }

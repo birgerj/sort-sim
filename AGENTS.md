@@ -86,6 +86,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/sim/robotFleet.ts` | Robot routing without drawing: grid, one-way lanes, BFS, reservations, detours. `FLOOR` sets the robot floor size. Tested. |
 | `src/sim/rng.ts` | Seeded random numbers. |
 | `mock-people.html`, `src/mock/people.ts` | Trial, not linked from the hall: a modelled worker (Quaternius, CC0) at three levels of detail with clips (walk on the beat, carry = walk legs + pick-up arms, pick up, push, dance, talk); clothes per pixel from the bind pose. Built by `tools/mockWorker.mjs` into `public/mock/` (left out of the offline cache). |
+| `mock-body.html`, `src/mock/body.ts`, `src/scene/proportions.ts` | Trial: our people's proportions old (`?body=old`) and new side by side, each next to the modelled human scaled to the same height, lines at its crown, chin and shoulder joint. `BODY` in proportions.ts: shoulders and neckline raised (`lift`), head larger from a lower neck joint (`head`, `drop`, set after binding). |
 | `scripts/shots.mjs` | Headless screenshots per department, day and night. |
 | `scripts/measure.mjs` | Headless measurement per department and look: draw calls and triangles per render pass, triangles by distance and by size on screen, which groups own the small ones, update time. `npm run build && node scripts/measure.mjs [dept ...]` (`MEASURE_LOOKS`, `MEASURE_QUALITY`, `MEASURE_FRAMES`); writes `measure/<quality>.json`. |
 

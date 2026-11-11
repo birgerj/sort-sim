@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Body proportions</title>
+    <meta name="description" content="Trial: our people's proportions, old and new, next to a modelled human of the same height." />
+    <meta name="color-scheme" content="light dark" />
+    <style>
+      :root {
+        --bg: #eef0f3;
+        --panel: rgba(255, 255, 255, 0.92);
+        --text: #1d1d1f;
+        --muted: #5b5f68;
+        --line: #d5d8de;
+        --accent: #2fa58f;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --bg: #15161a;
+          --panel: rgba(28, 29, 34, 0.92);
+          --text: #e8e6ef;
+          --muted: #9a9cab;
+          --line: #34363e;
+        }
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.4 system-ui, -apple-system, sans-serif;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+      #panes {
+        position: fixed;
+        inset: 0;
+        display: flex;
+      }
+      #panes iframe {
+        flex: 1;
+        border: 0;
+        min-width: 0;
+      }
+      #panes iframe + iframe {
+        border-left: 1px solid var(--line);
+      }
+      @media (max-width: 700px) {
+        #panes {
+          flex-direction: column;
+        }
+        #panes iframe + iframe {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+      }
+      .tag {
+        position: fixed;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 12px;
+        font-weight: 600;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      #bar {
+        position: fixed;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+        max-width: calc(100vw - 32px);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 8px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+      }
+      button {
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+      }
+      button.on {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      #legend {
+        position: fixed;
+        left: 12px;
+        top: 52px;
+        font-size: 11px;
+        color: var(--muted);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 6px 8px;
+        line-height: 1.6;
+      }
+      #legend i {
+        display: inline-block;
+        width: 14px;
+        height: 2px;
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module" src="./src/mock/body.ts"></script>
+  </body>
+</html>
