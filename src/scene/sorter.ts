@@ -3905,6 +3905,11 @@ export class Sorter implements Scene3D {
   }
 
   // ---------- camera ----------
+  /** The parcel the camera follows, if any. */
+  get followedParcel(): Parcel | null {
+    return this.camMode === 'follow' ? this.follow : null;
+  }
+
   private pickFollow(): void {
     const fresh = this.parcels.filter((p) => p.mode === 'path' && p.pathKind === 'lane' && p.sPrev < 20);
     const pool = fresh.length ? fresh : this.parcels.filter((p) => p.mode === 'loop');

@@ -368,7 +368,14 @@ export class Hud {
       // (Icons are deptIcons.ts's own constant SVG markup.)
       b.innerHTML = icon(CAM_ICONS[id] ?? '');
       b.append(el('span', '', label));
-      b.onclick = () => (id === 'next' ? this.scene.setControl('next', true) : this.scene.setControl('cam', id));
+      b.onclick = () => {
+        const was = this.scene.followedParcel;
+        if (id === 'next') this.scene.setControl('next', true);
+        else this.scene.setControl('cam', id);
+        // (Parcel: whichever it rides with; Next: once it has picked another.)
+        if (id === 'follow') this.showFollowed(null);
+        else if (id === 'next') this.showFollowed(was);
+      };
       cams.append(b);
       if (id !== 'next') this.camBtns.set(id, b);
     };
@@ -900,7 +907,11 @@ export class Hud {
       } else if (k === 'a') this.scene.setControl('cam', 'fly');
       else if (k === 'v') this.scene.setControl('cam', this.scene.cameraMode() === 'walk' ? 'fly' : 'walk');
       else if (k === 'f') this.scene.setControl('cam', 'fly');
-      else if (k === 'p') this.scene.setControl('next', true);
+      else if (k === 'p') {
+        const was = this.scene.followedParcel;
+        this.scene.setControl('next', true);
+        this.showFollowed(was);
+      }
       // D: to the day, or between Minimal and Day while it is day.
       else if (k === 'd') this.setTime('day', this.settings.time === 'day' ? (this.settings.look === 'real' ? 'minimal' : 'real') : undefined);
       else if (k === 'n') this.setTime('night');
@@ -1081,6 +1092,13 @@ export class Hud {
     row('Waiting', `${duration(m.wait)}${counted ? ` · ${100 - pct}%` : ''}`);
     row('Jobs started', String(m.jobs));
     c.body.replaceChildren(state, rows, workBar(pct));
+  }
+
+  /** Riding along with a parcel: its label card, as soon as the camera has picked one (not `was`). */
+  private showFollowed(was: Parcel | null, tries = 90): void {
+    const p = this.scene.followedParcel;
+    if (p && p !== was) this.showLabel(p);
+    else if (tries > 0) requestAnimationFrame(() => this.showFollowed(was, tries - 1));
   }
 
   private showLabel(p: Parcel): void {
