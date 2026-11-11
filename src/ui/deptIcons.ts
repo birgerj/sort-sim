@@ -1,5 +1,7 @@
-// The Go to panel: departments in groups, in the order a parcel goes through the hall, each
-// with an icon. The keys 1–9, 0 follow this order too (`orderDepts`).
+// The menus' stops, each with an icon. Go to: the places, where the camera stays, in groups in
+// the order a parcel goes through the hall; the keys 1–9, 0 follow this order (`orderDepts`).
+// Camera: the ways of looking that move (top down, and riding along with something).
+// Night: the night-only stops.
 //
 // Icons: Lucide (lucide.dev), ISC License, Copyright (c) 2026 Lucide Icons and Contributors.
 // Permission to use, copy, modify, and/or distribute this software for any purpose with or
@@ -9,19 +11,25 @@
 
 /** Groups and the departments in each (by `Poi.name`), in order. */
 export const DEPT_GROUPS: { title: string; ids: string[] }[] = [
-  { title: "Overview", ids: ["top down", "control room"] },
   { title: "Inbound", ids: ["inbound", "infeeds", "scan tunnels"] },
   { title: "Sorting", ids: ["loop", "chutes", "store", "manual sorting"] },
-  { title: "North · roll cages", ids: ["docks"] },
-  { title: "South · robots", ids: ["pickup stations", "bins", "boxes"] },
-  { title: "Office & staff", ids: ["office", "canteen", "computing"] },
-  {
-    title: "Ride along",
-    ids: ["loop ride", "robot", "forklift", "technician"],
-  },
-  // (Last: only there at night, so no other key moves when it shows.)
-  { title: "Night", ids: ["dance floor", "dj"] },
+  { title: "Outbound", ids: ["docks", "pickup stations", "bins", "boxes"] },
+  { title: "Office & staff", ids: ["control room", "office", "canteen", "computing"] },
 ];
+
+/** In the Camera panel: the view from above, and the stops that ride along with something. */
+export const CAMERA_VIEW_IDS = ["top down"];
+export const RIDE_IDS = ["loop ride", "robot", "forklift", "technician"];
+/** In the Night panel. */
+export const NIGHT_IDS = ["dance floor", "dj"];
+
+/** Icons for the Camera panel's own buttons (Lucide: plane, footprints, package, skip-forward). */
+export const CAM_ICONS: Record<string, string> = {
+  fly: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+  walk: '<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/>',
+  follow: '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  next: '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
+};
 
 /** SVG markup (24×24, stroked) per department. */
 export const DEPT_ICONS: Record<string, string> = {
@@ -100,7 +108,7 @@ export function groupDepts<D extends { id: string }>(
     title: g.title,
     depts: g.ids.map((id) => byId.get(id)).filter((d): d is D => !!d),
   }));
-  const known = new Set(DEPT_GROUPS.flatMap((g) => g.ids));
+  const known = new Set([...DEPT_GROUPS.flatMap((g) => g.ids), ...CAMERA_VIEW_IDS, ...RIDE_IDS, ...NIGHT_IDS]);
   const rest = depts.filter((d) => !known.has(d.id));
   if (rest.length) out.push({ title: "More", depts: rest });
   return out.filter((g) => g.depts.length);

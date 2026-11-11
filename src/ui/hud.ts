@@ -5,7 +5,7 @@
  * keys do most things on a desktop. Settings are remembered in localStorage; URL
  * parameters override them for one visit.
  */
-import { DEPT_ICONS, groupDepts, orderDepts } from './deptIcons';
+import { CAM_ICONS, CAMERA_VIEW_IDS, DEPT_ICONS, groupDepts, NIGHT_IDS, orderDepts, RIDE_IDS } from './deptIcons';
 import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
@@ -175,6 +175,8 @@ export class Hud {
       if (b.hidden === show) b.hidden = !show;
     }
     for (const [head, ids] of this.deptHeads) {
+      // (A heading over buttons that are always there has no ids: it stays.)
+      if (!ids.length) continue;
       const show = ids.some((id) => !this.deptBtns.get(id)?.hidden);
       if (head.hidden === show) head.hidden = !show;
     }
@@ -315,51 +317,67 @@ export class Hud {
     this.sheet.append(head);
     this.sheet.setAttribute('aria-label', 'Menu panel');
 
-    // Go to: the departments, in groups with a small heading each (deptIcons.ts).
+    // Go to: the places (the camera stays there), in groups with a small heading each (deptIcons.ts).
+    const depts = this.scene.departments();
+    const byId = new Map(depts.map((d) => [d.id, d]));
+    const icon = (svg: string) =>
+      `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svg}</svg>`;
+    /** A heading over a group, across the grid's row. */
+    const heading = (grid: HTMLElement, title: string, ids: string[]) => {
+      const head = el('div', 'dept-group', title);
+      grid.append(head);
+      this.deptHeads.set(head, ids);
+    };
+    /** A button that flies to a stop. */
+    const stop = (grid: HTMLElement, id: string, key = '') => {
+      const d = byId.get(id);
+      if (!d) return;
+      const b = el('button', 'dept');
+      b.type = 'button';
+      b.title = key;
+      // (Icons are deptIcons.ts's own constant SVG markup.)
+      b.innerHTML = icon(DEPT_ICONS[d.id] ?? '');
+      b.append(el('span', '', d.label));
+      b.onclick = () => this.scene.visit(d.id);
+      grid.append(b);
+      this.deptBtns.set(d.id, b);
+      if (d.when) this.deptWhen.set(d.id, d.when);
+    };
     const go = this.section('go');
     const grid = el('div', 'depts');
     let n = 0;
-    for (const g of groupDepts(this.scene.departments())) {
-      const head = el('div', 'dept-group', g.title);
-      grid.append(head);
-      this.deptHeads.set(head, g.depts.map((d) => d.id));
+    for (const g of groupDepts(depts)) {
+      heading(grid, g.title, g.depts.map((d) => d.id));
       for (const d of g.depts) {
-        const b = el('button', 'dept');
-        b.type = 'button';
-        b.title = n < 10 ? `Key ${(n + 1) % 10}` : '';
+        stop(grid, d.id, n < 10 ? `Key ${(n + 1) % 10}` : '');
         n++;
-        // (Icons are deptIcons.ts's own constant SVG markup.)
-        b.innerHTML = `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${DEPT_ICONS[d.id] ?? ''}</svg>`;
-        b.append(el('span', '', d.label));
-        b.onclick = () => this.scene.visit(d.id);
-        grid.append(b);
-        this.deptBtns.set(d.id, b);
-        if (d.when) this.deptWhen.set(d.id, d.when);
       }
     }
     go.append(grid);
 
-    // Camera.
+    // Camera: the ways of looking that move — fly, walk, from above, and riding along.
     const cam = this.section('camera');
-    const cams = el('div', 'cams');
-    for (const [id, label, sub, key] of [
-      ['fly', 'Fly', 'A tour of the hall, now and then with a parcel', 'F'],
-      ['follow', 'Follow', 'Ride along with a parcel', 'P'],
-      ['walk', 'Walk', 'On foot: WASD, or thumbs', 'V'],
-    ] as const) {
-      const b = el('button', 'cam');
+    const cams = el('div', 'depts');
+    /** A button that switches the camera mode (or, for next, picks another parcel). */
+    const mode = (id: 'fly' | 'walk' | 'follow' | 'next', label: string, key: string) => {
+      const b = el('button', 'dept');
+      b.type = 'button';
       b.title = `Key ${key}`;
-      b.append(el('b', '', label), el('span', '', sub));
-      b.onclick = () => this.scene.setControl('cam', id);
+      // (Icons are deptIcons.ts's own constant SVG markup.)
+      b.innerHTML = icon(CAM_ICONS[id] ?? '');
+      b.append(el('span', '', label));
+      b.onclick = () => (id === 'next' ? this.scene.setControl('next', true) : this.scene.setControl('cam', id));
       cams.append(b);
-      this.camBtns.set(id, b);
-    }
-    // (In the grid with the three: two by two.)
-    const next = el('button', 'cam');
-    next.title = 'Key P';
-    next.append(el('b', '', 'Next parcel'), el('span', '', 'Follow another one'));
-    next.onclick = () => this.scene.setControl('next', true);
-    cams.append(next);
+      if (id !== 'next') this.camBtns.set(id, b);
+    };
+    heading(cams, 'View', []);
+    mode('fly', 'Fly tour', 'F');
+    mode('walk', 'Walk', 'V');
+    for (const id of CAMERA_VIEW_IDS) stop(cams, id);
+    heading(cams, 'Ride along', []);
+    mode('follow', 'Parcel', 'P');
+    mode('next', 'Next parcel', 'P');
+    for (const id of RIDE_IDS) stop(cams, id);
     cam.append(cams, el('p', 'set-help', 'Click or tap a robot, forklift or person in the hall to follow it; a parcel to see its label.'));
 
     // Hub: how busy, how fast, cleardown and figures.
@@ -413,7 +431,13 @@ export class Hud {
     acts.append(clear, stats, fault);
     hub.append(acts);
 
-    this.buildNight(this.section('night'));
+    // Night: first its own stops, then the effects.
+    const nightSec = this.section('night');
+    const nightStops = el('div', 'depts');
+    heading(nightStops, 'Go to', NIGHT_IDS);
+    for (const id of NIGHT_IDS) stop(nightStops, id);
+    nightSec.append(nightStops);
+    this.buildNight(nightSec);
     this.buildMore(this.section('more'));
   }
 
