@@ -7,7 +7,7 @@
  */
 import { CAM_ICONS, CAMERA_VIEW_IDS, DEPT_ICONS, groupDepts, NIGHT_IDS, orderDepts, RIDE_IDS } from './deptIcons';
 import { MOODS } from '../audio/composer';
-import type { Music } from '../audio/music';
+import { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
 import { COUNTRIES, COUNTRY, setCountry, type CountryId } from '../sim/countries';
 import { setXmas, XMAS } from '../sim/season';
@@ -197,7 +197,9 @@ export class Hud {
     if (this.open === 'night') this.refreshNight();
     const most = this.scene.infeedCapacity();
     const q = this.scene.backlog;
-    const txt = `${this.settings.rate}/min · ${Math.round(this.music.bpm)} BPM ${MOODS[this.music.mood]}${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
+    // (The tempo and style the slider asks for: the music gets there in a few bars.)
+    const bpm = this.music.targetBpm;
+    const txt = `${this.settings.rate}/min · ${Math.round(bpm)} BPM ${MOODS[Music.moodAt(bpm)]}${this.settings.rate > most ? ` · infeed takes ${most}` : ''}${q > 0 ? ` · queue ${q}` : ''}`;
     if (this.rateOut.textContent !== txt) this.rateOut.textContent = txt;
     if (this.card) {
       const w = this.scene.parcelInfo(this.card.p).where;

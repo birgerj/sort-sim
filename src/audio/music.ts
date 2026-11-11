@@ -21,7 +21,7 @@ const LOOKAHEAD = 0.35;
 /** Tempo range, and how far it may move per bar (so changes are gradual). */
 export const MIN_BPM = 60;
 export const MAX_BPM = 160;
-const BPM_PER_BAR = 3;
+const BPM_PER_BAR = 8;
 
 export interface MusicNote {
   color: RGB;
@@ -91,6 +91,14 @@ export class Music {
     let best = BPM;
     for (const [, b] of this.bars) if (b.at <= t) best = b.bpm;
     return best;
+  }
+
+  /** Where the tempo is going (the slider's choice), and the style of music at that tempo. */
+  get targetBpm(): number {
+    return this.target;
+  }
+  static moodAt(bpm: number): Mood {
+    return bpm < 82 ? 0 : bpm < 112 ? 1 : bpm < 136 ? 2 : 3;
   }
 
   /** Where the tempo should go (60–160 BPM); it moves there a few BPM per bar. */
@@ -367,7 +375,7 @@ export class Music {
       const { at: start, bpm } = this.barStart(bar);
       const step = 60 / bpm / 4;
       // The mood follows the tempo: ambient when slow, techno and then acid when fast.
-      this.composer.mood = bpm < 82 ? 0 : bpm < 112 ? 1 : bpm < 136 ? 2 : 3;
+      this.composer.mood = Music.moodAt(bpm);
       if (this.ctx && this.delayLine) this.delayLine.delayTime.setTargetAtTime(step * 3, this.ctx.currentTime + Math.max(0, start - t), 0.2);
       for (const ev of this.composer.bar(bar)) {
         const at = start + ev.step * step;
@@ -497,7 +505,8 @@ export class Music {
     switch (ev.voice) {
       case 'kick': {
         if (this.kickBuf) {
-          this.sample(ctx, this.kickBuf, at, 0.8 * ev.vel);
+          // (Softer in the faster styles, where it comes on every beat with more going on.)
+          this.sample(ctx, this.kickBuf, at, 0.8 * [1, 1, 0.78, 0.68][this.composer.mood]! * ev.vel);
           break;
         }
         const o = ctx.createOscillator();
