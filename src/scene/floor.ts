@@ -173,10 +173,10 @@ interface Projector {
   yOff: number;
 }
 
-/** Parcels in a box before it counts as full. */
-export const BOX_FULL = 12;
+/** Parcels in a box before it counts as full (small boxes: swapped often, so the forklifts keep busy). */
+export const BOX_FULL = 6;
 /** A box is full by volume: about this much of parcels (m³). */
-export const BOX_M3 = 0.55;
+export const BOX_M3 = 0.3;
 
 export interface BinView {
   code: string;
@@ -321,7 +321,8 @@ export class RobotFloor {
   robotTop(k: number, out: THREE.Vector3): number {
     const r = this.robots[k]!;
     out.set(r.g.position.x, TOP_Y + 0.08, r.g.position.z);
-    return r.g.rotation.y;
+    // (A parcel turns with the roller deck.)
+    return r.g.rotation.y + r.top.rotation.y;
   }
 
   /** A place on station s's roller table, `dist` metres back from the pickup end (the parcel's centre). */
@@ -329,6 +330,8 @@ export class RobotFloor {
     const st = this.stations[s]!;
     out.set(st.x, DECK_Y, st.z - 0.75 - dist);
   }
+
+  private readonly aimV = new THREE.Vector3();
 
   binPos(b: number, out: THREE.Vector3): void {
     if (b === this.tableBin) {
@@ -547,6 +550,22 @@ export class RobotFloor {
       r.g.position.set(x + ex, 0, z + ez);
       r.g.rotation.y = r.yaw + (party ? r.spin : 0) + eyaw;
       r.top.position.y = TOP_Y + (party ? 0.06 * s.kick : 0) + hop;
+      // The roller deck turns so its rollers run towards the pickup table while loading and towards
+      // the box while dropping (a parcel goes on and off over the rollers, never over a rail).
+      let aim: number | null = null;
+      if (b.state === 'loading' && b.station >= 0) {
+        this.tableSlot(b.station, 0, this.aimV);
+        aim = Math.atan2(this.aimV.x - r.g.position.x, this.aimV.z - r.g.position.z);
+      } else if (b.state === 'dropping' && b.bin >= 0) {
+        this.binPos(b.bin, this.aimV);
+        aim = Math.atan2(this.aimV.x - r.g.position.x, this.aimV.z - r.g.position.z);
+      }
+      if (aim !== null) {
+        // (Rollers work both ways: the nearer of the two ends.)
+        let d = aim - r.g.rotation.y - r.top.rotation.y;
+        d -= Math.round(d / Math.PI) * Math.PI;
+        r.top.rotation.y += d * Math.min(1, dt * 14);
+      }
       r.glow.copy(s.cols[b.k % s.cols.length]!).multiplyScalar(0.4 + s.kick * (party ? 1.2 : 0.7));
       // Number plates on both sides, and the underglow, follow the robot.
       r.g.updateMatrix();
@@ -813,10 +832,12 @@ export class RobotFloor {
     const frameGeo = mergeGeometries(frame)!;
     const deck: THREE.BufferGeometry[] = [new RoundedBoxGeometry(0.92, 0.08, 1.02, 2, 0.03)];
     for (const sz of [-0.49, 0.49]) deck.push(box(0.92, 0.12, 0.04, 0, 0.1, sz));
-    const deckGeo = mergeGeometries(deck.map((g) => (g.index ? g.toNonIndexed() : g)))!;
+    // (Turned a quarter: the rollers run across the robot's length and the rails are at its ends,
+    // so a parcel comes on from the pickup table and goes off into a box over the rollers.)
+    const deckGeo = mergeGeometries(deck.map((g) => (g.index ? g.toNonIndexed() : g)))!.rotateY(Math.PI / 2);
     const rollers: THREE.BufferGeometry[] = [];
     for (let x = -0.36; x <= 0.37; x += 0.09) rollers.push(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 10).rotateX(Math.PI / 2).translate(x, 0.07, 0));
-    const rollerGeo = mergeGeometries(rollers)!;
+    const rollerGeo = mergeGeometries(rollers)!.rotateY(Math.PI / 2);
     const wheels: THREE.BufferGeometry[] = [];
     for (const sx of [-0.33, 0.33]) for (const sz of [-0.36, 0.36]) wheels.push(new THREE.CylinderGeometry(0.075, 0.075, 0.06, 14).rotateZ(Math.PI / 2).translate(sx, 0.075, sz));
     const wheelGeo = mergeGeometries(wheels)!;
