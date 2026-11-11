@@ -56,8 +56,8 @@ export default defineConfig({
   base: './',
   build: {
     chunkSizeWarningLimit: 1200,
-    // (mock-people.html, mock-body.html: trial pages, not linked from the hall.)
-    rollupOptions: { input: { main: 'index.html', mock: 'mock-people.html', body: 'mock-body.html' } },
+    // (mock-people.html: a trial page, not linked from the hall.)
+    rollupOptions: { input: { main: 'index.html', mock: 'mock-people.html' } },
   },
   plugins: [bakedBodies(), serviceWorker()],
   test: {

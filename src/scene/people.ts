@@ -717,8 +717,6 @@ import { BELLIES, BODIES_FILE, bodyKey, decodeBodies, REST_SPREAD, WIDTHS } from
  * Without them, each body is made in the browser when first needed.
  */
 export async function loadBakedBodies(): Promise<void> {
-  // (The baked ones have the current proportions; the old ones are made here.)
-  if (BODY.old) return;
   try {
     const res = await fetch(new URL(BODIES_FILE, document.baseURI));
     if (!res.ok) return;
