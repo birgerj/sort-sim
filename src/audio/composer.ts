@@ -13,7 +13,7 @@
  *   1 deep        a thin pad now and then, soft kick and rim, a syncopated bass, leads
  *   2 house       no pads: a pounding four-on-the-floor kick, claps, open hats on the
  *                 off-beat, an off-beat octave bass and short chord stabs
- *   3 acid techno no pads or leads: hard kick, rolling hats, a squelchy 16th acid line
+ *   3 acid techno no pads or leads: hard kick, rolling hats, an acid line from written 303-style patterns
  */
 import { Rng } from '../sim/rng';
 
@@ -61,6 +61,48 @@ const PROGRESSIONS: number[][][] = [
   ],
 ];
 
+/**
+ * Acid lines: written patterns in the way 303 lines are made, not random notes. One step per
+ * 16th, separated by spaces (the bars' quarters by "|", for reading only):
+ *   a number   a note, in semitones above the chord's root (12: the octave up, 1: the flat
+ *              second, the "phrygian" squelch; 3, 5, 7, 10: the minor scale's colours)
+ *   A          accented (louder, the filter opens wider)
+ *   S          slides into the next note (no new attack, the pitch glides; best into an octave)
+ *   -          a rest      _  a tie: the note before goes on
+ * What makes them work, as the 303's own sequencer teaches: mostly the root, one or two
+ * flourishes, rests to leave room for the kick, accents in pairs now and then, slides into an
+ * octave jump, and a pattern that repeats. Two of them are shorter than a bar (12 and 3 steps),
+ * so they turn against the four-on-the-floor kick, the classic acid trick.
+ */
+const ACID_PATTERNS = [
+  '0A 0 12S 0 | 0 3 0 0A | 12 0 10S 12 | 0 0 7 0',
+  '0A - 0 12 | - 0 3S 5 | 0A - 0 10 | 12S 0 - 7',
+  '0 0A 1S 0 | 0 12 0 1 | 0A 0 12S 13 | 0 7 0 3',
+  '0A 0 0 12 | 0 _ 3 0 | 0 0A 12 _ | 10 0 7S 12',
+  '0 3 7 10A | 12 10S 7 3 | 0 0 12A 0 | 7S 5 3 0',
+  '0A 0A - 12 | 0 - 0 3 | 0A 0A - 15 | 12S 10 7 5',
+  '0 12 0 12A | 0 12S 0 10 | 0 12 0 12A | 3S 5 7 12',
+  '0A 0 12 0 3 0 0A 12S 10 0 7 0',
+  '0A 12 0',
+  '0A - - 0 | - - 12S 0 | 0 - 3 - | 7S 5 - 0',
+].map(parseAcid);
+/** Last beat of the 4th and 8th bar of a pattern: a flourish instead. */
+const ACID_FILLS = ['12S 15 12S 10', '0 12A 0 12A', '7S 10 12S 15', '3S 5 7S 12', '0A 1S 0 -'].map(parseAcid);
+
+interface AcidStep {
+  /** Semitones above the root; null: a rest; 'tie': the note before goes on. */
+  n: number | null | 'tie';
+  accent: boolean;
+  slide: boolean;
+}
+
+function parseAcid(text: string): AcidStep[] {
+  return text
+    .split(/\s+/)
+    .filter((t) => t && t !== '|')
+    .map((t) => (t === '-' ? { n: null, accent: false, slide: false } : t === '_' ? { n: 'tie' as const, accent: false, slide: false } : { n: parseInt(t, 10), accent: t.includes('A'), slide: t.includes('S') }));
+}
+
 /** D minor pentatonic for the lead, two octaves. */
 const LEAD_SCALE = [62, 65, 67, 69, 72, 74, 77, 79, 81, 84];
 
@@ -82,6 +124,8 @@ export function chordOf(bar: number): number[] {
 
 export class Composer {
   private lastLead = 4;
+  /** The bar being written (for the acid patterns that run across bars). */
+  private barNo = 0;
   /** How busy the music is (see the top of the file). */
   mood: Mood = 1;
 
@@ -106,6 +150,7 @@ export class Composer {
         this.house(inForm, sec, chord, root, rng, ev);
         break;
       default:
+        this.barNo = bar;
         this.acid(inForm, sec, root, rng, ev);
     }
     return ev.sort((a, b) => a.step - b.step);
@@ -179,17 +224,32 @@ export class Composer {
     for (let s = 2; s < 16; s += 4) ev.push({ voice: 'hat', step: s, vel: 0.7, len: 2, open: true });
     for (let s = 0; s < 16; s++) if (s % 4 !== 2) ev.push({ voice: 'hat', step: s, vel: 0.3 + rng.next() * 0.3, len: 1 });
     if (!drop) for (const s of [3, 7, 11, 15]) if (rng.chance(0.5)) ev.push({ voice: 'bass', step: s, midi: root, vel: 0.5, len: 1 });
-    const notes = [0, 0, 0, 12, 3, 7, 10, 0, 12, 5];
-    let prev = -1;
-    for (let s = 0; s < 16; s++) {
-      if (!rng.chance(sec === 'intro' ? 0.4 : drop ? 0.5 : 0.75)) {
-        prev = -1;
-        continue;
+    // A written pattern (see ACID_PATTERNS), a new one every 8 bars, played over the chord's root;
+    // a flourish on the last beat of every 4th bar. Short patterns run on across the bars.
+    const cycle = Math.floor(this.barNo / 8);
+    const pat = ACID_PATTERNS[(cycle * 3 + this.seed) % ACID_PATTERNS.length]!;
+    const fill = this.barNo % 4 === 3 ? ACID_FILLS[(cycle + Math.floor(this.barNo / 4)) % ACID_FILLS.length]! : null;
+    const steps: AcidStep[] = [];
+    for (let s = 0; s < 16; s++) steps.push(fill && s >= 12 ? fill[s - 12]! : pat[(this.barNo * 16 + s) % pat.length]!);
+    let last: NoteEvent | null = null;
+    let slideIn = false;
+    steps.forEach((st, s) => {
+      if (st.n === 'tie') {
+        if (last) last.len++;
+        return;
       }
-      const slide = prev >= 0 && rng.chance(0.25);
-      const midi = root + notes[Math.floor(rng.next() * notes.length)]!;
-      ev.push({ voice: 'acid', step: s, midi, vel: drop ? 0.6 : 0.85, len: slide ? 2 : 1, accent: rng.chance(0.3), slide });
-      prev = midi;
-    }
+      if (st.n === null || (sec === 'intro' && !st.accent && s % 4 !== 0)) {
+        // (The intro keeps only the downbeats and the accents: the line comes in thin.)
+        last = null;
+        slideIn = false;
+        return;
+      }
+      const e: NoteEvent = { voice: 'acid', step: s, midi: root + st.n, vel: drop ? 0.6 : 0.85, len: 1, accent: st.accent, slide: slideIn };
+      // A slide holds the note into the next one (no gap, no new attack).
+      if (st.slide) e.len = 2;
+      ev.push(e);
+      last = e;
+      slideIn = st.slide;
+    });
   }
 }
