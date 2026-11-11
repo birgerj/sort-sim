@@ -283,6 +283,19 @@ function face(h: Human, dt: number): void {
   h.mouth.scale.set(1 - 0.15 * open, 1 + 2.4 * open, 1);
 }
 
+/**
+ * Last step for someone posed from a clip (clips.ts): the clip has placed the body; only the
+ * ponytail, blinking and talking are left. (Marked as walking, so the gait picks up smoothly.)
+ */
+export function settleFace(h: Human, dt: number): void {
+  const m = h.m;
+  dt = clamp(dt, 0, 0.1);
+  m.t += dt;
+  m.walk = 1;
+  if (h.tail) swingTail(h, dt);
+  face(h, dt);
+}
+
 /** The ponytail: a damped spring that wants to hang down and lags behind turns and bobbing. */
 function swingTail(h: Human, dt: number): void {
   const m = h.m;

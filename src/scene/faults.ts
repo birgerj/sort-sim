@@ -110,8 +110,8 @@ export class FaultCrew {
   ) {
     for (const s of L.sites) this.sites.set(s.chute, s);
     k.put(this.group);
-    // Navy work clothes with reflective bands (a vest of the same blue), a white helmet.
-    this.h = buildHuman(k, { shirt: 0x22283f, trousers: 0x22283f, vest: 0x1d4ed8, helmet: 0xf3f4f6, build: { height: 1, width: 1, belly: 0.3 }, hairStyle: 0 });
+    // Navy work clothes with reflective bands (a vest of the same blue).
+    this.h = buildHuman(k, { shirt: 0x22283f, trousers: 0x22283f, vest: 0x1d4ed8, build: { height: 1, width: 1, belly: 0.3 }, hairStyle: 0 });
     this.group.add(this.h.root);
     this.buildScooter();
     this.buildBench();

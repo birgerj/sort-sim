@@ -30,8 +30,8 @@ const SHIFT_GROUP = 6;
 const HUB_MIN_PER_BEAT = 0.25;
 
 const LOOKS = [
-  { shirt: 0x3a3d44, trousers: 0x22283f, vest: 0xf2a51a, helmet: 0xffffff },
-  { shirt: 0xf3f4f6, trousers: 0x22283f, vest: 0xc8ff3a, helmet: 0xf2c200 },
+  { shirt: 0x3a3d44, trousers: 0x22283f, vest: 0xf2a51a },
+  { shirt: 0xf3f4f6, trousers: 0x22283f, vest: 0xc8ff3a },
   { shirt: 0x1755fe, trousers: 0x3a3d44, vest: 0xf2a51a },
   { shirt: 0x22283f, trousers: 0x22283f, vest: 0xc8ff3a, hairStyle: 2 },
   { shirt: 0x6b3fd1, trousers: 0x22283f, vest: 0xf2a51a, hairStyle: 1 },

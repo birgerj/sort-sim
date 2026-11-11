@@ -98,7 +98,7 @@ export class ManualSort {
     // The worker at the table (by day).
     const was = k.only;
     k.only = 'day';
-    this.worker = buildHuman(k, { shirt: 0x2fa58f, trousers: 0x22283f, vest: 0xf2c200, helmet: 0xffffff }, { x: HOME.x, z: HOME.z, ry: TO_TABLE });
+    this.worker = buildHuman(k, { shirt: 0x2fa58f, trousers: 0x22283f, vest: 0xf2c200 }, { x: HOME.x, z: HOME.z, ry: TO_TABLE });
     k.only = was;
   }
 

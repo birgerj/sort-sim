@@ -12,7 +12,8 @@ import type { FloorKit } from './floor';
 import { buildForklift } from './forklift';
 import { XMAS } from '../sim/season';
 import { buildHuman, type Human } from './people';
-import { gait, relaxArms, settle, sit, swingArms } from './motion';
+import { gait, relaxArms, settle, settleFace, sit, swingArms } from './motion';
+import { CLIPS, poseClip } from './clips';
 import { ANTICS, type ActKind } from './antics';
 import { Rng } from '../sim/rng';
 
@@ -151,6 +152,14 @@ export class Life {
       if (w.seated) {
         w.seated.position.set(p.x, 0, p.z);
         w.seated.rotation.y = w.yaw;
+        continue;
+      }
+      // A walking clip when there is one (and the hands are free): two steps over two beats,
+      // the stride shortened to the walking speed.
+      const clip = CLIPS.get('Walk_Loop');
+      if (clip && !w.h.armR.userData.wave && !w.h.armR.userData.hold) {
+        poseClip(w.h, clip, bt / 2 + w.h.m.seed, Math.min(1, w.speed / clip.step));
+        settleFace(w.h, dt);
         continue;
       }
       // One step per beat; the stride follows the walking speed.
@@ -577,9 +586,9 @@ export class Life {
       h.armR.userData.wave = true;
       this.walkers.push(walker(h, new Route([[-55, 15], [-46.5, 15], [-46.5, 18.3], [-55, 18.3]]), 0.35, 0));
     }
-    walk({ shirt: 0x2fa58f, trousers: 0x3a3d44, vest: 0xc8ff3a, helmet: 0xffffff }, [[-58, 12.6], [-28, 12.6], [-28, 13.6], [-58, 13.6]], 0.6, 0.2);
+    walk({ shirt: 0x2fa58f, trousers: 0x3a3d44, vest: 0xc8ff3a }, [[-58, 12.6], [-28, 12.6], [-28, 13.6], [-58, 13.6]], 0.6, 0.2);
     // (The other way round, a little to the side: they pass each other, and give each other a high five.)
-    walk({ shirt: 0xf3f4f6, trousers: 0x22283f, vest: 0xf2a51a, helmet: 0xf2c200 }, [[-28, 13.2], [-58, 13.2], [-58, 13.0], [-28, 13.0]], 0.6, 0.7);
+    walk({ shirt: 0xf3f4f6, trousers: 0x22283f, vest: 0xf2a51a }, [[-28, 13.2], [-58, 13.2], [-58, 13.0], [-28, 13.0]], 0.6, 0.7);
     // Cleaner on a ride-on scrubber, under the high infeeds.
     const sc = new THREE.Group();
     this.group.add(sc);

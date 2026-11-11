@@ -85,7 +85,7 @@ const parcelMat = std(0xc49a6c);
 
 // ---- Loading ----
 const loader = new GLTFLoader();
-const [model, animGltf] = await Promise.all([loader.loadAsync('./mock/worker.glb'), loader.loadAsync('./mock/anims.glb')]);
+const [model, animGltf] = await Promise.all([loader.loadAsync('./mock/worker.glb'), loader.loadAsync('./anims/ual.glb')]);
 const clips = new Map(animGltf.animations.map((c) => [c.name, c]));
 const clip = (n: string) => clips.get(n)!;
 

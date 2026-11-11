@@ -183,7 +183,7 @@ export class Inbound {
       nose.position.y = lay.beltY - 0.04;
       // The unloaders: hi-vis, gloves.
       const crew: Unloader[] = ([1, -1] as const).map((side, j) => {
-        const h = buildHuman(k, { shirt: [0x3a3d44, 0x22283f, 0x1755fe][(i + j) % 3]!, trousers: 0x22283f, vest: [0xf2a51a, 0xc8ff3a][(i + j) % 2]!, helmet: [0xf2c200, 0xffffff][((i >> 1) + j) % 2]! });
+        const h = buildHuman(k, { shirt: [0x3a3d44, 0x22283f, 0x1755fe][(i + j) % 3]!, trousers: 0x22283f, vest: [0xf2a51a, 0xc8ff3a][(i + j) % 2]! });
         k.put(h.root);
         return { h, side, ux: x + side * 1.25, uz: wallZ + 1.4, yaw: Math.PI, carry: [] };
       });
