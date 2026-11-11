@@ -401,6 +401,8 @@ function shapes(level: BodyLevel): Record<string, THREE.BufferGeometry> {
   };
   // The neckline (collar, lanyard, the suit's V and tie) rises with the shoulders.
   for (const key of ['collar', 'lanyard', 'shirtV', 'lapels', 'tie']) geo[key]!.translate(0, BODY.lift, 0);
+  // Hands their real size, from the wrist (the hand joint).
+  geo.hand!.scale(BODY.hand, BODY.hand, BODY.hand);
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
   for (const key of ['head', 'ears', 'eyes', 'pupils', 'lips', 'hair', 'hairLong', 'hairTail', 'hairT', 'hairLongT', 'hairTailT', 'helmet', 'band', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard', 'phonesBand', 'phonesBandH', 'phonesCups', 'phonesCupsH']) geo[key]!.translate(0, -NECK_Y, 0);
   // Eyes and mouth hang from their own joints on the head.

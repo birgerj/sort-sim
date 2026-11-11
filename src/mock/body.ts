@@ -9,7 +9,7 @@ import type { FloorKit } from '../scene/floor';
 import { BODY } from '../scene/proportions';
 
 const params = new URLSearchParams(location.search);
-const VIEWS = ['Front', 'Side', 'Three-quarter', 'Heads'] as const;
+const VIEWS = ['Front', 'Side', 'Three-quarter', 'Close'] as const;
 type View = (typeof VIEWS)[number];
 
 if (!params.has('pane')) {
@@ -44,7 +44,7 @@ if (!params.has('pane')) {
   loading.textContent = 'Building…';
   const tag = document.createElement('div');
   tag.className = 'tag';
-  tag.textContent = BODY.old ? 'Old: long neck, small head' : 'New: shoulders up 4 cm, head 6 % larger';
+  tag.textContent = BODY.old ? 'Old: long neck, small head' : 'New: shoulders up and sloping, head 6 % larger, hands larger';
   const legend = document.createElement('div');
   legend.id = 'legend';
   legend.innerHTML = 'Reference (grey, same height):<br><i style="background:#e2231a"></i>crown<br><i style="background:#1755fe"></i>chin<br><i style="background:#2fa58f"></i>shoulder joint';
@@ -134,9 +134,9 @@ if (!params.has('pane')) {
     const w = innerWidth;
     const h = innerHeight;
     renderer.setSize(w, h);
-    const heads = view === 'Heads';
-    const span = heads ? 0.7 : 2.25;
-    const cy = heads ? 1.5 : 0.98;
+    const heads = view === 'Close';
+    const span = heads ? 1.0 : 2.25;
+    const cy = heads ? 1.38 : 0.98;
     const a = w / h;
     camera.left = (-span / 2) * a;
     camera.right = (span / 2) * a;
@@ -151,6 +151,11 @@ if (!params.has('pane')) {
     view = v;
     const ry = v === 'Side' ? Math.PI / 2 : v === 'Three-quarter' ? 0.6 : 0;
     for (const g of holders) g.rotation.y = ry;
+    // Close: the worker and the reference only, side by side.
+    const close = v === 'Close';
+    holders[0]!.position.x = close ? 0.26 : 0;
+    holders[1]!.position.x = close ? -0.26 : -0.62;
+    holders[2]!.visible = !close;
     resize();
   };
   addEventListener('resize', resize);

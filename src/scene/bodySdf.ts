@@ -39,6 +39,7 @@ const CHEST_Y = 1.17;
 const NECK_Y = 1.52;
 /** Shoulders, armpits and the slope up to the neck sit this much higher (see proportions.ts). */
 const L = BODY.lift;
+const SL = BODY.slope;
 const SHOULDER_Y = 1.385 + L;
 const UPPER_ARM = 0.29;
 const FORE = 0.265;
@@ -113,7 +114,9 @@ export function bodyField(width: number, belly: number, spread: number) {
   ell('torso', 'chest', [0, 1.25 + L / 2, -0.005], [0.166 * w, 0.16 + L / 2, 0.108 * d]);
   for (const s of [-1, 1]) {
     ell('torso', 'chest', [0.068 * w * s, 1.28 + L / 2, 0.045], [0.072, 0.06, 0.05]);
-    cone('torso', 'chest', [0.02 * s, 1.42 + L, -0.02], [(F.shoulderX - 0.023) * s, 1.39 + L, -0.01], 0.056, 0.047);
+    // The slope from the neck to the shoulder (the trapezius): high beside the neck and a
+    // little behind it, down to the top of the shoulder.
+    cone('torso', 'chest', [(0.02 + 0.015 * SL) * s, 1.42 + L + 0.04 * SL, -0.02 - 0.015 * SL], [(F.shoulderX - 0.023 - 0.007 * SL) * s, 1.39 + L - 0.012 * SL, -0.01], 0.056 - 0.008 * SL, 0.047 - 0.004 * SL);
     // The armpit, as on a real body: the chest muscle's lower edge runs up and out to the
     // front of the upper arm, the broad back muscle's edge (lower, further back) to its back,
     // with a hollow between them; the back muscles also widen the back under the shoulder blades.
@@ -122,7 +125,8 @@ export function bodyField(width: number, belly: number, spread: number) {
     ell('torso', 'chest', [0.1 * w * s, 1.215 + L / 2, -0.04], [0.065, 0.13 + L / 2, 0.055]);
   }
   // The neck: its lower part on the chest, its upper part (into the head) on the head.
-  cone('torso', 'chest', [0, 1.4 + L, -0.01], [0, NECK_Y, -0.004], 0.054, 0.05);
+  // (Leaning a little forward, as a neck does.)
+  cone('torso', 'chest', [0, 1.4 + L, -0.01 - 0.02 * SL], [0, NECK_Y, -0.004], 0.054, 0.05);
   cone('torso', 'head', [0, NECK_Y, -0.004], [0, 1.63, 0.0], 0.05, 0.046);
   for (const [k, s] of [['L', -1], ['R', 1]] as const) {
     const hip: V3 = [F.hipX * s, HIP_Y, 0];
@@ -140,7 +144,7 @@ export function bodyField(width: number, belly: number, spread: number) {
     const el: V3 = s < 0 ? F.elbow : mx(F.elbow);
     const wr: V3 = s < 0 ? F.wrist : mx(F.wrist);
     const arm = ('arm' + k) as Part;
-    ell(arm, ('arm' + k) as Bone, [(F.shoulderX - 0.003) * s, 1.365 + L, -0.002], [0.058 * lw, 0.075, 0.06 * lw]);
+    ell(arm, ('arm' + k) as Bone, [(F.shoulderX - 0.003 + 0.004 * SL) * s, 1.365 + L - 0.012 * SL, -0.002], [0.058 * lw, 0.075, 0.06 * lw]);
     cone(arm, ('arm' + k) as Bone, sh, el, 0.055 * lw, 0.042 * lw);
     const bi = lerp3(sh, el, 0.45);
     ell(arm, ('arm' + k) as Bone, [bi[0], bi[1], bi[2] + 0.012], [0.048 * lw, 0.08, 0.05 * lw]);
