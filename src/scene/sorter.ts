@@ -1505,7 +1505,7 @@ export class Sorter implements Scene3D {
     this.composer.addPass(this.bokeh);
     this.grade = gradePass();
     this.composer.addPass(this.grade);
-    // Edge smoothing for the realistic day: without the ink lines, stair-stepped edges show.
+    // Edge smoothing: for the realistic day (stair-stepped edges), and the minimal look's ink lines.
     this.smaa = new SMAAPass(1, 1);
     this.smaa.enabled = false;
     this.composer.addPass(this.smaa);
@@ -4739,7 +4739,9 @@ export class Sorter implements Scene3D {
       p.m.metalness = p.mt + (p.pm - p.mt) * rd;
     }
     this.grade.enabled = this.real && day > 0.02;
-    this.smaa.enabled = this.real && day > 0.5;
+    // Edge smoothing: the realistic day, and the ink lines of the minimal look (but not on low: it
+    // costs three passes over the screen).
+    this.smaa.enabled = this.real ? day > 0.5 : this.quality !== 'low';
     (this.grade.uniforms.uAmount as THREE.IUniform<number>).value = day;
     const show = day > 0.5;
     if (show === this.dayShown) return;
