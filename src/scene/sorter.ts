@@ -1600,7 +1600,8 @@ export class Sorter implements Scene3D {
         loopEdge: edge,
         trees: [
           { x: -55.8, z: 21.2, h: 7 },
-          { x: -48.6, z: 31.2, h: 6 },
+          // (West of the coffee and vending machines, clear of them.)
+          { x: -53.5, z: 31.0, h: 6 },
           { x: -19.5, z: -36.2, h: 7 },
           { x: PLATFORM_X - 2.2, z: 2.4, y: PLATFORM_Y, h: 3.4 },
         ],

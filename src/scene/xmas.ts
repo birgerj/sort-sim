@@ -553,21 +553,23 @@ export class Xmas {
 
   /** A giant candy cane: a red-and-white striped staff with a hook (shooting up out of the floor). */
   private cane(x: number, z: number, ry: number): void {
-    const stripes = canvasTex(64, 256, (g) => {
+    // Red bands that wind round the staff: one diagonal band per tile, the tile repeated along the
+    // length (u) and once round it (v), so the bands join up into a spiral.
+    const stripes = canvasTex(64, 64, (g) => {
       g.fillStyle = '#ffffff';
-      g.fillRect(0, 0, 64, 256);
+      g.fillRect(0, 0, 64, 64);
       g.fillStyle = '#d0021b';
-      for (let y = -64; y < 320; y += 48) {
+      for (const o of [-64, 0, 64]) {
         g.beginPath();
-        g.moveTo(0, y);
-        g.lineTo(64, y + 32);
-        g.lineTo(64, y + 52);
-        g.lineTo(0, y + 20);
+        g.moveTo(o, 0);
+        g.lineTo(o + 24, 0);
+        g.lineTo(o + 88, 64);
+        g.lineTo(o + 64, 64);
         g.fill();
       }
     });
     stripes.wrapS = stripes.wrapT = THREE.RepeatWrapping;
-    stripes.repeat.set(1, 6);
+    stripes.repeat.set(9, 1);
     const pts: THREE.Vector3[] = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1.4, 0)];
     for (let a = 0; a <= 180; a += 15) {
       const r = (a * Math.PI) / 180;
