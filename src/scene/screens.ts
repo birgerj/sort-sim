@@ -295,9 +295,24 @@ export class Screens {
       while (text.length > 1 && g.measureText(`${text}…`).width > max) text = text.slice(0, -1);
       return `${text}…`;
     };
+    // (Left-aligned, whatever was drawn before: the fault marks centre theirs.)
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
     panels.forEach((pn, i) => {
       const x = x0 + i * (w + gap);
       this.panelRects[i] = { x, y: y0, w, h };
+      // Everything of a panel stays inside it.
+      g.save();
+      g.beginPath();
+      g.rect(x, y0, w, h);
+      g.clip();
+      this.scanPanel(g, pn, x, y0, w, h, fit);
+      g.restore();
+    });
+  }
+
+  private scanPanel(g: CanvasRenderingContext2D, pn: NonNullable<HubMap['scanPanels']>[number], x: number, y0: number, w: number, h: number, fit: (text: string, max: number) => string): void {
+    {
       const f = Math.max(0, 1 - pn.age / SCAN_BLINK);
       const last = pn.last;
       const ok = !last || last.read;
@@ -348,7 +363,7 @@ export class Screens {
         g.font = '500 14px system-ui, sans-serif';
         g.fillText(fit(`${last.size} · ${last.kg.toFixed(1)} kg`, w - 24), x + 12, y0 + 95);
       }
-    });
+    }
   }
 
   /**
