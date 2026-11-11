@@ -2,7 +2,7 @@
 // in the meantime: sound on or off, and the country the hub serves (the one the browser points
 // to by default). Start goes straight in when the hall is ready; before that, the loading screen
 // shows until it is.
-import { COUNTRIES, COUNTRY, type CountryId } from '../sim/countries';
+import { COUNTRIES, COUNTRY, setCountry, type CountryId } from '../sim/countries';
 import { loadSettings, saveSettings } from './hud';
 import { updateOnCard } from './pwa';
 
@@ -47,7 +47,7 @@ export function startCard(onStart: (sound: boolean) => void): void {
   };
   showSound();
 
-  // Country: the destinations, names and postcodes follow it; changing it starts the build again.
+  // Country: the destinations, names and postcodes follow it.
   const country = el('select', 'country');
   country.setAttribute('aria-label', 'Country the hub serves');
   for (const k of COUNTRIES) {
@@ -61,7 +61,9 @@ export function startCard(onStart: (sound: boolean) => void): void {
     if (id === COUNTRY.id) return;
     settings.country = id;
     saveSettings(settings);
-    location.reload();
+    // (Live: the hall takes the new names, also when it is still being built.)
+    if (new URLSearchParams(location.search).get('game')) location.reload();
+    else setCountry(id);
   };
 
   // Update: only when a new version is waiting. It is then the first choice, at the top of the

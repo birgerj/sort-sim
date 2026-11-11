@@ -1060,11 +1060,7 @@ export class Docks {
     const ranges = split(NORTH_CITIES[city]!, CAGES);
     const cages: Cage[] = cageAt.map(([at, ry], i) => this.buildCage(at, ry, ranges[i]!));
     const n0 = this.docks.length * CAGES;
-    cages.forEach((c, i) => {
-      // A coloured card about A4 size, black print: postcodes, and the cage's number (as the projector shows it) and city.
-      const bg = CARD_COLS[i % CARD_COLS.length]!;
-      for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), `${i + 1} · ${NORTH_CITIES[city]!.name}`, { bg, fg: '#111111', sub: '#111111', border: '#111111' });
-    });
+    this.cardsFor(n0, city, cages);
     // The return tote for parcels sent here by mistake.
     k.box('tote', k.std(0x1f3f80, 0.6, 0.1, 0x2c62c8), x + 0.9, 0.22, E - 0.4, 0.6, 0.44, 0.42);
     const worker = this.buildWorker(v(x, 0, E - 1.1));
@@ -1104,6 +1100,29 @@ export class Docks {
       this.meshMat.side = THREE.DoubleSide;
     }
     return this.meshMat;
+  }
+
+  /** A coloured card about A4 size on each cage, black print: postcodes, and the cage's number (as the projector shows it) and city. */
+  private cardsFor(n0: number, city: number, cages: Cage[]): void {
+    cages.forEach((c, i) => {
+      const bg = CARD_COLS[i % CARD_COLS.length]!;
+      for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), `${i + 1} · ${NORTH_CITIES[city]!.name}`, { bg, fg: '#111111', sub: '#111111', border: '#111111' });
+    });
+  }
+
+  /**
+   * Another country: each dock serves the city of the same rank there; its cages take the same
+   * parts of that city's postcodes (cards redrawn). `move` gives a parcel waiting at the dock or
+   * in a cage its postcode in the new country (once per parcel).
+   */
+  setCountry(move: (p: DockParcel) => void): void {
+    this.docks.forEach((d, n) => {
+      const ranges = split(NORTH_CITIES[d.city]!, CAGES);
+      d.cages.forEach((c, i) => (c.range = ranges[i]!));
+      this.cardsFor(n * CAGES, d.city, d.cages);
+      for (const p of d.queue) move(p);
+      for (const c of d.cages) for (const p of c.items) move(p);
+    });
   }
 
   private buildCage(at: V3, ry: number, range: [number, number]): Cage {

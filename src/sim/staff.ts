@@ -77,6 +77,9 @@ export interface StaffMember {
   obj: unknown;
   /** Asked every tick: are they working now? */
   busy: () => boolean;
+  /** What the name was made from (to name them again for another country). */
+  woman: boolean;
+  seed: number;
 }
 
 export class Staff {
@@ -84,12 +87,14 @@ export class Staff {
   private readonly taken = new Set<string>();
   private last: number | null = null;
 
-  constructor(private readonly country: Country = COUNTRY) {}
+  constructor(private country: Country = COUNTRY) {}
 
   /** Someone with a job: named from the seed, counted from hub time `now`. */
   add(role: Role, place: string, woman: boolean, seed: number, obj: unknown, busy: () => boolean, now: number): StaffMember {
     const m: StaffMember = {
       id: this.list.length + 1,
+      woman,
+      seed: seed + this.list.length * 7919,
       name: staffName(this.country, woman, seed + this.list.length * 7919, this.taken),
       role,
       place,
@@ -104,6 +109,13 @@ export class Staff {
     };
     this.list.push(m);
     return m;
+  }
+
+  /** Another country: everyone gets a name from there (from the same seed, so always the same one). */
+  setCountry(c: Country): void {
+    this.country = c;
+    this.taken.clear();
+    for (const m of this.list) m.name = staffName(c, m.woman, m.seed, this.taken);
   }
 
   /** Count the minutes since the last tick for everyone, by what they are doing now. */

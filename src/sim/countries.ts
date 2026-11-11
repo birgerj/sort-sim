@@ -541,7 +541,22 @@ function chosen(): Country {
   return COUNTRIES.find((c) => c.id === id) ?? COUNTRIES[0]!;
 }
 
-export const COUNTRY: Country = chosen();
+/** The country the hub serves now (a live binding: it can change while the hall runs, see setCountry). */
+export let COUNTRY: Country = chosen();
+
+const countryListeners: ((now: Country, was: Country) => void)[] = [];
+/** Be told when the country changes (in the order asked; the postcode tables first). */
+export function onCountry(fn: (now: Country, was: Country) => void): void {
+  countryListeners.push(fn);
+}
+/** Serve another country from now on: names, places, streets and postcodes follow (the hall stays as built). */
+export function setCountry(id: CountryId): void {
+  const next = COUNTRIES.find((c) => c.id === id);
+  if (!next || next === COUNTRY) return;
+  const was = COUNTRY;
+  COUNTRY = next;
+  for (const fn of countryListeners) fn(next, was);
+}
 
 /** A postcode as numbers only, with its leading zeros (for signs): "06000", "0800". */
 export const pcDigits = (pc: number, c: Country = COUNTRY) => String(pc).padStart(c.digits, '0');

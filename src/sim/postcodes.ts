@@ -6,12 +6,12 @@
 // roll cages (five per door, each for a part of the city's postcodes). The next
 // 20 get a door on the south side, fed by the robots' boxes (two per door).
 // Parcels carry a postcode; the sorter sends them by it.
-import { COUNTRY, pcDigits, type City } from './countries';
+import { COUNTRY, onCountry, pcDigits, type City, type Country } from './countries';
 
 export type { City };
 
-/** Largest first. */
-export const CITIES: City[] = COUNTRY.cities;
+/** Largest first (the country can change while the hall runs: see onCountry below). */
+export let CITIES: City[] = COUNTRY.cities;
 
 /**
  * How many north doors each city gets, from its volume (post goes out in proportion to
@@ -47,7 +47,7 @@ export function planDoors(pops: number[], doors: number, most = 4): number[] {
 /** Doors per north city as the hall is built (see planDoors), and the cities the hall serves. */
 const STANDING = planDoors(CITIES.map((c) => c.pop), 20);
 /** The night-shift game's cities, in its order: the north cities, then the next 20. */
-export const GAME_CITIES = CITIES.slice(0, STANDING.length + 20);
+export let GAME_CITIES = CITIES.slice(0, STANDING.length + 20);
 
 /**
  * A night-shift game re-signs the doors to the player's plan (?game=…&plan=4.3.3.2.0…:
@@ -72,12 +72,53 @@ const PLAN = gamePlan();
 
 /** Doors per north city, west to east. */
 export const DOORS_PER_CITY = PLAN ? PLAN.filter((n) => n > 0) : STANDING;
+/**
+ * The north and south cities by their rank in the country (largest = 0). The hall keeps these
+ * ranks when the country changes: door 1's city becomes the new country's city of the same
+ * rank (the doors are only shared out again on a restart).
+ */
+const NORTH_RANK: number[] = PLAN ? GAME_CITIES.map((_, i) => i).filter((i) => PLAN[i]! > 0) : STANDING.map((_, i) => i);
+const SOUTH_RANK: number[] = (
+  PLAN
+    ? // The robot cities, and the country's next towns on any doors left over.
+      [...GAME_CITIES.map((_, i) => i).filter((i) => PLAN[i] === 0), ...CITIES.map((_, i) => i).slice(GAME_CITIES.length)]
+    : CITIES.map((_, i) => i).slice(STANDING.length)
+).slice(0, 20);
+const byRank = (r: number) => CITIES[Math.min(r, CITIES.length - 1)]!;
 /** Cities at the north doors (roll cages) and at the south doors (robot boxes, 20 doors). */
-export const NORTH_CITIES = PLAN ? GAME_CITIES.filter((_, i) => PLAN[i]! > 0) : CITIES.slice(0, STANDING.length);
-export const SOUTH_CITIES = PLAN
-  ? // The robot cities, and the country's next towns on any doors left over.
-    [...GAME_CITIES.filter((_, i) => PLAN[i] === 0), ...CITIES.slice(GAME_CITIES.length)].slice(0, 20)
-  : CITIES.slice(STANDING.length, STANDING.length + 20);
+export let NORTH_CITIES: City[] = NORTH_RANK.map(byRank);
+export let SOUTH_CITIES: City[] = SOUTH_RANK.map(byRank);
+
+// Another country: the same ranks, the new names.
+onCountry((c) => {
+  CITIES = c.cities;
+  GAME_CITIES = CITIES.slice(0, STANDING.length + 20);
+  NORTH_CITIES = NORTH_RANK.map(byRank);
+  SOUTH_CITIES = SOUTH_RANK.map(byRank);
+});
+
+/**
+ * A postcode of country `was` as the same place in today's country: the city of the same rank,
+ * the same share of the way through the same part of its areas (a city at the north doors in
+ * `north` parts, as its cages; at the south doors in `south` parts, as its boxes). So a parcel
+ * keeps its cage or box when the country changes.
+ */
+export function translatePc(pc: number, was: Country, north: number, south: number): number {
+  const r = was.cities.findIndex((c) => c.pc.some(([a, b]) => pc >= a && pc <= b));
+  if (r < 0) return pc;
+  const parts = NORTH_RANK.includes(r) ? north : SOUTH_RANK.includes(r) ? south : 1;
+  const oldAll = areas(was.cities[r]!, was.step);
+  const i = Math.max(0, oldAll.indexOf(pc));
+  let k = 0;
+  while (k < parts - 1 && i >= Math.floor(((k + 1) * oldAll.length) / parts)) k++;
+  const o0 = Math.floor((k * oldAll.length) / parts);
+  const o1 = Math.floor(((k + 1) * oldAll.length) / parts);
+  const f = (i - o0 + 0.5) / Math.max(1, o1 - o0);
+  const all = areas(byRank(r));
+  const n0 = Math.floor((k * all.length) / parts);
+  const n1 = Math.max(n0 + 1, Math.floor(((k + 1) * all.length) / parts));
+  return all[Math.min(all.length - 1, n0 + Math.min(n1 - n0 - 1, Math.floor(f * (n1 - n0))))]!;
+}
 /** The city (index in NORTH_CITIES) of each north door, west to east: a city's doors side by side. */
 export const DOCK_CITY: number[] = DOORS_PER_CITY.flatMap((n, i) => Array.from({ length: n }, () => i));
 
@@ -93,8 +134,10 @@ export function split(c: City, parts: number): [number, number][] {
   const all = areas(c);
   const out: [number, number][] = [];
   for (let k = 0; k < parts; k++) {
-    const a = all[Math.floor((k * all.length) / parts)]!;
-    const b = all[Math.floor(((k + 1) * all.length) / parts) - 1]!;
+    // (A town with fewer areas than parts: every part is its one area.)
+    const i = Math.floor((k * all.length) / parts);
+    const a = all[i]!;
+    const b = all[Math.max(i, Math.floor(((k + 1) * all.length) / parts) - 1)]!;
     out.push([a, b]);
   }
   return out;

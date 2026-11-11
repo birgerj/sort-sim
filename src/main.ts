@@ -14,6 +14,7 @@
  *   quality=low|normal|high  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
+import { setCountry } from './sim/countries';
 import './ui/style.css';
 
 import { Music } from './audio/music';
@@ -216,4 +217,4 @@ requestAnimationFrame((t) => {
 });
 
 // For the console and the screenshot script.
-Object.assign(window, { sortsim: { scene, music, settings, antics: ANTICS, setTod: (t: number) => (tod = t) } });
+Object.assign(window, { sortsim: { scene, music, settings, antics: ANTICS, setTod: (t: number) => (tod = t), setCountry } });

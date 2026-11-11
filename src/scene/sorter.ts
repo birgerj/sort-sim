@@ -15,7 +15,7 @@
 // a purple workstation, magenta GPU racks, people and hanging signs, and
 // a blue outline on the followed parcel.
 import * as THREE from 'three';
-import { pcDigits } from '../sim/countries';
+import { onCountry, pcDigits, type Country } from '../sim/countries';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -63,7 +63,7 @@ import { BPM } from '../audio/composer';
 import { addressFor, type Address } from '../sim/addresses';
 import { Kpi } from '../sim/kpi';
 import { Staff, type Role, type StaffMember } from '../sim/staff';
-import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES } from '../sim/postcodes';
+import { CITIES, DOCK_CITY, NORTH_CITIES, randomPostcode, rangeText, SOUTH_CITIES, translatePc } from '../sim/postcodes';
 import { Batches } from '../sim/batches';
 import { ManualSort } from './manualSort';
 import { Relabel } from './relabel';
@@ -1745,6 +1745,7 @@ export class Sorter implements Scene3D {
       });
     }
     this.hireStaff();
+    onCountry((now, was) => this.setCountry(now, was));
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     this.eggs = new Eggs(this);
@@ -7140,6 +7141,52 @@ export class Sorter implements Scene3D {
       const driver = l.g.children.map((c) => RIGS.get(c)).find((x) => x);
       hire('driver', `South aisle · forklift ${k + 1}`, driver, l.g, 173 + k, () => this.yard.busy(k));
     });
+  }
+
+  /**
+   * Another country while the hall runs: every door keeps its place in the order of cities (door 1
+   * serves the new country's largest city, and so on; the doors are only shared out again on a
+   * restart). Parcels get the matching postcode there (same cage or box), and everything that shows
+   * a name, a place or a postcode is drawn again; the staff get names from there.
+   */
+  private setCountry(now: Country, was: Country): void {
+    // (Each parcel once: the ones at the docks are on the sorter's list too.)
+    const done = new WeakSet<object>();
+    const move = (p: { pc: number }) => {
+      if (done.has(p)) return;
+      done.add(p);
+      p.pc = translatePc(p.pc, was, 6, 2);
+    };
+    for (const p of this.parcels) move(p);
+    this.docks.setCountry(move);
+    this.floor.setCountry();
+    this.batches.rename(was.cities, now.cities);
+    // The names on the door screens, and the chute displays.
+    const pcs = (c: (typeof CITIES)[number]) => rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]);
+    for (const d of this.trucks.docks) {
+      const c = d.number <= 20 ? NORTH_CITIES[DOCK_CITY[d.number - 1]!] : SOUTH_CITIES[d.number - 21];
+      if (!c) continue;
+      d.city = c.name;
+      d.pc = pcs(c);
+    }
+    const dockChutes = [...this.dockOf.keys()];
+    for (const k of this.showText.keys()) {
+      const dock = dockChutes.indexOf(k);
+      const c = dock >= 0 ? NORTH_CITIES[DOCK_CITY[dock]!] : undefined;
+      if (!c) continue;
+      this.showText.set(k, [`${dock + 1} · ${c.name}`, pcs(c)]);
+      this.showNow.set(k, '?');
+    }
+    // Labels on the parcels.
+    for (const p of this.parcels) if (p.labelCell) this.drawLabel(p.labelCell, p);
+    // The staff: new names, and the places at the doors under the new city names.
+    const rename = new Map(was.cities.map((c, i) => [c.name, now.cities[i]?.name ?? c.name]));
+    this.staff.setCountry(now);
+    for (const m of this.staff.list) m.place = m.place.replace(/ · (.+)$/, (all, name: string) => (rename.has(name) ? ` · ${rename.get(name)!}` : all));
+    if (this.followThing?.kind === 'person') {
+      const m = this.staff.find(this.followThing.obj);
+      if (m) this.followThing.name = m.name;
+    }
   }
 
   /** The staff member a tapped person or forklift is, if any. */
