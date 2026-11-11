@@ -9,7 +9,7 @@ import { DEPT_ICONS, groupDepts, orderDepts } from './deptIcons';
 import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
-import { COUNTRIES, COUNTRY, type CountryId } from '../sim/countries';
+import { COUNTRIES, COUNTRY, setCountry, type CountryId } from '../sim/countries';
 import { XMAS } from '../sim/season';
 import { InfoPanel } from './info';
 import { duration, ROLE_TEXT, Staff, type StaffMember } from '../sim/staff';
@@ -119,7 +119,7 @@ export class Hud {
   /** The card of a tapped staff member (refreshed every second). */
   private staffCard: { el: HTMLElement; m: StaffMember; body: HTMLElement; last: number } | null = null;
   /** The staff list in the figures (kept while the panel is open). */
-  private staffList: { el: HTMLElement; head: HTMLElement; rows: { m: StaffMember; r: HTMLElement; bar: HTMLElement; pw: HTMLElement; pq: HTMLElement }[] } | null = null;
+  private staffList: { el: HTMLElement; head: HTMLElement; rows: { m: StaffMember; r: HTMLElement; nm: HTMLElement; ts: HTMLElement; bar: HTMLElement; pw: HTMLElement; pq: HTMLElement }[] } | null = null;
   private hideTimer = 0;
   /** Group for the app buttons (install, full screen). */
   appGroup!: HTMLElement;
@@ -546,10 +546,11 @@ export class Hud {
       if (id === COUNTRY.id) return;
       this.settings.country = id;
       saveSettings(this.settings);
-      // Docks, cages, boxes and signs are labelled when the hall is built: start again.
-      location.reload();
+      // A night-shift game is played for one country's hall: start again. Otherwise switch live.
+      if (new URLSearchParams(location.search).get('game')) location.reload();
+      else setCountry(id);
     };
-    const cb = this.row(sec, 'Country', 'Its 40 largest towns get the 40 dock doors; names, streets and postcodes follow it. Changing it restarts the hall.');
+    const cb = this.row(sec, 'Country', 'Its 40 largest towns get the 40 dock doors; names, streets and postcodes follow it at once. The doors are shared out over the towns again on the next start.');
     cb.classList.add('stack');
     cb.append(country);
     // The app: install and full screen (added by the PWA helper), and hiding the controls.
@@ -759,7 +760,9 @@ export class Hud {
         const r = el('button', 'person');
         r.title = `${m.name}, ${ROLE_TEXT[m.role]}, ${m.place}: show the card and follow`;
         const name = el('span', 'pn');
-        name.append(el('b', '', m.name), el('span', 'ts', `${ROLE_TEXT[m.role]} · ${m.place}`));
+        const nm = el('b', '', m.name);
+        const ts = el('span', 'ts', `${ROLE_TEXT[m.role]} · ${m.place}`);
+        name.append(nm, ts);
         const bar = workBar(0);
         const pw = el('span', 'pw');
         const pq = el('span', 'pq');
@@ -770,7 +773,7 @@ export class Hud {
           this.showStaff(m);
         };
         box.append(r);
-        return { m, r, bar: bar.firstElementChild as HTMLElement, pw, pq };
+        return { m, r, nm, ts, bar: bar.firstElementChild as HTMLElement, pw, pq };
       });
       st = this.staffList = { el: box, head, rows };
     }
@@ -779,6 +782,13 @@ export class Hud {
     for (const x of st.rows) {
       const pct = Staff.workPct(x.m);
       x.r.classList.toggle('on', x.m.working);
+      // (Names follow the country; places change with breaks.)
+      const ts = `${ROLE_TEXT[x.m.role]} · ${x.m.place}`;
+      if (x.nm.textContent !== x.m.name) x.nm.textContent = x.m.name;
+      if (x.ts.textContent !== ts) {
+        x.ts.textContent = ts;
+        x.r.title = `${x.m.name}, ${ROLE_TEXT[x.m.role]}, ${x.m.place}: show the card and follow`;
+      }
       x.bar.style.width = `${pct}%`;
       x.bar.parentElement!.setAttribute('aria-label', `${pct}% working`);
       x.pw.textContent = `${pct}%`;

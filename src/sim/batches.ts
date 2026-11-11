@@ -66,6 +66,13 @@ export class Batches {
     this.next = t + minutes + 25 + this.rnd() * 45;
   }
 
+  /** The country changed: the batches are for the cities of the same rank in the new one. */
+  rename(was: City[], now: City[]): void {
+    const to = (c: City) => now[was.indexOf(c)] ?? c;
+    if (this.active) this.active.city = to(this.active.city);
+    for (const b of this.past) b.city = to(b.city);
+  }
+
   /** For a new parcel: the batch's city if this parcel is part of the batch. */
   pick(): City | null {
     return this.active && this.rnd() < this.active.share ? this.active.city : null;

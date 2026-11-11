@@ -779,6 +779,19 @@ export class RobotFloor {
     }
   }
 
+  /** Another country: each box takes the same half of the city of the same rank there (boards redrawn). */
+  setCountry(): void {
+    this.bins.forEach((b, n) => {
+      b.range = split(SOUTH_CITIES[b.city]!, 2)[n % 2]!;
+      b.code = rangeText(b.range);
+      const m = this.boardMats[n];
+      if (!m) return;
+      m.map?.dispose();
+      m.map = codeTex(b.code, SOUTH_CITIES[b.city]!.name);
+      m.needsUpdate = true;
+    });
+  }
+
   private buildRobots(): void {
     const k = this.kit;
     const black = k.std(0x141519, 0.5, 0.3, 0x1b1c20);
