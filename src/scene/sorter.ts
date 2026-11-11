@@ -159,7 +159,7 @@ const HOLD_S = 18;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
 const LANE_QUEUE = 7;
 /** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
-const ROBOT_SHARE = 0.12;
+const ROBOT_SHARE = 0.2;
 /**
  * Rounds on the sorter before a parcel whose chute stays full (and the store has no room for
  * it either) is put aside to manual sorting (overflow): manual work is the last resort.
@@ -2464,11 +2464,11 @@ export class Sorter implements Scene3D {
   // ---------- parcels ----------
   /**
    * A postcode and the chute for it: most to the cities at the north docks (their
-   * chute), about 12% to the cities served by the robots (any pickup station, the least
+   * chute), about 20% to the cities served by the robots (any pickup station, the least
    * busy of three tried); now and then an exception for manual sorting.
    */
   private assign(p: Parcel): void {
-    // The robots handle less than the roll cages: about one parcel in eight goes to them,
+    // The robots handle less than the roll cages: about one parcel in five goes to them,
     // and fewer still while their pickup tables are filling up.
     const queued = this.stationQueue.reduce((a, q) => a + q.length, 0);
     const load = Math.min(1, queued / Math.max(1, this.stationQueue.length * 3));

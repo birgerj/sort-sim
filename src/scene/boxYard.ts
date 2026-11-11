@@ -16,8 +16,13 @@ export const AISLE_Z = 31.1;
 const WALL_Z = 34;
 /** 20 dock doors on the south wall: [x, number, in use]; door k serves south city k (its two boxes stand right by it). */
 export const DOORS: [number, number, boolean][] = Array.from({ length: 20 }, (_, k) => [-16 + 6 * k, 21 + k, true]);
-/** Forklifts; each serves one stretch of the row of boxes, with the doors in it. */
-const LIFTS = 4;
+/**
+ * Forklifts. Each waits in the middle of its own stretch of the aisle, but takes the nearest full
+ * box anywhere, as long as its way there and back does not cross another forklift's.
+ */
+const LIFTS = 3;
+/** Room kept between two forklifts in the aisle (m). */
+const CLEAR = 3;
 
 interface Key {
   x?: number;
@@ -47,9 +52,11 @@ interface Lift extends ForkliftModel {
   home: number;
   /** Beat the next move may start on, after a pause (−1: not set). */
   next: number;
-  /** Stretch of the aisle this forklift serves. */
+  /** Stretch of the aisle this forklift waits in. */
   x0: number;
   x1: number;
+  /** The stretch of aisle it needs for its job (there and back home), or null when idle. */
+  span: [number, number] | null;
 }
 
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
@@ -97,6 +104,7 @@ export class BoxYard {
         next: -1,
         x0: lx0,
         x1: lx1,
+        span: null,
       };
       this.lifts.push(l);
       this.place(l);
@@ -117,12 +125,29 @@ export class BoxYard {
   }
 
   update(bt: number): void {
-    // Hand out jobs to idle forklifts on their side.
+    // Hand out jobs: each idle forklift the nearest full box it can reach without crossing another
+    // forklift's way (busy ones: the stretch their job needs; idle ones: where they stand).
     for (const l of this.lifts) {
       if (l.job !== null || l.keys.length || l.key) continue;
-      const k = this.jobs.findIndex((b) => this.floor.bins[b]!.x >= l.x0 && this.floor.bins[b]!.x < l.x1);
-      if (k < 0) continue;
-      const [b] = this.jobs.splice(k, 1);
+      l.span = null;
+      const taken = this.lifts.filter((o) => o !== l).map((o): [number, number] => o.span ?? [o.x, o.x]);
+      let best = -1;
+      let bestD = Infinity;
+      this.jobs.forEach((b, k) => {
+        const bx = this.floor.bins[b]!.x;
+        const a = Math.min(l.x, bx, l.home) - CLEAR;
+        const z = Math.max(l.x, bx, l.home) + CLEAR;
+        if (taken.some(([p, q]) => p < z && q > a)) return;
+        const d = Math.abs(bx - l.x);
+        if (d < bestD) {
+          bestD = d;
+          best = k;
+        }
+      });
+      if (best < 0) continue;
+      const [b] = this.jobs.splice(best, 1);
+      const bx = this.floor.bins[b!]!.x;
+      l.span = [Math.min(l.x, bx, l.home) - CLEAR, Math.max(l.x, bx, l.home) + CLEAR];
       this.plan(l, b!);
     }
     for (const l of this.lifts) {

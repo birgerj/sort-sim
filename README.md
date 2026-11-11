@@ -62,7 +62,7 @@ sound is generated in code.
    buffers after the tunnels (and outside).
 2. **Sorter loop.** A rounded rectangle of trays. Two loop scanners. Every
    parcel carries a postcode of the chosen country: about 88% for the largest
-   municipalities (north docks), about 12% for the next 20 (robots; fewer while
+   municipalities (north docks), about 20% for the next 20 (robots; fewer while
    their pickup tables fill up), and now and
    then an exception for manual sorting. When its chute is full, a parcel
    goes round again.
@@ -89,7 +89,8 @@ sound is generated in code.
 4. **Robots (south).** 20 chutes end at long pickup roller tables. A robot
    takes a parcel (the projector shows its postcode), drives to the box for
    that postcode (two boxes per city, doors 21–40), tips it in, and parks.
-5. **Boxes and trucks (south wall).** When a box is full, a forklift takes it
+5. **Boxes and trucks (south wall).** When a box is full (six parcels, or less
+   if they are big), the nearest of three forklifts whose way is clear takes it
    into the truck at its city's door and brings it back empty.
    Above every door a screen shows the door number, city, postcodes, how
    full the roll cages (north) or the truck (south) are, and what
