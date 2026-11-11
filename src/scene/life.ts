@@ -10,7 +10,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 import type { FloorKit } from './floor';
 import { buildForklift } from './forklift';
-import { XMAS } from '../sim/season';
+import { onXmas, XMAS } from '../sim/season';
 import { buildHuman, type Human } from './people';
 import { gait, relaxArms, settle, sit, swingArms } from './motion';
 import { ANTICS, type ActKind } from './antics';
@@ -570,10 +570,12 @@ export class Life {
     // (Its south side clear of the parcel trolley by the manual sorting.)
     walk({ shirt: 0x6b3fd1, trousers: 0x22283f, cap: 0x1d1d1f }, [[-44, 15.3], [-26, 15.3], [-26, 16.7], [-44, 16.7]], 0.7, 0, true);
     // Two colleagues walking the infeed side.
-    if (XMAS) {
-      // Father Christmas walks a round by the control room, waving.
+    {
+      // Father Christmas walks a round by the control room, waving (while it is Christmas).
       const h = buildHuman(k, { shirt: 0xc8102e, trousers: 0xc8102e, skin: 0xf0cfb0, hair: 0xffffff, santa: true });
       this.group.add(h.root);
+      h.root.visible = XMAS;
+      onXmas(() => setTimeout(() => (h.root.visible = XMAS), XMAS ? 1500 : 0));
       h.armR.userData.wave = true;
       this.walkers.push(walker(h, new Route([[-55, 15], [-46.5, 15], [-46.5, 18.3], [-55, 18.3]]), 0.35, 0));
     }

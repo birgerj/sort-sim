@@ -17,7 +17,7 @@ import { canvasTexture } from './textures';
 import { REAL } from './realDay';
 import { BODY_LEVELS, bodyField, bodySurfaceZ, buildBody, type BodyLevel } from './bodySdf';
 
-import { XMAS } from '../sim/season';
+import { onXmas, XMAS } from '../sim/season';
 
 export interface Human {
   root: THREE.Group;
@@ -875,7 +875,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   }
   const field = bodyField(width, belly, REST_SPREAD);
   // Rigid parts per level (same list, finer or coarser shapes).
-  const gearAt = (g: Record<string, THREE.BufferGeometry>): Part[] => {
+  const gearAt = (g: Record<string, THREE.BufferGeometry>, xmas: boolean): Part[] => {
     const parts: Part[] = [];
     const add = (j: THREE.Object3D, geo: THREE.BufferGeometry, c: number, extra: Partial<Part> = {}) => parts.push({ geo, j, c, ...extra });
     for (const ft of [footL, footR]) {
@@ -904,14 +904,14 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(eyes, g.pupils!, 0x1d1d1f);
     add(mouth, g.lips!, lip);
     // Under a helmet, a cap or a Christmas hat the hair lies flat on top.
-    const flat = look.helmet !== undefined || XMAS || !look.suit;
+    const flat = look.helmet !== undefined || xmas || !look.suit;
     add(head, (flat ? [g.hairT!, g.hairLongT!, g.hairTailT!] : [g.hair!, g.hairLong!, g.hairTail!])[style]!, hair, { hair: true });
     if (tail) add(tail, g.tail!, hair);
     if (look.santa) {
       add(head, g.beard!, 0xffffff);
       add(chest, g.sack!, 0x8a5a2a);
     }
-    if (XMAS || look.santa) {
+    if (xmas || look.santa) {
       // Christmas hats for everyone (over the helmet for workers).
       const h = look.helmet !== undefined;
       if (h) add(head, g.helmet!, look.helmet!);
@@ -1042,15 +1042,28 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const meshes: THREE.SkinnedMesh[] = [];
   for (const b of bones) restOf(b);
   let coarseGear: THREE.BufferGeometry | null = null;
+  // The gear with and without Christmas hats (hair flat under a hat), per level: the one not worn
+  // now is baked the first time it is asked for (see wear).
+  const worn = XMAS;
+  let hatOn = worn;
+  const gears: { level: BodyLevel; mesh: THREE.SkinnedMesh; geo: Map<boolean, THREE.BufferGeometry> }[] = [];
   for (const level of ['coarse', 'far', 'fine'] as BodyLevel[]) {
     const group = new THREE.Group();
     const bodyMesh = new THREE.SkinnedMesh(level === 'fine' ? bodyGeo(width, belly, 'coarse') : bodyGeo(width, belly, level), clothesMat);
     // The fine gear (only seen up close) is baked in spare moments after load; until then the
     // coarse one stands in.
-    const gearGeo: THREE.BufferGeometry = level === 'fine' ? coarseGear! : bakeGear(gearAt(shapes(level)));
+    const gearGeo: THREE.BufferGeometry = level === 'fine' ? coarseGear! : bakeGear(gearAt(shapes(level), worn));
     if (level === 'coarse') coarseGear = gearGeo;
     const gearMesh = new THREE.SkinnedMesh(gearGeo, mat);
-    if (level === 'fine') later(() => (gearMesh.geometry = bakeGear(gearAt(shapes('fine')))));
+    const geo = new Map<boolean, THREE.BufferGeometry>();
+    if (level !== 'fine') geo.set(worn, gearGeo);
+    gears.push({ level, mesh: gearMesh, geo });
+    if (level === 'fine')
+      later(() => {
+        const fine = bakeGear(gearAt(shapes('fine'), worn));
+        geo.set(worn, fine);
+        if (hatOn === worn) gearMesh.geometry = fine;
+      });
     group.add(bodyMesh, gearMesh);
     for (const m of [bodyMesh, gearMesh]) {
       // People get no ink lines; the ink pass draws them as a mask (see `InkPass`).
@@ -1063,6 +1076,29 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     lod.levels.sort((a, b) => a.distance - b.distance);
     if (level === 'fine') queueFine(width, belly, bodyMesh);
   }
+  /** Hats on or off: the gear for it, baked now if it never was (the fine level in a spare moment after). */
+  const wear = (on: boolean) => {
+    hatOn = on;
+    for (const x of gears) {
+      if (x.level === 'fine') continue;
+      let g = x.geo.get(on);
+      if (!g) x.geo.set(on, (g = bakeGear(gearAt(shapes(x.level), on))));
+      x.mesh.geometry = g;
+    }
+    const fine = gears.find((x) => x.level === 'fine')!;
+    const done = fine.geo.get(on);
+    // (Until the fine one is made, the coarse one stands in, as at load.)
+    fine.mesh.geometry = done ?? gears[0]!.geo.get(on)!;
+    if (!done)
+      later(() => {
+        if (fine.geo.has(on)) return;
+        const g = bakeGear(gearAt(shapes('fine'), on));
+        fine.geo.set(on, g);
+        if (hatOn === on) fine.mesh.geometry = g;
+      });
+  };
+  WEARERS.push(wear);
+
   root.updateMatrixWorld(true);
   // (The joints are Groups, not Bones; the skeleton only needs their world matrices.)
   for (const m of meshes) m.bind(skeleton, new THREE.Matrix4());
@@ -1081,6 +1117,19 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const m: MotionState = { t: 0, walk: 0, amp: 0, px: 0, py: 0, pyaw: 0, proll: 0, drop: 0, footL: 0, footR: 0, tx: 0, tvx: 0, tz: 0, tvz: 0, yaw: 0, y: 0, seed: (seed % 997) / 997, talk: 0, talkE: 0, blinkAt: 1 + r(4) * 4 };
   return { root, pelvis, torso, chest, armL, armR, foreL, foreR, head, legL, legR, kneeL, kneeR, footL, footR, handL, handR, tail, hairStyle: style, eyes, mouth, m };
 }
+
+/** Everyone's hats on or off (see buildHuman). */
+const WEARERS: ((on: boolean) => void)[] = [];
+// Christmas switched: hats go on (or come off) one person after another, in a second or three.
+onXmas((on) => {
+  const order = WEARERS.map((w) => ({ w, k: Math.random() }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.w);
+  if (typeof window === 'undefined') return order.forEach((w) => w(on));
+  const gen = ++wearGen;
+  order.forEach((w, i) => setTimeout(() => gen === wearGen && w(on), 300 + (i / order.length) * 2500));
+});
+let wearGen = 0;
 
 /** Layer the people's meshes are also on, so the ink pass can draw them on their own. */
 export const INK_MASK_LAYER = 3;

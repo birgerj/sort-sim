@@ -434,6 +434,16 @@ export class Music {
   private delayLine: DelayNode | null = null;
 
   /** Christmas: sleigh bells instead of the closed hat (a few bright, quickly dying pings). */
+  /** Christmas switched on: a run of bells up, over a shake of sleigh bells (once). */
+  xmasFlourish(): void {
+    const ctx = this.ctx;
+    if (!ctx || this.muted || ctx.state !== 'running') return;
+    const t = ctx.currentTime + 0.05;
+    // (Up a major pentatonic, two octaves, then the top note again.)
+    [72, 74, 76, 79, 81, 84, 86, 88, 91, 93, 96, 96].forEach((m, i) => this.bell(ctx, t + i * 0.09 + (i === 11 ? 0.18 : 0), mtof(m), 0.55 + i * 0.03));
+    for (let i = 0; i < 16; i++) this.jingle(ctx, t + i * 0.075, 0.5 + 0.5 * Math.sin((i / 15) * Math.PI));
+  }
+
   private jingle(ctx: AudioContext, at: number, vel: number): void {
     for (const [f, d] of [[2637, 0], [3951, 0.006], [5274, 0.011], [3322, 0.017]] as const) {
       const o = ctx.createOscillator();

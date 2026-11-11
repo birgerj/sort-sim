@@ -9,7 +9,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { FloorKit } from './floor';
 import { buildHuman } from './people';
 import { sit } from './motion';
-import { XMAS } from '../sim/season';
+import { onXmas, XMAS } from '../sim/season';
 
 export interface ForkliftModel {
   g: THREE.Group;
@@ -109,6 +109,9 @@ function geometry(): Record<string, G> {
 }
 
 const xmasMats = new Map<number, THREE.MeshBasicMaterial>();
+/** Every forklift's Christmas lights. */
+const XMAS_PARTS: THREE.Object3D[] = [];
+onXmas((on) => XMAS_PARTS.forEach((x, i) => setTimeout(() => (x.visible = XMAS), on ? 600 + i * 400 : 0)));
 /** Lit materials for the Christmas bulbs (shared, so the parts stay instanced). */
 function xmasMat(k: FloorKit, i: number, c: THREE.Color): THREE.MeshBasicMaterial {
   void k;
@@ -169,8 +172,13 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
   // (No floor shadow for someone on a seat.)
   for (const c of [...d.root.children]) if (c.userData.noInk) d.root.remove(c);
   g.add(d.root);
-  if (XMAS) {
-    // Christmas: bulbs along the overhead guard (red, green, gold) and a red nose on the mast.
+  {
+    // Christmas: bulbs along the overhead guard (red, green, gold) and a red nose on the mast
+    // (always there, shown while it is Christmas).
+    const xg = new THREE.Group();
+    xg.visible = XMAS;
+    g.add(xg);
+    XMAS_PARTS.push(xg);
     const bulb = (x: number, z: number) => new THREE.SphereGeometry(0.04, 6, 5).translate(x, 2.25, z);
     const cols = [[1.8, 0.15, 0.1], [0.2, 1.6, 0.3], [1.8, 1.3, 0.2]] as const;
     cols.forEach(([r, gg, bb], c) => {
@@ -178,9 +186,9 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
       let i = 0;
       for (let z = -0.54; z <= 0.66; z += 0.15) for (const x of [-0.56, 0.56]) if (i++ % 3 === c) pts.push(bulb(x, z));
       for (let x = -0.45; x <= 0.46; x += 0.15) for (const z of [-0.54, 0.66]) if (i++ % 3 === c) pts.push(bulb(x, z));
-      add(mergeGeometries(pts)!, xmasMat(k, c, new THREE.Color(r, gg, bb)));
+      add(mergeGeometries(pts)!, xmasMat(k, c, new THREE.Color(r, gg, bb)), xg);
     });
-    add(new THREE.SphereGeometry(0.1, 10, 8).translate(0, 2.0, 1.14), xmasMat(k, 3, new THREE.Color(2.2, 0.12, 0.08)));
+    add(new THREE.SphereGeometry(0.1, 10, 8).translate(0, 2.0, 1.14), xmasMat(k, 3, new THREE.Color(2.2, 0.12, 0.08)), xg);
   }
   // Blue warning spots: a lamp on the overhead guard, front and back, throws a blue spot on the
   // floor about 3 m ahead of the forks and behind, so people on foot see it coming round a corner.

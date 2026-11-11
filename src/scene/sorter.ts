@@ -45,7 +45,7 @@ import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
 import { Xmas } from './xmas';
-import { XMAS } from '../sim/season';
+import { onXmas, XMAS } from '../sim/season';
 import { Party } from './party';
 import { Roof, ceilingWithLights, roofLights } from './roof';
 import { Crowd } from './crowd';
@@ -1576,7 +1576,8 @@ export class Sorter implements Scene3D {
         },
       },
     );
-    if (XMAS) {
+    {
+      // Christmas: always built, shown while it is on (Settings → Christmas switches it live).
       const edge: { x: number; z: number; nx: number; nz: number; y: number }[] = [];
       for (let s = 0; s < LOOP_LEN; s += 0.6) {
         loopAt(s, this.p, this.t);
@@ -1617,7 +1618,8 @@ export class Sorter implements Scene3D {
         ],
         snow: [...Array.from({ length: 11 }, (_, k) => ({ x: -36 + k * 12, z: 0 })), { x: -58, z: 12 }, { x: -58, z: -14 }, { x: -26, z: -20 }],
         market: { x: -28.6, z: 32.6 },
-      });
+      }, XMAS);
+      onXmas((on) => this.xmas?.set(on, this.lookPoint()));
     }
     this.life = new Life(this, {
       wx: WX,
@@ -7187,6 +7189,15 @@ export class Sorter implements Scene3D {
       const m = this.staff.find(this.followThing.obj);
       if (m) this.followThing.name = m.name;
     }
+  }
+
+  /** Where the camera looks, on the floor (in the hall): where a change spreads out from. */
+  private lookPoint(): THREE.Vector3 {
+    const dir = this.camera.getWorldDirection(new THREE.Vector3());
+    const o = this.camera.position;
+    const t = dir.y < -0.05 ? Math.min(80, -o.y / dir.y) : 30;
+    const p = o.clone().addScaledVector(dir, t);
+    return p.set(clamp(p.x, WX, EX), 0, clamp(p.z, NZ, HZ));
   }
 
   /** The staff member a tapped person or forklift is, if any. */

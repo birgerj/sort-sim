@@ -1,5 +1,6 @@
 // Christmas: the hall dressed for the holidays (Settings → Christmas, or ?xmas=1 / ?xmas=0).
-// Read once at load, like the country: the decorations are built with the hall.
+// The decorations are always built with the hall, and shown or hidden: it can be switched while
+// the hall runs (setXmas).
 
 function read(): boolean {
   let on = false;
@@ -17,7 +18,20 @@ function read(): boolean {
   return on;
 }
 
-export const XMAS = read();
+/** Christmas on now (a live binding: see setXmas). */
+export let XMAS = read();
+
+const xmasListeners: ((on: boolean) => void)[] = [];
+/** Be told when Christmas is switched on or off. */
+export function onXmas(fn: (on: boolean) => void): void {
+  xmasListeners.push(fn);
+}
+/** Switch Christmas on or off while the hall runs. */
+export function setXmas(on: boolean): void {
+  if (on === XMAS) return;
+  XMAS = on;
+  for (const fn of xmasListeners) fn(on);
+}
 
 /** Whole days until Christmas Day (0 on the 25th and 26th). */
 export function daysToChristmas(d = new Date()): number {

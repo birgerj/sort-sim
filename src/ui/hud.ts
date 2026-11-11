@@ -10,7 +10,7 @@ import { MOODS } from '../audio/composer';
 import type { Music } from '../audio/music';
 import { BELT_SPEEDS, Sorter, type Parcel, type Quality } from '../scene/sorter';
 import { COUNTRIES, COUNTRY, setCountry, type CountryId } from '../sim/countries';
-import { XMAS } from '../sim/season';
+import { setXmas, XMAS } from '../sim/season';
 import { InfoPanel } from './info';
 import { duration, ROLE_TEXT, Staff, type StaffMember } from '../sim/staff';
 import { NIGHT_PRESETS, NIGHT_SWITCHES, presetOf, type NightFx, type NightPreset } from '../scene/nightFx';
@@ -507,16 +507,20 @@ export class Hud {
       qb.append(b);
       this.qualityBtns.set(id, b);
     }
-    const xb = this.row(sec, 'Christmas', 'Trees, garlands, lights, presents, Father Christmas, a Christmas market, bells in the music. Restarts the hall.');
+    const xb = this.row(sec, 'Christmas', 'Trees, garlands, lights, presents, Father Christmas, a Christmas market, bells in the music. Comes in from where you look.');
     xb.classList.add('cols2');
+    const xmasBtns: HTMLButtonElement[] = [];
     for (const [on, label] of [[false, 'Off'], [true, 'On']] as const) {
       const b = el('button', on === XMAS ? 'on' : '', label);
       b.onclick = () => {
         if (on === XMAS) return;
         this.settings.xmas = on;
         saveSettings(this.settings);
-        location.reload();
+        setXmas(on);
+        if (on) this.music.xmasFlourish();
+        xmasBtns.forEach((x, i) => x.classList.toggle('on', (i === 1) === on));
       };
+      xmasBtns.push(b);
       xb.append(b);
     }
     const ib = this.pv ? this.row(sec, 'Product info', 'A card with the product behind each tour stop; the tour stays long enough to read it.') : el('div');
