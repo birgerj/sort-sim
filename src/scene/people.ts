@@ -1,4 +1,4 @@
-// People: dock workers (hi-vis vest, helmet) and staff (shirt, cap). Jointed like
+// People: dock workers (hi-vis vest, bare-headed) and staff (shirt, cap). Jointed like
 // a simple skeleton: pelvis, hips, knees, ankles, waist, chest (lower back), neck,
 // shoulders, elbows and wrists, and a ponytail that swings. `motion.ts` poses them
 // (walking, crouching, reaching, breathing). Facing +z. Each person gets one of a
@@ -94,7 +94,7 @@ export interface HumanLook {
   trousers: number;
   /** Hi-vis vest colour (workers). */
   vest?: number;
-  /** Helmet colour (workers), or a cap. */
+  /** Hard hat colour (none in the hall now: workers go bare-headed; staff wear a cap). */
   helmet?: number;
   /** A suit: jacket (shirt colour) with lapels, a white shirt and a tie; bare head. */
   suit?: { tie: number };
@@ -192,6 +192,115 @@ function helmetGeometry([U, V, RIM]: [number, number, number]): THREE.BufferGeom
   return g.rotateX(-0.1).translate(0, 0.8, -0.006);
 }
 
+/**
+ * A rounded body along the foot (z forward): a ring at each step from heel to toe, each a
+ * rounded rectangle from `bottom(z)` to `top(z)` and `width(z)` across, the rings drawn in at
+ * both ends so the heel and the toe are round. Closed, smooth normals.
+ */
+function loft(z0: number, z1: number, bottom: (z: number) => number, top: (z: number) => number, width: (z: number) => number, rounding: [number, number], far: boolean): THREE.BufferGeometry {
+  const NZ = far ? 8 : 20;
+  const NA = far ? 8 : 18;
+  const pos: number[] = [];
+  const idx: number[] = [];
+  const [rh, rt] = rounding;
+  for (let i = 0; i <= NZ; i++) {
+    const u = i / NZ;
+    const z = z0 + (z1 - z0) * u;
+    // Drawn in towards the ends: a quarter circle over the last `rh` (heel) and `rt` (toe) metres.
+    const dh = Math.min(1, (z - z0) / rh);
+    const dt = Math.min(1, (z1 - z) / rt);
+    const e = Math.sqrt(Math.max(0, 1 - (1 - Math.min(dh, dt)) ** 2));
+    const yb = bottom(z);
+    const yt = top(z);
+    const ym = (yb + yt) / 2;
+    const hh = ((yt - yb) / 2) * (0.35 + 0.65 * e);
+    const hw = (width(z) / 2) * e;
+    for (let j = 0; j < NA; j++) {
+      const a = (j / NA) * Math.PI * 2;
+      // A superellipse: flatter sides and sole than an ellipse.
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      const x = Math.sign(c) * Math.abs(c) ** 0.6 * hw;
+      const y = ym + Math.sign(sn) * Math.abs(sn) ** 0.6 * hh;
+      pos.push(x, Math.max(yb, y), z);
+    }
+  }
+  for (let i = 0; i < NZ; i++) {
+    for (let j = 0; j < NA; j++) {
+      const a = i * NA + j;
+      const b = i * NA + ((j + 1) % NA);
+      const c = a + NA;
+      const d = b + NA;
+      idx.push(a, c, b, b, c, d);
+    }
+  }
+  // Caps at the heel and the toe (the end rings are small: a fan closes them).
+  const capAt = (ring: number, flip: boolean) => {
+    const base = ring * NA;
+    let cx = 0;
+    let cy = 0;
+    for (let j = 0; j < NA; j++) cy += pos[(base + j) * 3 + 1]!;
+    const k = pos.length / 3;
+    pos.push(cx, cy / NA, pos[base * 3 + 2]!);
+    for (let j = 0; j < NA; j++) {
+      const a = base + j;
+      const b = base + ((j + 1) % NA);
+      if (flip) idx.push(k, a, b);
+      else idx.push(k, b, a);
+    }
+    cx = 0;
+  };
+  capAt(0, false);
+  capAt(NZ, true);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+const ease01 = (t: number) => {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+};
+
+/** The safety shoe's parts (in the foot joint's frame: ankle at 0, floor at -0.1, toe at +z). */
+function safetyShoe(far: boolean): Record<string, THREE.BufferGeometry> {
+  const F = -0.1;
+  const HEEL = -0.098;
+  const TOE = 0.182;
+  // Width along the foot: heel 8.4 cm, ball 11 cm, toe 9 cm.
+  const width = (z: number) => (z < 0.07 ? 0.084 + 0.026 * ease01((z - HEEL) / 0.15) : 0.11 - 0.02 * ease01((z - 0.07) / 0.11));
+  // The sole: 2.6 cm of rubber, the toe turned up a little.
+  const spring = (z: number) => 0.012 * ease01((z - 0.12) / 0.06);
+  const soleTop = (z: number) => F + 0.026 + spring(z) * 0.6;
+  const sole = loft(HEEL - 0.004, TOE + 0.004, (z) => F + spring(z), soleTop, (z) => width(z) + 0.01, [0.02, 0.03], far);
+  // The upper: heel counter up to the collar behind the ankle, the opening, the tongue and the
+  // instep sloping down to a round toe box.
+  const top = (z: number) => {
+    if (z < -0.06) return F + 0.118;
+    if (z < 0.0) return F + 0.112 - 0.006 * Math.sin(((z + 0.06) / 0.06) * Math.PI);
+    return F + 0.112 - 0.055 * ease01(z / 0.15);
+  };
+  const upper = loft(HEEL, TOE, (z) => soleTop(z) - 0.004, top, width, [0.03, 0.05], far);
+  // A padded collar round the ankle opening.
+  const collar = new THREE.TorusGeometry(1, 0.22, far ? 4 : 6, far ? 10 : 20)
+    .rotateX(Math.PI / 2)
+    .scale(0.041, 0.042, 0.05)
+    .translate(0, F + 0.114, -0.05);
+  collar.deleteAttribute('uv');
+  // The lacing: four crossings down the instep, each lying on the upper's slope.
+  const laces = mergeGeometries(
+    [0.012, 0.032, 0.052, 0.072].map((z) => {
+      const slope = (top(z + 0.005) - top(z - 0.005)) / 0.01;
+      const g = new THREE.BoxGeometry(0.036, 0.004, 0.009).rotateX(-Math.atan(slope)).translate(0, top(z) + 0.001, z);
+      g.deleteAttribute('uv');
+      return g.toNonIndexed();
+    }),
+  )!;
+  return { boot: upper, sole, bootCollar: collar, laces };
+}
+
 // Shared geometry, per detail level: built once. Front is +z.
 const geoCache: Partial<Record<BodyLevel, Record<string, THREE.BufferGeometry>>> = {};
 const merge = (...g: THREE.BufferGeometry[]) => mergeGeometries(g.map((x) => (x.index ? x.toNonIndexed() : x)))!;
@@ -211,9 +320,10 @@ function shapes(level: BodyLevel): Record<string, THREE.BufferGeometry> {
     new THREE.LatheGeometry(prof.map(([r, h]) => new THREE.Vector2(r, h)), sg(seg)).scale(1, 1, depth).translate(0, y, 0);
   const ell = (rx: number, ry: number, rz: number, x: number, y: number, z: number, seg = 14) => new THREE.SphereGeometry(1, sg(seg, 4), sg(Math.max(8, seg - 4))).scale(rx, ry, rz).translate(x, y, z);
   const geo: Record<string, THREE.BufferGeometry> = {
-    // Safety boot (ankle joint at the top): rounded upper, toe cap, and a thick dark sole (the sole is its own part).
-    boot: merge(new RoundedBoxGeometry(0.11, 0.1, 0.24, far ? 1 : 2, 0.04).translate(0, -0.85, 0.035), ell(0.054, 0.042, 0.06, 0, -0.865, 0.11, 10)).translate(0, KNEE + ANKLE, 0),
-    sole: box(0.12, 0.03, 0.27, 0, -0.905, 0.04).translate(0, KNEE + ANKLE, 0),
+    // Low safety shoe (ankle joint at the top, floor 0.1 below it): a rounded leather upper
+    // from the side profile, a padded collar round the ankle, the lacing down the instep and
+    // a rubber sole with a heel, a little turned up at the toe.
+    ...safetyShoe(far),
     // A collar round the base of the neck (where the neck skin meets the shirt).
     collar: new THREE.TorusGeometry(0.06, 0.013, sg(6), sg(18)).rotateX(Math.PI / 2).scale(1, 1, 0.92).translate(0, 0.548, 0.006),
     buckle: box(0.05, 0.035, 0.015, 0, 0.06, 0.1),
@@ -879,8 +989,10 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     const parts: Part[] = [];
     const add = (j: THREE.Object3D, geo: THREE.BufferGeometry, c: number, extra: Partial<Part> = {}) => parts.push({ geo, j, c, ...extra });
     for (const ft of [footL, footR]) {
-      add(ft, g.boot!, 0x2a2522);
-      add(ft, g.sole!, 0x1d1d1f);
+      add(ft, g.boot!, 0x26272b);
+      add(ft, g.bootCollar!, 0x1d1d1f);
+      add(ft, g.laces!, 0x5b5f68);
+      add(ft, g.sole!, 0x45484f);
     }
     add(chest, g.collar!, worker ? look.shirt : look.shirt, { w: [[chest, 0.6], [head, 0.4]] });
     add(torso, g.buckle!, 0xb9c0c8, { on: 1 });
@@ -903,8 +1015,9 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     add(eyes, g.eyes!, 0xf6f6f2);
     add(eyes, g.pupils!, 0x1d1d1f);
     add(mouth, g.lips!, lip);
-    // Under a helmet, a cap or a Christmas hat the hair lies flat on top.
-    const flat = look.helmet !== undefined || xmas || !look.suit;
+    // Under a helmet, a cap or a Christmas hat the hair lies flat on top. (Workers go bare-headed:
+    // no hard hats in a sorting hall.)
+    const flat = look.helmet !== undefined || xmas || (!look.suit && !worker);
     add(head, (flat ? [g.hairT!, g.hairLongT!, g.hairTailT!] : [g.hair!, g.hairLong!, g.hairTail!])[style]!, hair, { hair: true });
     if (tail) add(tail, g.tail!, hair);
     if (look.santa) {
@@ -920,7 +1033,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
     } else if (look.helmet !== undefined) {
       add(head, g.helmet!, look.helmet);
       add(head, g.band!, 0x2a2d33);
-    } else if (!look.suit) {
+    } else if (!look.suit && (!worker || look.cap !== undefined)) {
       const c = look.cap ?? 0x2f3b6b;
       add(head, g.cap!, c);
       add(head, g.peak!, c);

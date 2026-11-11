@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 
 import type { Human } from './people';
-import { gait, settle, swingArms } from './motion';
+import { gait, settle, settleFace, swingArms } from './motion';
+import { CLIPS, poseClip } from './clips';
 
 export type P3 = [number, number, number];
 
@@ -33,6 +34,16 @@ export class Trip {
     return Math.atan2(b[0] - a[0], b[2] - a[2]);
   }
 
+  /** Rise over run of the stretch at distance s (stairs are steep, floors 0). */
+  slope(s: number): number {
+    s = Math.max(0, Math.min(this.len, s));
+    let i = 0;
+    while (i < this.acc.length - 2 && this.acc[i + 1]! < s) i++;
+    const a = this.pts[i]!;
+    const b = this.pts[i + 1] ?? a;
+    return (b[1] - a[1]) / (Math.hypot(b[0] - a[0], b[2] - a[2]) || 1);
+  }
+
   /** The same way back. */
   reversed(): Trip {
     return new Trip([...this.pts].reverse());
@@ -54,6 +65,13 @@ export function walkOn(h: Human, trip: Trip, s: number, dt: number, bt: number, 
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
   h.root.rotation.y += d * Math.min(1, dt * 6);
+  // A walking clip when there is one (not on the stairs: its feet would miss the steps).
+  const clip = CLIPS.get('Walk_Loop');
+  if (clip && speed > 0.05 && Math.abs(trip.slope(s)) < 0.05) {
+    poseClip(h, clip, bt / 2 + h.m.seed, Math.min(1, speed / clip.step));
+    settleFace(h, dt);
+    return;
+  }
   const swing = gait(h, dt, Math.PI * bt + h.m.seed * 6.28, speed);
   swingArms(h, swing, 1);
   settle(h, dt);

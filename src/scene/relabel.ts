@@ -77,7 +77,7 @@ export class Relabel {
     this.printAt = [e.x + 1.0, 0, e.z - len - 0.25];
     this.trip = new Trip([this.printAt, ...set.way]);
     this.back = new Trip([...[...set.way].reverse(), this.printAt, this.home]);
-    this.worker = buildHuman(k, { shirt: 0x22283f, trousers: 0x22283f, vest: 0xf2a51a, helmet: 0xffffff }, { x: this.home[0], z: this.home[2], ry: -Math.PI / 2 });
+    this.worker = buildHuman(k, { shirt: 0x22283f, trousers: 0x22283f, vest: 0xf2a51a }, { x: this.home[0], z: this.home[2], ry: -Math.PI / 2 });
     k.put(this.worker.root);
   }
 

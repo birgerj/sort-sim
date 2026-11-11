@@ -1244,7 +1244,6 @@ export class Docks {
       shirt: [0x2f3b6b, 0x2fa58f, 0xf3f4f6, 0x6b7280][n % 4]!,
       trousers: [0x22283f, 0x3a3d44][n % 2]!,
       vest: n % 3 === 2 ? 0xf2a51a : 0xc8ff3a,
-      helmet: [0xffffff, 0xf2c200, 0x1755fe][n % 3]!,
       skin: [0xf0cfb0, 0xd9a77e, 0x8d5a3b, 0xf5d9c4][n % 4]!,
       // The picker who dances along wears headphones.
       headphones: role === 0 && this.docks.length === DANCE_DOCK ? 0xd6339a : undefined,

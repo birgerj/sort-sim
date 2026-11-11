@@ -5,7 +5,7 @@
 //
 // Writes public/mock/worker.glb (body in three levels of detail, eyes, brows, hair; no
 // textures: every body vertex carries a clothing region in `_REGION`, coloured per person in
-// the page) and public/mock/anims.glb (the clips the mock plays, on the same 65-bone skeleton).
+// the page) and public/anims/ual.glb (the clips the mock plays, on the same 65-bone skeleton).
 import { NodeIO } from '@gltf-transform/core';
 import { prune, dedup, weld, resample } from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
@@ -201,5 +201,6 @@ for (const m of ar.listMeshes()) m.dispose();
 for (const t of ar.listTextures()) t.dispose();
 for (const m of ar.listMaterials()) m.dispose();
 await anim.transform(prune({ keepLeaves: true }), resample(), prune({ keepLeaves: true }), dedup());
-await io.write('public/mock/anims.glb', anim);
+mkdirSync('public/anims', { recursive: true });
+await io.write('public/anims/ual.glb', anim);
 console.log('clips', ar.listAnimations().map((a) => a.getName()).join(', '));

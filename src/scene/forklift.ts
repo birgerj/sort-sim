@@ -165,7 +165,7 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
     add(loadGeo.box, M.load, forks, load);
   }
   // The driver, seated.
-  const d = buildHuman(k, { shirt: 0x2f3b6b, trousers: 0x22283f, vest: 0xc8ff3a, helmet: 0xffffff });
+  const d = buildHuman(k, { shirt: 0x2f3b6b, trousers: 0x22283f, vest: 0xc8ff3a });
   d.root.position.set(0, 0.18, -0.2);
   sit(d);
   d.legL.position.y = d.legR.position.y = -0.1;

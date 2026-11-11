@@ -21,6 +21,7 @@ import './ui/style.css';
 import { Music } from './audio/music';
 import { Sorter } from './scene/sorter';
 import { loadBakedBodies, startLaterWork } from './scene/people';
+import { clipOptions, loadClips } from './scene/clips';
 import { NIGHT_PRESETS, normalizeNightFx } from './scene/nightFx';
 import { Hud, loadSettings, saveSettings, type Settings, type TimeMode } from './ui/hud';
 import { startCard } from './ui/startCard';
@@ -84,8 +85,10 @@ if (showUi && !mute) {
   });
 }
 await nextPaint();
-// The people's bodies, made at build time (a few hundred kB), while the loading screen is up.
-await loadBakedBodies();
+// The people's bodies, made at build time (a few hundred kB), while the loading screen is up;
+// and the animation clips some of them walk with (`?clips=0`: the generated gait instead).
+clipOptions.on = q.get('clips') !== '0';
+await Promise.all([loadBakedBodies(), loadClips('./anims/ual.glb')]);
 const scene = new Sorter();
 app.append(scene.canvas);
 scene.canvas.addEventListener('webglcontextlost', (e) => {
