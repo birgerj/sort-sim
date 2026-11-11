@@ -13,6 +13,7 @@ import { BPM, chordOf, Composer, energyOf, STEPS_PER_BAR, type Mood, type NoteEv
 export type Sfx = 'horn' | 'beep' | 'buzz' | 'tune' | 'quack' | 'airhorn' | 'meow' | 'boop' | 'sulk';
 import type { NoteRole, RGB } from '../scene/types';
 import { XMAS } from '../sim/season';
+import { renderKick, renderSnare } from './drums';
 
 const SPB = 60 / BPM; // seconds per beat at the starting tempo
 const STEP = SPB / 4; // one 16th at the starting tempo
@@ -117,6 +118,9 @@ export class Music {
   private reverb: GainNode | null = null;
   private delay: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  /** The kick and snare samples (made at start, see drums.ts); until they are ready, the old synths. */
+  private kickBuf: AudioBuffer | null = null;
+  private snareBuf: AudioBuffer | null = null;
   private muted = false;
   private volume = 0.8;
 
@@ -420,6 +424,8 @@ export class Music {
     dOut.connect(this.out);
     dOut.connect(this.reverb);
     // White noise for the drums.
+    void renderKick('punch').then((b) => (this.kickBuf = b));
+    void renderSnare('crisp').then((b) => (this.snareBuf = b));
     this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const nd = this.noise.getChannelData(0);
     for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
@@ -462,6 +468,17 @@ export class Music {
     }
   }
 
+  /** Play a drum sample at a level (and a little into the reverb, for the snare). */
+  private sample(ctx: AudioContext, buf: AudioBuffer, at: number, level: number, verb = false): void {
+    const s = ctx.createBufferSource();
+    s.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = level;
+    s.connect(g).connect(this.out!);
+    if (verb) g.connect(this.reverb!);
+    s.start(at);
+  }
+
   private play(ev: NoteEvent, at: number, step = STEP): void {
     const ctx = this.ctx!;
     if (at < ctx.currentTime) return;
@@ -469,6 +486,10 @@ export class Music {
     const dur = ev.len * STEP;
     switch (ev.voice) {
       case 'kick': {
+        if (this.kickBuf) {
+          this.sample(ctx, this.kickBuf, at, 0.8 * ev.vel);
+          break;
+        }
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.frequency.setValueAtTime(130, at);
@@ -542,6 +563,10 @@ export class Music {
         const f = ctx.createBiquadFilter();
         const g = ctx.createGain();
         const snare = ev.voice === 'snare';
+        if (snare && this.snareBuf) {
+          this.sample(ctx, this.snareBuf, at, 0.4 * ev.vel, true);
+          break;
+        }
         f.type = snare ? 'bandpass' : 'highpass';
         f.frequency.value = snare ? 1900 : ev.open ? 6500 : 7500;
         f.Q.value = snare ? 0.9 : 0.7;
@@ -573,7 +598,8 @@ export class Music {
         lp.frequency.setValueAtTime(top, at);
         lp.frequency.exponentialRampToValueAtTime(260, at + (ev.accent ? 0.22 : 0.14));
         const g = ctx.createGain();
-        const lvl = (ev.accent ? 0.13 : 0.085) * ev.vel;
+        // (About 5 dB under where it was: it sat on top of everything.)
+        const lvl = (ev.accent ? 0.13 : 0.085) * 0.55 * ev.vel;
         g.gain.setValueAtTime(0.0001, at);
         g.gain.exponentialRampToValueAtTime(lvl, at + 0.005);
         g.gain.setValueAtTime(lvl, at + dur * 0.8);
