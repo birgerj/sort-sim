@@ -542,6 +542,8 @@ export class Hud {
         saveSettings(this.settings);
         setXmas(on);
         if (on) this.music.xmasFlourish();
+        // (Close the panel: the decorations come in, or go, behind it.)
+        this.openTab(null);
         xmasBtns.forEach((x, i) => x.classList.toggle('on', (i === 1) === on));
       };
       xmasBtns.push(b);
