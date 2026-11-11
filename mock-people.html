@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>People mock</title>
+    <meta name="description" content="Trial: a modelled worker (CC0) with levels of detail and animation clips, walking and lifting on the beat." />
+    <meta name="color-scheme" content="light dark" />
+    <style>
+      :root {
+        --bg: #eef0f3;
+        --panel: rgba(255, 255, 255, 0.92);
+        --text: #1d1d1f;
+        --muted: #5b5f68;
+        --line: #d5d8de;
+        --accent: #2fa58f;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --bg: #15161a;
+          --panel: rgba(28, 29, 34, 0.92);
+          --text: #e8e6ef;
+          --muted: #9a9cab;
+          --line: #34363e;
+        }
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.4 system-ui, -apple-system, sans-serif;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+      #ui {
+        position: fixed;
+        left: 16px;
+        top: 16px;
+        max-width: min(360px, calc(100vw - 32px));
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 14px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+      }
+      #ui h1 {
+        font-size: 15px;
+        margin: 0 0 4px;
+      }
+      #ui p {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .label {
+        width: 100%;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      button {
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+      }
+      button.on {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      #stats {
+        font: 12px/1.5 ui-monospace, monospace;
+        color: var(--muted);
+        white-space: pre;
+      }
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading">Loading the worker…</div>
+    <div id="ui" hidden>
+      <h1>People mock</h1>
+      <p>Quaternius Universal Base Characters and Universal Animation Library (both CC0), flat work clothes from the scene's palette, three levels of detail. Drag to turn, scroll to zoom.</p>
+      <div class="row" id="acts"><span class="label">Front worker</span></div>
+      <div class="row" id="crew"><span class="label">Crew</span></div>
+      <div class="row" id="view"><span class="label">View</span></div>
+      <div id="stats"></div>
+    </div>
+    <script type="module" src="./src/mock/people.ts"></script>
+  </body>
+</html>

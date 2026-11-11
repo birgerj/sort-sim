@@ -24,7 +24,7 @@ function serviceWorker(): Plugin {
         }
       };
       walk(dir);
-      const keep = files.filter((f) => f !== 'sw.js' && !f.startsWith('screens/'));
+      const keep = files.filter((f) => f !== 'sw.js' && !f.startsWith('screens/') && !f.startsWith('mock') && !f.includes('/mock-'));
       const hash = createHash('sha256');
       for (const f of keep.sort()) hash.update(f).update(readFileSync(join(dir, f)));
       const version = hash.digest('hex').slice(0, 12);
@@ -54,7 +54,11 @@ function bakedBodies(): Plugin {
 export default defineConfig({
   // Relative asset paths, so the build works on GitHub Pages under /sort-sim/.
   base: './',
-  build: { chunkSizeWarningLimit: 1200 },
+  build: {
+    chunkSizeWarningLimit: 1200,
+    // (mock-people.html: a trial page, not linked from the hall.)
+    rollupOptions: { input: { main: 'index.html', mock: 'mock-people.html' } },
+  },
   plugins: [bakedBodies(), serviceWorker()],
   test: {
     include: ['tests/**/*.test.ts'],

@@ -1,0 +1,4 @@
+worker.glb and anims.glb are built by tools/mockWorker.mjs from two packs by Quaternius:
+Universal Base Characters (Regular male, SimpleParted hair) and Universal Animation Library
+(Idle, Walk, Pick up, Push, Dance, Talking). Both CC0 1.0 Universal (public domain dedication):
+https://creativecommons.org/publicdomain/zero/1.0/  -  https://quaternius.com
