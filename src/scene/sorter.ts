@@ -223,6 +223,8 @@ export type Quality = 'low' | 'normal' | 'high';
 export const LOD_SCALE: Record<Quality, number> = { low: 0.6, normal: 1, high: 1.4 };
 /** How far out the outlines are drawn (they have faded into the haze by about 90 m anyway). */
 const INK_DIST: Record<Quality, number> = { low: 55, normal: 90, high: Infinity };
+/** Small parts (bolts, lamps, rollers, wheels) get their own lines up to this far (m). */
+const INK_DETAIL: Record<Quality, number> = { low: 30, normal: 40, high: 60 };
 /** x of the wall columns (south wall; the north ones stand 2.4 m further east). */
 /** x of the staff door in the south wall (east of the column at x −43), and of the walkway to it. */
 const SDX = -41.7;
@@ -1494,6 +1496,7 @@ export class Sorter implements Scene3D {
     this.composer.addPass(this.gtao);
     this.ink = new InkPass(this.scene, this.camera, INK_MASK_LAYER);
     this.ink.maxDist = INK_DIST[this.quality];
+    this.ink.detailDist = INK_DETAIL[this.quality];
     this.composer.addPass(this.ink);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.55, 0.6);
     this.composer.addPass(this.bloom);
@@ -2252,6 +2255,7 @@ export class Sorter implements Scene3D {
     this.lodScale = LOD_SCALE[q];
     setPeopleLod(this.lodScale);
     this.ink.maxDist = INK_DIST[q];
+    this.ink.detailDist = INK_DETAIL[q];
     this.quality = q;
     this.shadowMode = null; // re-decide the shadows for this quality
     this.dayShown = null; // re-apply the look (mirror floor, shadows)

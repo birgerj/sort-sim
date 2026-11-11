@@ -64,11 +64,43 @@ void main() {
 }
 `;
 
+/** A single mesh that may be left out of the normals by distance: its world sphere (and, if it may move, its own). */
+interface FarMesh {
+  o: THREE.Mesh;
+  s: THREE.Sphere;
+  local?: THREE.Sphere;
+}
+
 export class InkPass extends Pass {
   private target: THREE.WebGLRenderTarget;
   // Double-sided: belts and chutes are single surfaces; seen from behind they must still
   // hide what is behind them, or its outlines show through and they look transparent.
-  private normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+  private normalMat = InkPass.normals();
+  /**
+   * The normals material, which also leaves out single instances (a roller, a tray, a robot) beyond
+   * `uReach` from the camera: their triangles are moved off screen, so they cost no drawing.
+   */
+  private static normals(): THREE.MeshNormalMaterial {
+    const m = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+    const reach = { value: 1e9 };
+    m.userData.reach = reach;
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uReach = reach;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uReach;').replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+#ifdef USE_INSTANCING
+        {
+          // (The instance's place and size, less its reach: beyond it, off screen.)
+          vec3 ip = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          float sc = max(length(instanceMatrix[0].xyz), max(length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz)));
+          if (distance(ip, cameraPosition) - sc > uReach) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        }
+#endif`,
+      );
+    };
+    return m;
+  }
   /** People: drawn into the same buffers with alpha 2, which the edge shader leaves alone. */
   private maskMat = new THREE.MeshNormalMaterial({ opacity: 2 });
   /** Objects on the mask layer (people), drawn in a second render. */
@@ -87,7 +119,12 @@ export class InkPass extends Pass {
   /** How far the camera is from what it looks at: nothing that close is ever left out. */
   focus = 0;
   /** Single meshes that may be left out by distance, with their world bounding spheres. */
-  private far: { o: THREE.Mesh; s: THREE.Sphere }[] | null = null;
+  private far: FarMesh[] | null = null;
+  /** Instanced meshes, with the size of their geometry (bounding radius) and whether their parts are small. */
+  private insts: { o: THREE.InstancedMesh; r: number; small: boolean }[] | null = null;
+  private readonly wp = new THREE.Vector3();
+  /** Small parts (bolts, lamps, rollers, wheels): no lines of their own further than this (m). */
+  detailDist = 35;
 
   constructor(
     private scene: THREE.Scene,
@@ -130,19 +167,42 @@ export class InkPass extends Pass {
     this.skip = null;
     this.masked = null;
     this.far = null;
+    this.insts = null;
   }
 
-  private collectFar(skip: Set<THREE.Object3D>): { o: THREE.Mesh; s: THREE.Sphere }[] {
-    const out: { o: THREE.Mesh; s: THREE.Sphere }[] = [];
+  private collectInsts(skip: Set<THREE.Object3D>): { o: THREE.InstancedMesh; r: number; small: boolean }[] {
+    const out: { o: THREE.InstancedMesh; r: number; small: boolean }[] = [];
+    const m4 = new THREE.Matrix4();
+    const sc = new THREE.Vector3();
+    this.scene.traverse((o) => {
+      const im = o as THREE.InstancedMesh;
+      if (!im.isInstancedMesh || skip.has(im)) return;
+      const g = im.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      const r = g.boundingSphere!.radius;
+      // Small: every part (as placed now) under 0.3 m across, or so.
+      let big = 0;
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m4);
+        sc.setFromMatrixScale(m4);
+        big = Math.max(big, r * Math.max(sc.x, sc.y, sc.z));
+      }
+      out.push({ o: im, r, small: big < 0.3 });
+    });
+    return out;
+  }
+
+  private collectFar(skip: Set<THREE.Object3D>): FarMesh[] {
+    const out: FarMesh[] = [];
     this.scene.updateMatrixWorld(true);
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh || skip.has(m) || (m as THREE.InstancedMesh).isInstancedMesh || (m as THREE.SkinnedMesh).isSkinnedMesh) return;
-      // (Only what stands still: a moving part's sphere would go stale.)
-      if (!m.userData.merged && !m.userData.static && m.parent !== this.scene) return;
       const g = m.geometry;
       if (!g.boundingSphere) g.computeBoundingSphere();
-      out.push({ o: m, s: g.boundingSphere!.clone().applyMatrix4(m.matrixWorld) });
+      // What stands still: its sphere once; what may move (a truck, a cage, a door): placed each frame.
+      const still = !!(m.userData.merged || m.userData.static || m.parent === this.scene);
+      out.push({ o: m, s: g.boundingSphere!.clone().applyMatrix4(m.matrixWorld), local: still ? undefined : g.boundingSphere! });
     });
     return out;
   }
@@ -169,16 +229,47 @@ export class InkPass extends Pass {
     // Far single meshes: out of the normals for this frame.
     const hidden: THREE.Object3D[] = [];
     const reach = Math.max(this.maxDist, this.focus * 1.3);
-    if (reach < Infinity) {
-      if (!this.far) this.far = this.collectFar(new Set(this.skip));
-      const cam = this.camera.position;
-      for (const { o, s } of this.far) {
-        if (o.visible && s.center.distanceTo(cam) - s.radius > reach) {
-          o.visible = false;
-          hidden.push(o);
-        }
+    // (Small things: only up to detailDist, or what the camera looks at.)
+    const small = Math.min(reach, Math.max(this.detailDist, this.focus * 1.3));
+    const cam = this.camera.position;
+    if (!this.far) this.far = this.collectFar(new Set(this.skip));
+    for (const { o, s, local } of this.far) {
+      if (!o.visible) continue;
+      if (local) s.copy(local).applyMatrix4(o.matrixWorld);
+      if (s.center.distanceTo(cam) - s.radius > (s.radius < 0.4 ? small : reach)) {
+        o.visible = false;
+        hidden.push(o);
       }
     }
+    // Instanced meshes: left out whole when none of their parts is within reach (small parts: within
+    // detailDist); the others lose the parts beyond reach in the shader (see normals).
+    if (!this.insts) this.insts = this.collectInsts(new Set(this.skip));
+    for (const { o, r, small: isSmall } of this.insts) {
+      if (!o.visible || o.count === 0) continue;
+      const lim = isSmall ? small : reach;
+      if (lim === Infinity) continue;
+      const a = o.instanceMatrix.array;
+      const w = o.matrixWorld.elements;
+      // (Instances are placed in the mesh's own frame; most meshes sit at the origin unturned.)
+      const ox = w[12]!;
+      const oy = w[13]!;
+      const oz = w[14]!;
+      let near = false;
+      for (let i = 0; i < o.count && !near; i++) {
+        const k = i * 16;
+        const s = Math.sqrt(Math.max(a[k]! * a[k]! + a[k + 1]! * a[k + 1]! + a[k + 2]! * a[k + 2]!, a[k + 4]! * a[k + 4]! + a[k + 5]! * a[k + 5]! + a[k + 6]! * a[k + 6]!, a[k + 8]! * a[k + 8]! + a[k + 9]! * a[k + 9]! + a[k + 10]! * a[k + 10]!));
+        if (s === 0) continue;
+        const dx = a[k + 12]! + ox - cam.x;
+        const dy = a[k + 13]! + oy - cam.y;
+        const dz = a[k + 14]! + oz - cam.z;
+        near = Math.sqrt(dx * dx + dy * dy + dz * dz) - r * s <= lim;
+      }
+      if (!near) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    }
+    (this.normalMat.userData.reach as { value: number }).value = reach === Infinity ? 1e9 : reach;
     const bg = this.scene.background;
     const fog = this.scene.fog;
     this.scene.background = null;
@@ -197,7 +288,10 @@ export class InkPass extends Pass {
         this.scene.traverse((o) => o.userData.inkMask && list.push(o));
         this.masked = list;
       }
-      for (const o of this.masked) o.visible = true;
+      // (People further than the reach are left out too: a few pixels tall, in the haze.)
+      // (Only those that are shown at all: Father Christmas only at Christmas.)
+      const shown = new Set(this.skip.filter((_, k) => was[k]));
+      for (const o of this.masked) o.visible = shown.has(o) && (reach === Infinity || o.getWorldPosition(this.wp).distanceTo(cam) < reach);
       const layers = this.camera.layers.mask;
       const auto = renderer.autoClear;
       this.camera.layers.set(this.maskLayer);
