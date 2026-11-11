@@ -15,6 +15,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasTexture } from './textures';
 import { REAL } from './realDay';
+import { BODY } from './proportions';
 import { BODY_LEVELS, bodyField, bodySurfaceZ, buildBody, type BodyLevel } from './bodySdf';
 
 import { onXmas, XMAS } from '../sim/season';
@@ -398,6 +399,10 @@ function shapes(level: BodyLevel): Record<string, THREE.BufferGeometry> {
     sack: ell(0.2, 0.26, 0.17, 0.06, 0.48, -0.24, 12),
 
   };
+  // The neckline (collar, lanyard, the suit's V and tie) rises with the shoulders.
+  for (const key of ['collar', 'lanyard', 'shirtV', 'lapels', 'tie']) geo[key]!.translate(0, BODY.lift, 0);
+  // Hands their real size, from the wrist (the hand joint).
+  geo.hand!.scale(BODY.hand, BODY.hand, BODY.hand);
   // Everything on the head hangs from the neck joint (at y 0.6 in the torso).
   for (const key of ['head', 'ears', 'eyes', 'pupils', 'lips', 'hair', 'hairLong', 'hairTail', 'hairT', 'hairLongT', 'hairTailT', 'helmet', 'band', 'cap', 'peak', 'hat', 'hatH', 'brimS', 'brimH', 'beard', 'phonesBand', 'phonesBandH', 'phonesCups', 'phonesCupsH']) geo[key]!.translate(0, -NECK_Y, 0);
   // Eyes and mouth hang from their own joints on the head.
@@ -712,6 +717,8 @@ import { BELLIES, BODIES_FILE, bodyKey, decodeBodies, REST_SPREAD, WIDTHS } from
  * Without them, each body is made in the browser when first needed.
  */
 export async function loadBakedBodies(): Promise<void> {
+  // (The baked ones have the current proportions; the old ones are made here.)
+  if (BODY.old) return;
   try {
     const res = await fetch(new URL(BODIES_FILE, document.baseURI));
     if (!res.ok) return;
@@ -848,13 +855,13 @@ vec3 clothes(vec3 p, vec3 w) {
   }
   if (y < 0.95) return cTrousers;
   if (y < 1.01) return cBelt;
-  if (y > 1.455 && ax < 0.07) return cSkin;
+  if (y > ${(1.455 + BODY.lift).toFixed(3)} && ax < 0.07) return cSkin;
   if (uCloth.x > 0.5) {
     float sx = uCloth.z;
-    bool armhole = length(vec2((ax - (sx + 0.01)) / 0.07, (y - 1.335) / 0.12)) < 1.0 || ax > sx - 0.023;
-    bool vNeck = z > 0.0 && y > 1.325 + 1.4 * ax;
-    if (!(y > 1.42 || armhole || vNeck)) {
-      if ((y > 1.11 && y < 1.14) || (y > 1.25 && y < 1.28)) return cBand;
+    bool armhole = length(vec2((ax - (sx + 0.01)) / 0.07, (y - ${(1.335 + BODY.lift).toFixed(3)}) / 0.12)) < 1.0 || ax > sx - 0.023;
+    bool vNeck = z > 0.0 && y > ${(1.325 + BODY.lift).toFixed(3)} + 1.4 * ax;
+    if (!(y > ${(1.42 + BODY.lift).toFixed(3)} || armhole || vNeck)) {
+      if ((y > 1.11 && y < 1.14) || (y > ${(1.25 + BODY.lift / 2).toFixed(3)} && y < ${(1.28 + BODY.lift / 2).toFixed(3)})) return cBand;
       return cVest;
     }
   }
@@ -962,8 +969,8 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   const tail = style === 2 ? joint(head, TAIL.x, TAIL.y, TAIL.z) : null;
   const eyes = joint(head, EYES.x, EYES.y, EYES.z);
   const mouth = joint(head, MOUTH.x, MOUTH.y, MOUTH.z);
-  const armL = joint(chest, -shoulderX, 0.465 - CHEST_Y, 0);
-  const armR = joint(chest, shoulderX, 0.465 - CHEST_Y, 0);
+  const armL = joint(chest, -shoulderX, 0.465 + BODY.lift - CHEST_Y, 0);
+  const armR = joint(chest, shoulderX, 0.465 + BODY.lift - CHEST_Y, 0);
   const foreL = joint(armL, 0, -UPPER_ARM, 0);
   const foreR = joint(armR, 0, -UPPER_ARM, 0);
   const handL = joint(foreL, 0, -WRIST, 0);
@@ -1216,6 +1223,10 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   // (The joints are Groups, not Bones; the skeleton only needs their world matrices.)
   for (const m of meshes) m.bind(skeleton, new THREE.Matrix4());
 
+  // The head a little larger from a lower neck joint (after binding, so the skin follows it:
+  // see proportions.ts).
+  head.position.y -= BODY.drop;
+  head.scale.setScalar(BODY.head);
   // The resting pose: elbows a little bent.
   foreL.rotation.x = foreR.rotation.x = -0.12;
   root.scale.setScalar(height);
