@@ -398,7 +398,7 @@ export class Inbound {
     crouch(h, held ? Math.min(0.8, low * 1.4) : 0);
     if (held) {
       // Hands on the sides of the parcel.
-      const right = this.v2.set(-Math.cos(u.yaw), 0, Math.sin(u.yaw));
+      const right = this.v2.set(Math.cos(u.yaw), 0, -Math.sin(u.yaw));
       const c = this.v.copy(held.p.pos).setY(held.p.pos.y + 0.15);
       const kk = Math.min(1, dt * 14);
       reach(h, 'L', c.clone().addScaledVector(right, -0.22), kk, 1);

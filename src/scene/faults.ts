@@ -316,16 +316,16 @@ export class FaultCrew {
     crouch(h, squat);
     const kk = Math.min(1, dt * 12);
     if (pose === 'ride') {
-      // Hands on the grips.
+      // Hands on the grips: each on its own side (the left arm sits at the body's −x).
       for (const side of ['L', 'R'] as const) {
-        this.v.set(side === 'L' ? 0.24 : -0.24, 1.18, 0.34).applyMatrix4(this.scooter.matrix);
+        this.v.set(side === 'L' ? -0.24 : 0.24, 1.18, 0.34).applyMatrix4(this.scooter.matrix);
         reach(h, side, this.v, kk, 0);
       }
     } else if (pose === 'repair') {
       // Both hands at the chute exit, moving a little on the beat (a screwdriver, a sensor's lens);
       // or the right hand down into the toolbox.
       const w = this.site!.work;
-      const right = this.v2.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
+      const right = this.v2.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
       const jig = 0.04 * Math.sin(bt * Math.PI * 2);
       if (toBox) {
         reach(h, 'R', this.v.copy(this.toolPos).setY(this.toolPos.y + 0.12), kk, 0);
@@ -338,7 +338,7 @@ export class FaultCrew {
     } else if (pose === 'bench') {
       // Tinkering at the bench: hands on the top, a little movement on the beat.
       const t = this.L.benchTop;
-      const right = this.v2.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
+      const right = this.v2.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
       const jig = 0.05 * Math.sin(bt * Math.PI);
       reach(h, 'L', this.v.copy(t).addScaledVector(right, -0.18), kk, 0.2);
       reach(h, 'R', this.v.copy(t).addScaledVector(right, 0.14 + jig).setY(t.y + Math.abs(jig)), kk, 0.2);
@@ -373,7 +373,7 @@ export class FaultCrew {
     } else {
       // On the floor beside him, at his right foot.
       if (tb.parent !== this.group) this.group.add(tb);
-      const right = this.v2.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
+      const right = this.v2.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
       // (A little behind him, out of his way.)
       tb.position.set(this.x + right.x * 0.5 - Math.sin(this.yaw) * 0.15, 0.09, this.z + right.z * 0.5 - Math.cos(this.yaw) * 0.15);
       tb.rotation.set(0, this.yaw + Math.PI / 2, 0);
