@@ -160,8 +160,11 @@ const HOLD_S = 18;
 const LANE_QUEUE = 7;
 /** Share of parcels for the robots (the rest go to the roll cages at the north docks). */
 const ROBOT_SHARE = 0.12;
-/** Rounds on the sorter before a parcel whose chute stays full is put aside (overflow). */
-const MAX_LAPS = 3;
+/**
+ * Rounds on the sorter before a parcel whose chute stays full (and the store has no room for
+ * it either) is put aside to manual sorting (overflow): manual work is the last resort.
+ */
+const MAX_LAPS = 5;
 /** A buffered parcel stays at least this long in the store (8 bars). */
 const MIN_STORE_BEATS = 32;
 /** Service marks on labels, and how often each comes up. */
@@ -3391,7 +3394,12 @@ export class Sorter implements Scene3D {
     const to = p.noread && p.dest >= 0 ? out : p.dest;
     if (to !== p.dest) {
       if (this.room(out) <= 0) {
-        p.divertAt += LOOP_LEN / BEAT_M;
+        if (p.reason === 'overflow') {
+          // Manual sorting is full too: back to trying its own chute (and the store) each round.
+          p.noread = false;
+          p.reason = undefined;
+          this.retarget(p);
+        } else p.divertAt += LOOP_LEN / BEAT_M;
         return;
       }
       this.inbound.set(out, (this.inbound.get(out) ?? 0) + 1);
@@ -3404,11 +3412,20 @@ export class Sorter implements Scene3D {
     if (p.dest >= 0 && this.room(p.dest, p.d + GAP) <= 0) {
       // Destination full: into the buffer store if it has room (it comes back out when the
       // chute has room again); otherwise it stays on its tray and goes round again
-      // (recirculation), and after MAX_LAPS rounds it is put aside to manual sorting (overflow).
+      // (recirculation), and after MAX_LAPS rounds it is put aside to manual sorting (overflow),
+      // if that has room. First, though: another door for the same city with room takes it.
+      // (For the robots, any pickup station will do.)
+      const same = this.stationOf.has(p.dest) && !p.manual ? [...this.stationOf.keys()] : this.cityChutes.find((ch) => ch.includes(p.dest));
+      const other = same?.find((c) => c !== p.dest && this.room(c, p.d + GAP) > 0);
+      if (other !== undefined) {
+        p.dest = other;
+        this.retarget(p);
+        return;
+      }
       if (this.buffer(p)) return;
       p.laps = (p.laps ?? 0) + 1;
       this.kpi.recirculated();
-      if (p.laps >= MAX_LAPS) {
+      if (p.laps >= MAX_LAPS && this.room(REJECT) > 0) {
         p.noread = true;
         p.reason = 'overflow';
         this.retarget(p);
