@@ -4971,7 +4971,8 @@ export class Sorter implements Scene3D {
     let recirculating = 0;
     for (const p of this.parcels) {
       if (p.mode === 'loop') parcels.push([p.pos.x, p.pos.z]);
-      else if (p.mode === 'path' && (p.pathKind === 'lane' || p.pathKind === 'feed')) infeedParcels.push([p.pos.x, p.pos.z]);
+      // (Only once they are in the hall: a feed path starts inside the trailer, north of the wing's wall.)
+      else if (p.mode === 'path' && (p.pathKind === 'lane' || p.pathKind === 'feed') && p.pos.z > WING.z0 + 0.3) infeedParcels.push([p.pos.x, p.pos.z]);
       if ((p.laps ?? 0) > 0 && p.mode === 'loop') recirculating++;
     }
     // Every scanner (the lanes' tunnels and the two on the loop): how long since it last scanned, and whether it read.
