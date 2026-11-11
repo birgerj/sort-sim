@@ -831,6 +831,12 @@ export class Docks {
       pos = w.from.clone().lerp(st.to, e);
       if (st.face) face = Math.atan2(st.face.x - pos.x, st.face.z - pos.z);
       const moving = w.from.distanceTo(st.to) > 0.2;
+      // Walking (or carrying) more than a metre: face the way you go, and turn to what the step
+      // looks at only on its last metre. (A step without its own target kept the last way the
+      // worker faced: back from a chat in the loop they walked to the cages backwards.)
+      if (!st.cage && (st.pose === 'walk' || st.pose === 'carry') && w.from.distanceTo(st.to) > 1 && f < 1 && (!st.face || pos.distanceTo(st.to) > 0.8)) {
+        face = Math.atan2(st.to.x - w.from.x, st.to.z - w.from.z);
+      }
       if (moving && f < 1) speed = w.from.distanceTo(st.to) / st.beats;
       if (st.cage) {
         st.cage.c.g.position.lerpVectors(w.cageFrom, st.cage.to, e);

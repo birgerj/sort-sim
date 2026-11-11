@@ -20,7 +20,7 @@ import './ui/style.css';
 
 import { Music } from './audio/music';
 import { Sorter } from './scene/sorter';
-import { loadBakedBodies, startLaterWork } from './scene/people';
+import { HUMANS, loadBakedBodies, startLaterWork } from './scene/people';
 import { clipOptions, loadClips } from './scene/clips';
 import { NIGHT_PRESETS, normalizeNightFx } from './scene/nightFx';
 import { Hud, loadSettings, saveSettings, type Settings, type TimeMode } from './ui/hud';
@@ -221,4 +221,4 @@ requestAnimationFrame((t) => {
 });
 
 // For the console and the screenshot script.
-Object.assign(window, { sortsim: { scene, music, settings, antics: ANTICS, setTod: (t: number) => (tod = t), setCountry, setXmas } });
+Object.assign(window, { sortsim: { scene, music, settings, antics: ANTICS, humans: HUMANS, setTod: (t: number) => (tod = t), setCountry, setXmas } });
