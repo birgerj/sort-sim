@@ -152,6 +152,8 @@ const LANE_TUNNEL_Z = -43.0;
 /** The maintenance platform inside the loop at its west end (the DJ's at night): centre x, top y. */
 const PLATFORM_X = -49;
 const PLATFORM_Y = 2.4;
+/** Christmas trees on the dance floor: between the snowflakes projected on the floor. */
+const XMAS_MID_TREES = [6, 30, 54, 78].map((x) => ({ x, z: 0 }));
 /** The buffer: where parcels queue on an infeed lane (metres along it, after the scan tunnel). */
 const HOLD_S = 18;
 /** Parcels that fit in a lane's queue inside the hall; more wait outside (counted). */
@@ -1604,7 +1606,13 @@ export class Sorter implements Scene3D {
           { x: -53.5, z: 31.0, h: 6 },
           { x: -19.5, z: -36.2, h: 7 },
           { x: PLATFORM_X - 2.2, z: 2.4, y: PLATFORM_Y, h: 3.4 },
+          // In the middle of the hall, on the loop's centre line (the dancers step aside round them).
+          ...XMAS_MID_TREES.map(({ x, z }) => ({ x, z, h: 5.5 })),
         ],
+        // Under the roof, in four rows between the roof beams: clear of the columns, the cable
+        // trays and the disco's lights (and the mirror ball).
+        // (One spot by the east end is taken by fittings under the roof.)
+        hangers: [-20.5, -4, 4, 21.5].flatMap((z) => Array.from({ length: 36 }, (_, k) => ({ x: -57.5 + k * 5, z }))).filter((h) => !(h.x === 107.5 && h.z === 21.5)),
         canes: [
           { x: -41.6, z: 1.7, ry: 0 },
           { x: -41.6, z: -1.7, ry: Math.PI },
@@ -1751,6 +1759,10 @@ export class Sorter implements Scene3D {
     onCountry((now, was) => this.setCountry(now, was));
     // The inside of the loop is the dance floor at night (clear of the inner legs and cable tray).
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
+    // At Christmas the dancers keep clear of the trees in the middle.
+    const treeSpots = XMAS_MID_TREES.map(({ x, z }) => ({ x, z, r: 2.6 }));
+    this.crowd.setAvoid(treeSpots, XMAS, true);
+    onXmas((on) => this.crowd.setAvoid(treeSpots, on));
     this.eggs = new Eggs(this);
     this.eggs.link({ life: this.life, docks: this.docks, party: this.party, floor: this.floor, tableY: DECK_Y });
     ANTICS.build(this);

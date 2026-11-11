@@ -22,6 +22,11 @@ export interface CrowdInput {
 interface Dancer {
   x: number;
   z: number;
+  /** Their own place, and how far they step aside from it when something stands there. */
+  bx: number;
+  bz: number;
+  ox: number;
+  oz: number;
   yaw: number;
   phase: number;
   /** 0 bounce, 1 arms up pumping, 2 sway, 3 glow stick wave. */
@@ -116,6 +121,10 @@ export class Crowd {
       this.dancers.push({
         x,
         z,
+        bx: x,
+        bz: z,
+        ox: 0,
+        oz: 0,
         yaw: Math.random() * Math.PI * 2,
         phase: Math.random(),
         style: Math.floor(Math.random() * 4),
@@ -177,9 +186,51 @@ export class Crowd {
   }
   private readonly cg = { x: 0, z: 0, yaw: 0, w: 0 };
 
+  /** Places to keep clear (round), and whether to keep clear of them now (the dancers step aside). */
+  private avoidOn = false;
+  private avoidF = 0;
+  setAvoid(spots: { x: number; z: number; r: number }[], on: boolean, now = false): void {
+    this.avoidOn = on;
+    // (At once, without the walk aside: as the hall is built.)
+    if (now) {
+      this.avoidF = on ? 1 : 0;
+      for (const d of this.dancers) {
+        d.x = d.bx;
+        d.z = d.bz;
+      }
+    }
+    for (const d of this.dancers) {
+      d.ox = d.oz = 0;
+      for (const sp of spots) {
+        const dx = d.bx - sp.x;
+        const dz = d.bz - sp.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist >= sp.r) continue;
+        // Out to the edge of the circle, the way they already were from its middle.
+        const a = dist > 0.01 ? Math.atan2(dz, dx) : d.phase * Math.PI * 2;
+        const to = sp.r + d.phase * 0.6;
+        d.ox = sp.x + Math.cos(a) * to - d.bx;
+        d.oz = sp.z + Math.sin(a) * to - d.bz;
+      }
+      if (now && on) {
+        d.x = d.bx + d.ox;
+        d.z = d.bz + d.oz;
+      }
+    }
+  }
+
   update(dt: number, bt: number, s: CrowdInput): void {
-    void dt;
     if (s.dayShown || !this.group.visible) return;
+    // Stepping aside (or back) takes a couple of seconds.
+    const want = this.avoidOn ? 1 : 0;
+    if (this.avoidF !== want) {
+      this.avoidF = want ? Math.min(1, this.avoidF + dt * 0.6) : Math.max(0, this.avoidF - dt * 0.6);
+      const e = this.avoidF * this.avoidF * (3 - 2 * this.avoidF);
+      for (const d of this.dancers) {
+        d.x = d.bx + d.ox * e;
+        d.z = d.bz + d.oz * e;
+      }
+    }
     const beat = Math.floor(bt);
     const ph = bt - beat;
     const hype = 0.4 + 0.6 * s.energy;

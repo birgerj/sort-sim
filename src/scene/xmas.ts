@@ -7,6 +7,7 @@
 // floor, lights come on one by one, baubles and wreaths pop up, presents drop in, stars come
 // down from the roof. Switched off, it all shrinks away again (faster).
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import type { FloorKit } from './floor';
@@ -30,6 +31,8 @@ export interface XmasLayout {
   snow: { x: number; z: number }[];
   /** The Christmas market: stall and stable, side by side, backs to the south wall. */
   market: { x: number; z: number };
+  /** Under the roof: where candy canes, stockings, presents and big baubles hang on wires. */
+  hangers: { x: number; z: number }[];
   /** The inbound wing north of the north wall (x0…x1, back wall at z0): the garlands follow its walls, its doors get wreaths. */
   wing?: { x0: number; x1: number; z0: number; doors: number[] };
   /** Along the west wall, no garland from z0 to z1 (the canteen's windows and stair). */
@@ -135,6 +138,16 @@ export class Xmas {
   private into: THREE.Object3D;
   private readonly m4 = new THREE.Matrix4();
   private readonly m5 = new THREE.Matrix4();
+  /** Things hanging from the roof: the wire's top, the hang point, a turn and a swing of its own. */
+  private hangers: { at: THREE.Vector3; top: number; yaw: number; phase: number; del: number; f: number; m: THREE.Matrix4 }[] = [];
+  /** Their parts, instanced: each instance is one part of one hanger, placed relative to its hang point. */
+  private hangParts: { im: THREE.InstancedMesh; local: THREE.Matrix4[]; who: number[] }[] = [];
+  private readonly h4 = new THREE.Matrix4();
+  private readonly hq = new THREE.Quaternion();
+  private readonly he = new THREE.Euler();
+  private readonly hv = new THREE.Vector3();
+  private readonly one = new THREE.Vector3(1, 1, 1);
+  private readonly zero = new THREE.Matrix4().makeScale(0, 0, 0);
   /** Twinkling lights: two sets that take turns on the beat. */
   private lights: THREE.MeshBasicMaterial[] = [];
   private stars: THREE.MeshBasicMaterial;
@@ -186,6 +199,7 @@ export class Xmas {
     this.buildStars();
     this.buildSnow();
     this.buildMarket();
+    this.buildHangers();
     this.swagMesh = new THREE.Mesh(merge(this.swags.map((x) => x.geo)), this.k.std(0x14532d, 0.9, 0, GREEN));
     this.add(this.swagMesh);
   }
@@ -201,13 +215,14 @@ export class Xmas {
     const delay = (at: THREE.Vector3) => Math.hypot(at.x - this.origin.x, at.z - this.origin.z) / WAVE;
     for (const p of this.pieces) p.del = delay(p.at) + p.extra;
     for (const x of this.insts) x.del = x.at.map((a, i) => delay(a) + x.extra[i]!);
+    for (const h of this.hangers) h.del = delay(h.at) + 0.3;
     // The swags in the order the wave reaches them.
     const order = this.swags.map((sw) => ({ sw, del: delay(sw.at) })).sort((a, b) => a.del - b.del);
     this.swagMesh!.geometry.dispose();
     this.swagMesh!.geometry = merge(order.map((o) => o.sw.geo));
     let n = 0;
     this.swagEnds = order.map((o) => ({ n: (n += o.sw.geo.attributes.position!.count), del: o.del }));
-    this.lastDel = Math.max(...this.pieces.map((p) => p.del), ...this.insts.flatMap((x) => x.del), ...order.map((o) => o.del));
+    this.lastDel = Math.max(...this.pieces.map((p) => p.del), ...this.insts.flatMap((x) => x.del), ...order.map((o) => o.del), ...this.hangers.map((h) => h.del));
     this.root.visible = true;
   }
 
@@ -219,6 +234,7 @@ export class Xmas {
     // Going: each thing in a third of the time, and the wave faster too.
     const f = (del: number) => (on ? Math.min(1, Math.max(0, (t - del) / IN)) : 1 - Math.min(1, Math.max(0, (t - del * 0.4) / OUT)));
     for (const p of this.pieces) this.pose(p.g, p.kind, f(p.del), p.from ?? 0);
+    for (const h of this.hangers) h.f = f(h.del);
     for (const it of this.insts) {
       it.base.forEach((b, i) => {
         this.instPose(b, it.at[i]!, it.kind, f(it.del[i]!), this.m4);
@@ -248,6 +264,7 @@ export class Xmas {
     if (t > (on ? this.lastDel + IN : this.lastDel * 0.4 + OUT) + 0.1) {
       this.t0 = -1;
       this.flakeFade = 1;
+      for (const h of this.hangers) h.f = 1;
       if (!on) this.root.visible = false;
       geo.setDrawRange(0, Infinity);
     }
@@ -362,6 +379,99 @@ export class Xmas {
     this.stars.color.setRGB(1, 0.78, 0.2).multiplyScalar(1 + night * 1.4 + Math.sin(bt * Math.PI) * 0.15);
     this.flakeMat.opacity = (0.18 + night * 0.5) * this.flakeFade;
     this.flakes.forEach((f, i) => (f.rotation.z = bt * 0.05 * (i % 2 ? 1 : -1)));
+    this.hang(bt, night, kick);
+  }
+
+  /**
+   * The hanging things this frame: each swings slowly from the top of its wire (a little more on
+   * the kick at night), and while coming in drops down from the roof (going: goes back up).
+   */
+  private hang(bt: number, night: number, kick: number): void {
+    const mats = this.hangers.map((h) => {
+      if (h.f <= 0) return null;
+      const lift = (1 - (this.on ? elasticOut(h.f) : h.f)) * (h.top - h.at.y + 1.5);
+      const sway = 0.06 * Math.sin(bt * (Math.PI / 4) + h.phase) + kick * 0.025 * night;
+      this.he.set(sway * 0.4, 0, sway);
+      this.hq.setFromEuler(this.he);
+      const m = h.m.compose(this.hv.set(h.at.x, h.top, h.at.z), this.hq, this.one);
+      this.he.set(0, h.yaw + Math.sin(bt * 0.1 + h.phase) * 0.3, 0);
+      this.hq.setFromEuler(this.he);
+      return m.multiply(this.h4.compose(this.hv.set(0, h.at.y - h.top + lift, 0), this.hq, this.one));
+    });
+    const zero = this.zero;
+    for (const p of this.hangParts) {
+      p.local.forEach((l, i) => {
+        const m = mats[p.who[i]!];
+        p.im.setMatrixAt(i, m ? this.h4.multiplyMatrices(m, l) : zero);
+      });
+      p.im.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  /** Candy canes, stockings, presents and big baubles, each on a thin wire from the roof. */
+  private buildHangers(): void {
+    const k = this.k;
+    const parts = new Map<string, { geo: THREE.BufferGeometry; mat: THREE.Material; local: THREE.Matrix4[]; who: number[]; cols: (number | undefined)[] }>();
+    const part = (key: string, geo: () => THREE.BufferGeometry, mat: () => THREE.Material, who: number, m: THREE.Matrix4, col?: number) => {
+      let p = parts.get(key);
+      if (!p) parts.set(key, (p = { geo: geo(), mat: mat(), local: [], who: [], cols: [] }));
+      p.local.push(m);
+      p.who.push(who);
+      p.cols.push(col);
+    };
+    const M = (x: number, y: number, z: number, sx = 1, sy = 1, sz = 1, rz = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, rz)), new THREE.Vector3(sx, sy, sz));
+    const white = () => k.std(0x444444, 0.6, 0, 0xffffff);
+    const shiny = () => k.std(0x555555, 0.25, 0.5, 0xffffff);
+    const wireMat = () => new THREE.MeshBasicMaterial({ color: 0x9aa0a8 });
+    const box = () => new THREE.BoxGeometry(1, 1, 1);
+    const wraps = [RED, GOLD, 0x1755fe, 0x2fa58f, 0xffffff, 0xd6339a, 0x6b3fd1];
+    const balls = [RED, GOLD, 0x1755fe, 0xc0c4cc, 0x2fa58f];
+    this.L.hangers.forEach(({ x, z }, i) => {
+      // (Not all at one height: from about 8.2 to 9.2 m.)
+      const r = (n: number) => (((i * 2654435761 + n * 40503) >>> 0) % 1000) / 1000;
+      const y = 8.2 + r(1) * 1.0;
+      const top = this.L.hh - 0.2;
+      this.hangers.push({ at: new THREE.Vector3(x, y, z), top, yaw: r(2) * Math.PI * 2, phase: r(3) * Math.PI * 2, del: 0, f: this.on ? 1 : 0, m: new THREE.Matrix4() });
+      const len = top - y;
+      part('wire', box, wireMat, i, M(0, len / 2, 0, 0.014, len, 0.014));
+      const kind = (i + Math.floor(r(4) * 2)) % 4;
+      if (kind === 0) {
+        // A candy cane by its hook (the hook's top is the hang point).
+        const s = 0.55;
+        part('cane', () => this.caneGeo(), () => this.caneMat(), i, M(-0.28 * s * 1.3, -1.9 * s * 1.3, 0, s * 1.3, s * 1.3, s * 1.3));
+      } else if (kind === 1) {
+        // A stocking: the leg, the foot (toe out to one side), a white furry cuff and a loop.
+        const col = [RED, GREEN, RED, 0x1755fe][Math.floor(r(5) * 4)]!;
+        part('stockleg', () => new RoundedBoxGeometry(1, 1, 1, 2, 0.12), white, i, M(0, -0.5, 0, 0.28, 0.55, 0.12), col);
+        part('stockleg', () => new RoundedBoxGeometry(1, 1, 1, 2, 0.12), white, i, M(0.08, -0.78, 0, 0.44, 0.22, 0.12), col);
+        part('stockcuff', () => new RoundedBoxGeometry(1, 1, 1, 2, 0.2), white, i, M(0, -0.2, 0, 0.34, 0.16, 0.15), 0xffffff);
+        part('stockloop', () => new THREE.TorusGeometry(0.06, 0.012, 6, 12), white, i, M(0, -0.06, 0), 0xffffff);
+      } else if (kind === 2) {
+        // A present: a box with a ribbon round it both ways and a bow on top.
+        const w = 0.4 + r(6) * 0.25;
+        const h = 0.3 + r(7) * 0.2;
+        const col = wraps[Math.floor(r(8) * wraps.length)]!;
+        const rib = col === RED ? GOLD : col === GOLD ? RED : [RED, GOLD, 0xffffff][Math.floor(r(9) * 3)]!;
+        part('gift', box, white, i, M(0, -0.12 - h / 2, 0, w, h, w * 0.9), col);
+        part('giftrib', box, white, i, M(0, -0.12 - h / 2, 0, 0.06, h + 0.01, w * 0.9 + 0.01), rib);
+        part('giftrib', box, white, i, M(0, -0.12 - h / 2, 0, w + 0.01, h + 0.01, 0.06), rib);
+        part('giftbow', () => merge([new THREE.ConeGeometry(0.07, 0.16, 4).rotateZ(Math.PI / 2).translate(-0.08, 0, 0), new THREE.ConeGeometry(0.07, 0.16, 4).rotateZ(-Math.PI / 2).translate(0.08, 0, 0), new THREE.SphereGeometry(0.035, 8, 6)]), white, i, M(0, -0.09, 0), rib);
+      } else {
+        // A big shiny bauble with a gold cap.
+        const rr = 0.25 + r(10) * 0.15;
+        part('ball', () => new THREE.SphereGeometry(1, 20, 14), shiny, i, M(0, -0.08 - rr, 0, rr, rr, rr), balls[Math.floor(r(11) * balls.length)]!);
+        part('ballcap', () => new THREE.CylinderGeometry(1, 1, 1, 12), () => k.std(0x8a6a10, 0.25, 0.7, GOLD), i, M(0, -0.06, 0, 0.07, 0.08, 0.07));
+      }
+    });
+    const c = new THREE.Color();
+    for (const p of parts.values()) {
+      const im = new THREE.InstancedMesh(p.geo, p.mat, p.local.length);
+      p.cols.forEach((col, j) => col !== undefined && im.setColorAt(j, c.setHex(col)));
+      im.frustumCulled = false;
+      this.add(im);
+      this.hangParts.push({ im, local: p.local, who: p.who });
+    }
+    this.hang(0, 0, 0);
   }
 
   /** An instanced string of bulbs (colours cycling), split over the two twinkle sets. */
@@ -392,7 +502,8 @@ export class Xmas {
         pts.push(new THREE.Vector3(x + 0.3, L.hh - 1.0 - Math.sin(u * Math.PI) * 0.6, z));
       }
     }
-    for (const e of L.loopEdge) pts.push(new THREE.Vector3(e.x + e.nx * 0.82, e.y - 0.38, e.z + e.nz * 0.82));
+    // Along both edges of the loop.
+    for (const e of L.loopEdge) for (const side of [0.82, -0.82]) pts.push(new THREE.Vector3(e.x + e.nx * side, e.y - 0.38, e.z + e.nz * side));
     this.bulbs(pts, 0.045);
   }
 
@@ -551,10 +662,24 @@ export class Xmas {
     this.boxes(gifts, 'drop');
   }
 
-  /** A giant candy cane: a red-and-white striped staff with a hook (shooting up out of the floor). */
-  private cane(x: number, z: number, ry: number): void {
-    // Red bands that wind round the staff: one diagonal band per tile, the tile repeated along the
-    // length (u) and once round it (v), so the bands join up into a spiral.
+  private caneGeoC: THREE.BufferGeometry | null = null;
+  private caneMatC: THREE.MeshStandardMaterial | null = null;
+  /** A candy cane's staff and hook (1.9 m to the top of the hook, before scaling). */
+  private caneGeo(): THREE.BufferGeometry {
+    if (this.caneGeoC) return this.caneGeoC;
+    const pts: THREE.Vector3[] = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1.4, 0)];
+    for (let a = 0; a <= 180; a += 15) {
+      const r = (a * Math.PI) / 180;
+      pts.push(new THREE.Vector3(0.28 - Math.cos(r) * 0.28, 1.6 + Math.sin(r) * 0.3, 0));
+    }
+    pts.push(new THREE.Vector3(0.56, 1.45, 0));
+    return (this.caneGeoC = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.09, 12, false));
+  }
+
+  /** Red bands that wind round the staff: one diagonal band per tile, the tile repeated along the
+   * length (u) and once round it (v), so the bands join up into a spiral. */
+  private caneMat(): THREE.MeshStandardMaterial {
+    if (this.caneMatC) return this.caneMatC;
     const stripes = canvasTex(64, 64, (g) => {
       g.fillStyle = '#ffffff';
       g.fillRect(0, 0, 64, 64);
@@ -570,15 +695,15 @@ export class Xmas {
     });
     stripes.wrapS = stripes.wrapT = THREE.RepeatWrapping;
     stripes.repeat.set(9, 1);
-    const pts: THREE.Vector3[] = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1.4, 0)];
-    for (let a = 0; a <= 180; a += 15) {
-      const r = (a * Math.PI) / 180;
-      pts.push(new THREE.Vector3(0.28 - Math.cos(r) * 0.28, 1.6 + Math.sin(r) * 0.3, 0));
-    }
-    pts.push(new THREE.Vector3(0.56, 1.45, 0));
-    const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.09, 12, false);
     const mat = this.k.std(0xffffff, 0.35, 0, 0xffffff);
     mat.map = stripes;
+    return (this.caneMatC = mat);
+  }
+
+  /** A giant candy cane: a red-and-white striped staff with a hook (shooting up out of the floor). */
+  private cane(x: number, z: number, ry: number): void {
+    const geo = this.caneGeo();
+    const mat = this.caneMat();
     this.piece(new THREE.Vector3(x, 0, z), 'grow', 0.3, () => {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, 0, z);
