@@ -1,12 +1,12 @@
 {
  "level": 2,
  "badge": "lean3",
- "par": 628.5,
+ "par": 621.35,
  "parPlanEarns": true,
  "plainEarns": false,
  "plainProfit": 511.0,
  "found": true,
- "profit": 628.5,
+ "profit": 621.35,
  "plan": {
   "blocks": [
    {
@@ -20,14 +20,14 @@
     "city": 0,
     "start": 60,
     "end": 120,
-    "people": 2,
+    "people": 1,
     "docks": 1
    },
    {
     "city": 0,
     "start": 120,
     "end": 180,
-    "people": 1,
+    "people": 2,
     "docks": 1
    },
    {

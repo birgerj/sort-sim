@@ -1,18 +1,32 @@
 {
  "level": 5,
- "profit": 1594.2008671924752,
+ "profit": 1601.516107165684,
  "plan": {
   "blocks": [
    {
     "city": 0,
-    "start": 180,
+    "start": 60,
+    "end": 120,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 150,
     "end": 240,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 1,
+    "start": 0,
+    "end": 60,
     "people": 2,
     "docks": 1
    },
    {
     "city": 1,
-    "start": 60,
+    "start": 120,
     "end": 180,
     "people": 2,
     "docks": 1
@@ -21,12 +35,19 @@
     "city": 2,
     "start": 210,
     "end": 270,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 240,
+    "end": 300,
     "people": 1,
     "docks": 1
    },
    {
     "city": 3,
-    "start": 60,
+    "start": 30,
     "end": 150,
     "people": 1,
     "docks": 1
@@ -34,12 +55,11 @@
   ],
   "robotCities": [
    0,
-   2,
    3,
    4,
    5
   ],
-  "robots": 9
+  "robots": 6
  },
  "runs": [
   {
@@ -94,19 +114,23 @@
     1582.5,
     1582.12
    ]
+  },
+  {
+   "note": "found during the badge search",
+   "profit": 1601.52
   }
  ],
  "detail": {
-  "profit": 1594.2008671924752,
+  "profit": 1601.516107165684,
   "rev": 2100.0,
   "bonus": 420.0,
   "late": 0.0,
   "left": 0.0,
-  "dock": 137.5,
-  "staff": 255.0,
-  "robots": 495.0,
-  "store": 38.299132807524806,
-  "peak": 180.0,
+  "dock": 212.5,
+  "staff": 345.0,
+  "robots": 330.0,
+  "store": 30.983892834315963,
+  "peak": 126.28571428571476,
   "ontime": 6,
   "refused": 0.0
  },

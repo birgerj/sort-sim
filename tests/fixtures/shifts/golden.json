@@ -190,21 +190,21 @@
     {
      "city": 1,
      "start": 0,
-     "end": 210,
+     "end": 150,
      "people": 2,
      "docks": 1
     },
     {
      "city": 2,
      "start": 0,
-     "end": 210,
+     "end": 150,
      "people": 2,
      "docks": 1
     },
     {
      "city": 3,
      "start": 30,
-     "end": 240,
+     "end": 180,
      "people": 2,
      "docks": 1
     }
@@ -212,14 +212,14 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": -8.5,
+  "profit": 246.5,
   "lines": {
    "revenue": 1020,
    "bonus": 204,
    "late": 0,
    "left": 0,
-   "docks": 362,
-   "people": 870,
+   "docks": 288,
+   "people": 690,
    "robots": 0,
    "buffer": 0
   },
@@ -234,22 +234,22 @@
    {
     "city": 1,
     "loaded": 60,
-    "planned": 210,
-    "left": 210,
+    "planned": 150,
+    "left": 150,
     "status": "onTime"
    },
    {
     "city": 2,
     "loaded": 70,
-    "planned": 210,
-    "left": 210,
+    "planned": 150,
+    "left": 150,
     "status": "onTime"
    },
    {
     "city": 3,
     "loaded": 50,
-    "planned": 240,
-    "left": 240,
+    "planned": 180,
+    "left": 180,
     "status": "onTime"
    }
   ]
@@ -265,24 +265,30 @@
      "end": 240,
      "people": 2,
      "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 0,
+     "end": 150,
+     "people": 1,
+     "docks": 1
     }
    ],
    "robotCities": [
     1,
-    2,
     3
    ],
-   "robots": 6
+   "robots": 4
   },
-  "profit": 620.0,
+  "profit": 570.5,
   "lines": {
    "revenue": 1020,
    "bonus": 204,
    "late": 0,
    "left": 0,
-   "docks": 100,
-   "people": 240,
-   "robots": 264,
+   "docks": 162,
+   "people": 315,
+   "robots": 176,
    "buffer": 0
   },
   "trucks": [
@@ -296,22 +302,22 @@
    {
     "city": 1,
     "loaded": 60,
-    "planned": 210,
-    "left": 210,
+    "planned": 150,
+    "left": 150,
     "status": "onTime"
    },
    {
     "city": 2,
     "loaded": 70,
-    "planned": 210,
-    "left": 210,
+    "planned": 150,
+    "left": 150,
     "status": "onTime"
    },
    {
     "city": 3,
     "loaded": 50,
-    "planned": 240,
-    "left": 240,
+    "planned": 180,
+    "left": 180,
     "status": "onTime"
    }
   ]
@@ -339,16 +345,16 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": 55.75,
+  "profit": 154.75,
   "lines": {
    "revenue": 660,
    "bonus": 132,
    "late": 0,
-   "left": 225,
+   "left": 135,
    "docks": 144,
    "people": 345,
    "robots": 0,
-   "buffer": 22
+   "buffer": 13
   },
   "trucks": [
    {
@@ -404,10 +410,10 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": 560.25,
+  "profit": 452.25,
   "lines": {
-   "revenue": 885,
-   "bonus": 177,
+   "revenue": 795,
+   "bonus": 159,
    "late": 0,
    "left": 0,
    "docks": 169,
@@ -432,7 +438,7 @@
    },
    {
     "city": 2,
-    "loaded": 150,
+    "loaded": 90,
     "planned": 180,
     "left": 180,
     "status": "onTime"
@@ -967,16 +973,16 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": 1654.51,
+  "profit": 1616.5,
   "lines": {
-   "revenue": 7100,
+   "revenue": 7095,
    "bonus": 511,
    "late": 0,
-   "left": 2560,
+   "left": 2565,
    "docks": 962,
    "people": 2310,
    "robots": 0,
-   "buffer": 123
+   "buffer": 152
   },
   "trucks": [
    {
@@ -1016,7 +1022,7 @@
    },
    {
     "city": 5,
-    "loaded": 442,
+    "loaded": 439,
     "planned": 360,
     "left": 360,
     "status": "incomplete"
@@ -1137,21 +1143,21 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": 3382.09,
+  "profit": 3313.63,
   "lines": {
-   "revenue": 8145,
+   "revenue": 8113,
    "bonus": 511,
    "late": 0,
-   "left": 1515,
+   "left": 1547,
    "docks": 1196,
    "people": 2375,
    "robots": 0,
-   "buffer": 187
+   "buffer": 193
   },
   "trucks": [
    {
     "city": 0,
-    "loaded": 1312,
+    "loaded": 1311,
     "planned": 340,
     "left": 340,
     "status": "incomplete"
@@ -1186,7 +1192,7 @@
    },
    {
     "city": 5,
-    "loaded": 388,
+    "loaded": 369,
     "planned": 360,
     "left": 360,
     "status": "incomplete"
@@ -1293,16 +1299,16 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": -451.54,
+  "profit": -1049.47,
   "lines": {
-   "revenue": 10900,
+   "revenue": 10622,
    "bonus": 470,
    "late": 0,
-   "left": 6740,
+   "left": 7018,
    "docks": 1454,
    "people": 3490,
    "robots": 0,
-   "buffer": 137
+   "buffer": 180
   },
   "trucks": [
    {
@@ -1321,7 +1327,7 @@
    },
    {
     "city": 2,
-    "loaded": 1058,
+    "loaded": 873,
     "planned": 450,
     "left": 450,
     "status": "incomplete"
@@ -1426,7 +1432,7 @@
     },
     {
      "city": 3,
-     "start": 300,
+     "start": 270,
      "end": 480,
      "people": 2,
      "docks": 1
@@ -1468,7 +1474,7 @@
     },
     {
      "city": 7,
-     "start": 270,
+     "start": 200,
      "end": 480,
      "people": 2,
      "docks": 1
@@ -1482,25 +1488,25 @@
     },
     {
      "city": 9,
-     "start": 270,
+     "start": 150,
      "end": 480,
-     "people": 2,
+     "people": 1,
      "docks": 1
     }
    ],
    "robotCities": [],
    "robots": 0
   },
-  "profit": 3248.25,
+  "profit": 1849.11,
   "lines": {
-   "revenue": 13093,
+   "revenue": 12483,
    "bonus": 689,
    "late": 0,
-   "left": 4547,
-   "docks": 2025,
-   "people": 3795,
+   "left": 5157,
+   "docks": 2117,
+   "people": 3850,
    "robots": 0,
-   "buffer": 166
+   "buffer": 199
   },
   "trucks": [
    {
@@ -1519,21 +1525,21 @@
    },
    {
     "city": 2,
-    "loaded": 1410,
+    "loaded": 944,
     "planned": 450,
     "left": 450,
     "status": "incomplete"
    },
    {
     "city": 3,
-    "loaded": 453,
+    "loaded": 538,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
    },
    {
     "city": 4,
-    "loaded": 1046,
+    "loaded": 1020,
     "planned": 270,
     "left": 270,
     "status": "incomplete"
@@ -1668,16 +1674,16 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": 633.58,
+  "profit": -150.07,
   "lines": {
-   "revenue": 13475,
+   "revenue": 13110,
    "bonus": 330,
    "late": 0,
-   "left": 5275,
+   "left": 5640,
    "docks": 1688,
    "people": 6075,
    "robots": 0,
-   "buffer": 134
+   "buffer": 188
   },
   "trucks": [
    {
@@ -1710,28 +1716,28 @@
    },
    {
     "city": 4,
-    "loaded": 907,
+    "loaded": 900,
     "planned": 420,
     "left": 420,
     "status": "incomplete"
    },
    {
     "city": 5,
-    "loaded": 907,
+    "loaded": 794,
     "planned": 360,
     "left": 360,
     "status": "incomplete"
    },
    {
     "city": 6,
-    "loaded": 728,
+    "loaded": 700,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
    },
    {
     "city": 7,
-    "loaded": 765,
+    "loaded": 717,
     "planned": 330,
     "left": 330,
     "status": "incomplete"
@@ -1752,7 +1758,7 @@
    },
    {
     "city": 10,
-    "loaded": 532,
+    "loaded": 484,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
@@ -1908,16 +1914,16 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": 3963.0,
+  "profit": 2285.48,
   "lines": {
-   "revenue": 15325,
-   "bonus": 1395,
+   "revenue": 14757,
+   "bonus": 900,
    "late": 0,
-   "left": 3425,
+   "left": 3993,
    "docks": 2412,
    "people": 6772,
    "robots": 0,
-   "buffer": 147
+   "buffer": 193
   },
   "trucks": [
    {
@@ -1929,21 +1935,21 @@
    },
    {
     "city": 1,
-    "loaded": 1183,
+    "loaded": 1172,
     "planned": 300,
     "left": 300,
     "status": "incomplete"
    },
    {
     "city": 2,
-    "loaded": 538,
+    "loaded": 513,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
    },
    {
     "city": 3,
-    "loaded": 944,
+    "loaded": 927,
     "planned": 240,
     "left": 240,
     "status": "incomplete"
@@ -1957,14 +1963,14 @@
    },
    {
     "city": 5,
-    "loaded": 1000,
+    "loaded": 942,
     "planned": 360,
     "left": 360,
-    "status": "onTime"
+    "status": "incomplete"
    },
    {
     "city": 6,
-    "loaded": 623,
+    "loaded": 481,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
@@ -1985,14 +1991,14 @@
    },
    {
     "city": 9,
-    "loaded": 650,
+    "loaded": 643,
     "planned": 210,
     "left": 210,
-    "status": "onTime"
+    "status": "incomplete"
    },
    {
     "city": 10,
-    "loaded": 532,
+    "loaded": 413,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
@@ -2127,16 +2133,16 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": -1507.86,
+  "profit": 1213.75,
   "lines": {
-   "revenue": 18628,
-   "bonus": 617,
+   "revenue": 16712,
+   "bonus": 465,
    "late": 0,
-   "left": 12872,
+   "left": 8038,
    "docks": 2300,
    "people": 5520,
    "robots": 0,
-   "buffer": 60
+   "buffer": 105
   },
   "trucks": [
    {
@@ -2148,14 +2154,14 @@
    },
    {
     "city": 1,
-    "loaded": 1077,
+    "loaded": 1057,
     "planned": 420,
     "left": 420,
     "status": "incomplete"
    },
    {
     "city": 2,
-    "loaded": 1124,
+    "loaded": 1030,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
@@ -2169,84 +2175,84 @@
    },
    {
     "city": 4,
-    "loaded": 992,
+    "loaded": 944,
     "planned": 450,
     "left": 450,
     "status": "incomplete"
    },
    {
     "city": 5,
-    "loaded": 850,
+    "loaded": 775,
     "planned": 330,
     "left": 330,
     "status": "incomplete"
    },
    {
     "city": 6,
-    "loaded": 882,
+    "loaded": 744,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
    },
    {
     "city": 7,
-    "loaded": 907,
+    "loaded": 868,
     "planned": 390,
     "left": 390,
     "status": "incomplete"
    },
    {
     "city": 8,
-    "loaded": 907,
+    "loaded": 814,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
    },
    {
     "city": 9,
-    "loaded": 623,
+    "loaded": 548,
     "planned": 240,
     "left": 240,
     "status": "incomplete"
    },
    {
     "city": 10,
-    "loaded": 662,
+    "loaded": 540,
     "planned": 450,
     "left": 450,
     "status": "incomplete"
    },
    {
     "city": 11,
-    "loaded": 728,
+    "loaded": 572,
     "planned": 360,
     "left": 360,
     "status": "onTime"
    },
    {
     "city": 12,
-    "loaded": 616,
+    "loaded": 457,
     "planned": 300,
     "left": 300,
-    "status": "onTime"
-   },
-   {
-    "city": 13,
-    "loaded": 527,
-    "planned": 480,
-    "left": 480,
     "status": "incomplete"
    },
    {
+    "city": 13,
+    "loaded": 418,
+    "planned": 480,
+    "left": 480,
+    "status": "onTime"
+   },
+   {
     "city": 14,
-    "loaded": 414,
+    "loaded": 326,
     "planned": 420,
     "left": 420,
     "status": "onTime"
    },
    {
     "city": 15,
-    "loaded": 297,
+    "loaded": 233,
     "planned": 480,
     "left": 480,
     "status": "onTime"
@@ -2288,7 +2294,7 @@
     },
     {
      "city": 2,
-     "start": 300,
+     "start": 270,
      "end": 480,
      "people": 2,
      "docks": 1
@@ -2337,7 +2343,7 @@
     },
     {
      "city": 6,
-     "start": 300,
+     "start": 270,
      "end": 480,
      "people": 2,
      "docks": 1
@@ -2358,7 +2364,7 @@
     },
     {
      "city": 8,
-     "start": 270,
+     "start": 120,
      "end": 480,
      "people": 2,
      "docks": 1
@@ -2375,13 +2381,6 @@
      "start": 0,
      "end": 240,
      "people": 2,
-     "docks": 1
-    },
-    {
-     "city": 10,
-     "start": 150,
-     "end": 450,
-     "people": 1,
      "docks": 1
     },
     {
@@ -2407,16 +2406,9 @@
     },
     {
      "city": 13,
-     "start": 270,
+     "start": 180,
      "end": 480,
      "people": 2,
-     "docks": 1
-    },
-    {
-     "city": 14,
-     "start": 30,
-     "end": 420,
-     "people": 1,
      "docks": 1
     },
     {
@@ -2427,129 +2419,131 @@
      "docks": 1
     }
    ],
-   "robotCities": [],
-   "robots": 0
+   "robotCities": [
+    14
+   ],
+   "robots": 4
   },
-  "profit": 3275.88,
+  "profit": 4371.01,
   "lines": {
-   "revenue": 21308,
-   "bonus": 1241,
+   "revenue": 18828,
+   "bonus": 744,
    "late": 0,
-   "left": 10192,
-   "docks": 3150,
-   "people": 5850,
-   "robots": 0,
-   "buffer": 81
+   "left": 5922,
+   "docks": 2988,
+   "people": 5805,
+   "robots": 352,
+   "buffer": 135
   },
   "trucks": [
    {
     "city": 0,
-    "loaded": 1755,
+    "loaded": 1746,
     "planned": 450,
     "left": 450,
     "status": "incomplete"
    },
    {
     "city": 1,
-    "loaded": 1651,
+    "loaded": 1604,
     "planned": 420,
     "left": 420,
     "status": "incomplete"
    },
    {
     "city": 2,
-    "loaded": 453,
-    "planned": 480,
-    "left": 480,
-    "status": "incomplete"
-   },
-   {
-    "city": 3,
-    "loaded": 1062,
-    "planned": 270,
-    "left": 270,
-    "status": "incomplete"
-   },
-   {
-    "city": 4,
-    "loaded": 1495,
-    "planned": 450,
-    "left": 450,
-    "status": "incomplete"
-   },
-   {
-    "city": 5,
-    "loaded": 1299,
-    "planned": 330,
-    "left": 330,
-    "status": "incomplete"
-   },
-   {
-    "city": 6,
-    "loaded": 453,
-    "planned": 480,
-    "left": 480,
-    "status": "incomplete"
-   },
-   {
-    "city": 7,
-    "loaded": 1184,
-    "planned": 390,
-    "left": 390,
-    "status": "onTime"
-   },
-   {
-    "city": 8,
     "loaded": 538,
     "planned": 480,
     "left": 480,
     "status": "incomplete"
    },
    {
-    "city": 9,
-    "loaded": 896,
-    "planned": 240,
-    "left": 240,
+    "city": 3,
+    "loaded": 1059,
+    "planned": 270,
+    "left": 270,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 1228,
+    "planned": 450,
+    "left": 450,
+    "status": "incomplete"
+   },
+   {
+    "city": 5,
+    "loaded": 930,
+    "planned": 330,
+    "left": 330,
+    "status": "incomplete"
+   },
+   {
+    "city": 6,
+    "loaded": 482,
+    "planned": 480,
+    "left": 480,
+    "status": "incomplete"
+   },
+   {
+    "city": 7,
+    "loaded": 931,
+    "planned": 390,
+    "left": 390,
     "status": "onTime"
    },
    {
+    "city": 8,
+    "loaded": 814,
+    "planned": 480,
+    "left": 480,
+    "status": "incomplete"
+   },
+   {
+    "city": 9,
+    "loaded": 673,
+    "planned": 240,
+    "left": 240,
+    "status": "incomplete"
+   },
+   {
     "city": 10,
-    "loaded": 837,
+    "loaded": 540,
     "planned": 450,
     "left": 450,
     "status": "incomplete"
    },
    {
     "city": 11,
-    "loaded": 728,
+    "loaded": 572,
     "planned": 360,
     "left": 360,
     "status": "onTime"
    },
    {
     "city": 12,
-    "loaded": 616,
+    "loaded": 457,
     "planned": 300,
     "left": 300,
-    "status": "onTime"
-   },
-   {
-    "city": 13,
-    "loaded": 527,
-    "planned": 480,
-    "left": 480,
     "status": "incomplete"
    },
    {
+    "city": 13,
+    "loaded": 418,
+    "planned": 480,
+    "left": 480,
+    "status": "onTime"
+   },
+   {
     "city": 14,
-    "loaded": 414,
+    "loaded": 326,
     "planned": 420,
     "left": 420,
     "status": "onTime"
    },
    {
     "city": 15,
-    "loaded": 297,
+    "loaded": 233,
     "planned": 480,
     "left": 480,
     "status": "onTime"
@@ -2586,16 +2580,16 @@
    "robotCities": [],
    "robots": 0
   },
-  "profit": 606.25,
+  "profit": 501.85,
   "lines": {
-   "revenue": 885,
-   "bonus": 177,
+   "revenue": 795,
+   "bonus": 159,
    "late": 0,
    "left": 0,
    "docks": 144,
    "people": 285,
    "robots": 0,
-   "buffer": 27
+   "buffer": 23
   },
   "trucks": [
    {
@@ -2614,7 +2608,7 @@
    },
    {
     "city": 2,
-    "loaded": 150,
+    "loaded": 90,
     "planned": 180,
     "left": 180,
     "status": "onTime"

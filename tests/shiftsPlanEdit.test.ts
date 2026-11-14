@@ -96,7 +96,7 @@ describe('plan rules', () => {
       expect(Math.abs(x.people - g.lines.people), `people ${g.level} ${g.name}`).toBeLessThanOrEqual(0.5);
       expect(Math.abs(x.robots - g.lines.robots), `robots ${g.level} ${g.name}`).toBeLessThanOrEqual(0.5);
     }
-    expect(Math.round(mostToEarn(FIX.level))).toBe(1062);
+    expect(Math.round(mostToEarn(FIX.level))).toBe(954);
     // Half way through the first block: half its cost, and the robots' share of the night.
     expect(fixedCosts(level(3), { blocks: [{ city: 0, start: 0, end: 240, people: 1, docks: 1 }], robotCities: [1], robots: 2 }, 120)).toEqual({ docks: 50, people: 60, robots: 44, total: 154 });
   });
@@ -123,7 +123,7 @@ describe('plan editing', () => {
 
   it('makes a starter block from first parcel to truck time', () => {
     expect(starterBlock(l, 0)).toEqual({ city: 0, start: 0, end: 105, people: 1, docks: 1 });
-    expect(starterBlock(level(3), 3)).toEqual({ city: 3, start: 30, end: 240, people: 1, docks: 1 });
+    expect(starterBlock(level(3), 3)).toEqual({ city: 3, start: 30, end: 180, people: 1, docks: 1 });
   });
 
   it('never changes the plan it was given', () => {

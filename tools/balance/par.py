@@ -377,6 +377,8 @@ def badge_rule(L, bid):
         return (lambda plan: peaks(plan)[0] <= 3), none
     if bid == 'lean12':
         return (lambda plan: peaks(plan)[0] <= 12), none
+    if bid.startswith('lean') and bid[4:].isdigit():
+        return (lambda plan: peaks(plan)[0] <= int(bid[4:])), none
     if bid == 'oneDock':
         return (lambda plan: peaks(plan)[1] <= 2), none
     if bid == 'noDockSmall':

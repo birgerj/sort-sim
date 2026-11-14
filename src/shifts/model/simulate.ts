@@ -171,7 +171,10 @@ function badgeGoal(level: Level, plan: Plan, statuses: TruckStatus[], bufferPeak
       if (atLeast !== null) return statuses.filter((s) => s === 'onTime').length >= Number(atLeast[1]);
       // fleet3: at most three robots.
       const fleet = /^fleet(\d+)$/.exec(level.badge.id);
-      return fleet !== null && plan.robots <= Number(fleet[1]);
+      if (fleet !== null) return plan.robots <= Number(fleet[1]);
+      // lean16: never more than sixteen people at work.
+      const lean = /^lean(\d+)$/.exec(level.badge.id);
+      return lean !== null && peaks.people <= Number(lean[1]);
     }
   }
 }

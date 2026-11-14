@@ -22,10 +22,10 @@ FRESH = ['Plan one dock: start, end, and 1 or 2 people.',
 SET = [['Unloading', 'Robots are off', 'Doors'], ['Unloading', 'Robots are off', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Robots are off', 'Doors'],
        ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors']]
 BADGE = [('lean', 'One person is enough'), ('lean3', 'Never more than 3 people at work'), ('fleet3', 'At most 3 robots'), ('lean3', 'Never more than 3 people at work'),
-         ('smallFleet', 'At most 6 robots'), ('halfBuffer', 'Buffer never over half full'), ('allOnTime', 'Every truck on time'), ('onTime9', 'At least 9 trucks on time'),
-         ('lean12', 'Never more than 12 people at work'), ('onTime15', 'At least 15 trucks on time')]
+         ('smallFleet', 'At most 6 robots'), ('lean6', 'Never more than 6 people at work'), ('allOnTime', 'Every truck on time'), ('onTime9', 'At least 9 trucks on time'),
+         ('lean16', 'Never more than 16 people at work'), ('allOnTime', 'Every truck on time')]
 # Best profit found per level with plans in the game's shape (par.py; see REPORT.md).
-PAR = [177, 628, 809, 669, 1622, 2443, 7780, 12726, 13429, 24214]  # rounded down, so the best known plan scores at least 1000
+PAR = [177, 621, 779, 596, 1601, 2398, 7577, 12570, 13029, 19342]  # rounded down, so the best known plan scores at least 1000
 
 
 def level_json(L):
@@ -171,6 +171,8 @@ def badge_condition(L, bid, plan, r):
         return people <= 3
     if bid == 'lean12':
         return people <= 12
+    if bid.startswith('lean') and bid[4:].isdigit():  # lean16: never more than 16 people at work
+        return people <= int(bid[4:])
     if bid == 'oneDock':
         return docks <= 2
     if bid == 'noDockSmall':  # the largest city by volume, the first one on a tie
