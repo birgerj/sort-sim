@@ -13,3 +13,6 @@
   plan that gives every city enough docks still earns one star. Report a value; the coordinator decides.
 - 2026-11-14 Open, for agent B: par for every level under the final rules. `levels.json` holds provisional values.
 - 2026-11-14 New code lives in `src/shifts`, `src/ui/shifts` and `src/scene/director.ts`; `src/game` is the old game.
+- 2026-11-14 An invalid plan makes `ScoreService.run` reject with a plain `PlanProblem[]` (not an Error).
+- 2026-11-14 Badge counting: people and docks per minute a block is open; the buffer badge looks at every minute.
+- 2026-11-14 For agent B: write arrivals and volumes unrounded in `levels.json`; golden plans must be startable (half-hour grid, no robot cities where robots are off); `fixture.run` should compute the badge.
