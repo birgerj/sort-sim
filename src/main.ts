@@ -14,7 +14,7 @@
  *   quality=low|normal|high  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
-import { COUNTRY, setCountry } from './sim/countries';
+import { COUNTRIES, COUNTRY, setCountry } from './sim/countries';
 import { setXmas } from './sim/season';
 import './ui/style.css';
 
@@ -142,14 +142,50 @@ const shifts = showUi
       levels: LEVELS,
       // City i of a level is the i-th largest town of the chosen country.
       cityNames: () => [...COUNTRY.cities].sort((a, b) => b.pop - a.pop).map((c) => c.name),
-      onFree: () => (hud.root.style.display = ''),
+      onFree: () => {
+        hud.root.style.display = '';
+        if (nightBefore) hud.setTime('night');
+        nightBefore = false;
+      },
       views: { planner: plannerView, shiftHud },
+      settings: {
+        look: () => (settings.look === 'real' ? 'real' : 'minimal'),
+        setLook: (v) => hud.setTime('day', v),
+        quality: () => settings.quality,
+        setQuality: (v) => {
+          settings.quality = v;
+          saveSettings(settings);
+          hudQuality();
+        },
+        sound: () => !settings.muted,
+        setSound: (on) => {
+          settings.muted = !on;
+          saveSettings(settings);
+          music.setMuted(!on);
+          if (on) void music.start();
+        },
+        country: () => COUNTRY.id,
+        countries: () => COUNTRIES.map((c) => ({ id: c.id, name: c.native === c.name ? c.name : `${c.name} · ${c.native}` })),
+        setCountry: (id) => {
+          const next = COUNTRIES.find((c) => c.id === id);
+          if (!next) return;
+          settings.country = next.id;
+          saveSettings(settings);
+          setCountry(next.id);
+        },
+      },
     })
   : null;
 if (shifts) document.body.append(shifts.root);
+/** The free simulation was in its night look when the game opened; the game plays by day. */
+let nightBefore = false;
 function openShifts(): void {
   if (!shifts) return;
   hud.root.style.display = 'none';
+  if (settings.time === 'night') {
+    nightBefore = true;
+    hud.setTime('day');
+  }
   shifts.open();
 }
 // Play on the start card: as soon as the hall exists.

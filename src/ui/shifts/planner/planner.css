@@ -1683,3 +1683,12 @@
   border-color: var(--acc);
   border-left-color: var(--c);
 }
+
+.shp-hud .shp-hud-gear {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}

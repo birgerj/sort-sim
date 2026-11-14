@@ -28,6 +28,8 @@ export type ShiftHud = (o: {
   onFocus?(city: number): void;
   /** The player asked for the automatic camera back. */
   onAuto?(): void;
+  /** The player asked for the settings panel. */
+  onSettings?(): void;
 }) => { root: HTMLElement; setClock(minute: number): void; setTimeline(t: Timeline): void; done(): void; setAuto?(on: boolean): void };
 
 /** Shift minutes per real second behind the speed buttons. */

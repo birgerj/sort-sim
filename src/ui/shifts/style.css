@@ -1899,3 +1899,83 @@
     transition: background-color 0.12s, border-color 0.12s;
   }
 }
+
+/* ---- Settings panel ---- */
+
+.sh-root .sh-settings {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(8, 9, 12, 0.5);
+  pointer-events: auto;
+}
+
+.sh-root .sh-settings-panel {
+  width: min(420px, 100%);
+  padding: 18px;
+  background: var(--sh-panel);
+  color: var(--sh-ink);
+  border: 1px solid var(--sh-line);
+  border-radius: var(--sh-radius);
+  font-family: var(--sh-font);
+}
+
+.sh-root .sh-settings-panel h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.sh-root .sh-settings-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sh-root .sh-settings-label {
+  font-size: 14px;
+  color: var(--sh-grey);
+}
+
+.sh-root .sh-settings-keys {
+  display: flex;
+  gap: 6px;
+}
+
+.sh-root .sh-settings-key {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 6px;
+  font-size: 15px;
+}
+
+.sh-root .sh-settings-key[aria-pressed='true'] {
+  background: var(--sh-acc);
+  border-color: var(--sh-acc);
+  color: #ffffff;
+}
+
+.sh-root .sh-settings-select {
+  min-height: 44px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sh-ink);
+  border: 1px solid var(--sh-line);
+  border-radius: var(--sh-radius-s);
+  font: 600 15px/1.2 var(--sh-font);
+}
+
+.sh-root .sh-settings-select option {
+  color: #111111;
+}
+
+.sh-root .sh-settings-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}

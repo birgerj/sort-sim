@@ -3,6 +3,7 @@
 // service and the hall only through the director; the levels come in from outside.
 import type { Director, Level, Plan, ScoreService } from '../../shifts/contract';
 import { h } from './dom';
+import { openSettings, type GameSettings } from './settings';
 import { DEFAULT_SPEED, type PlannerView, type ShiftHud } from './planner-seam';
 import { problemLines } from './problems';
 import { createProgress, type Progress } from './progress';
@@ -28,6 +29,8 @@ export interface ShiftsDeps {
   views?: { planner: PlannerView; shiftHud: ShiftHud };
   /** Where progress is kept; the browser's own storage when absent. */
   progress?: Progress;
+  /** Look, quality, sound and country; no settings button when absent. */
+  settings?: GameSettings;
 }
 
 const EMPTY_PLAN: Plan = { blocks: [], robotCities: [], robots: 0 };
@@ -51,7 +54,16 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
     return views;
   };
 
-  const ctx = (): Ctx => ({ levels: deps.levels, names: deps.cityNames(), progress, go, free });
+  const settings = deps.settings;
+  const ctx = (): Ctx => ({
+    levels: deps.levels,
+    names: deps.cityNames(),
+    progress,
+    go,
+    free,
+    // A new country gives the levels new city names: draw the screen again.
+    settings: settings ? () => openSettings(root, settings, true, () => go({ name: 'levels' })) : undefined,
+  });
 
   function show(el: HTMLElement, live = false): void {
     // While a shift plays, the overlay lets the hall show through and only its panel takes clicks.
@@ -135,6 +147,7 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
         finish();
       },
       onFocus: (city) => deps.director.focusCity?.(city),
+      onSettings: settings ? () => openSettings(root, settings, false, () => {}) : undefined,
       onAuto: () => deps.director.setAutoCamera?.(true),
     });
     deps.director.onAutoCamera?.((on) => {

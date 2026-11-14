@@ -27,6 +27,8 @@ export interface Ctx {
   names: string[];
   progress: Progress;
   go(route: Route): void;
+  /** Opens the settings panel, when the game has one. */
+  settings?(): void;
   /** Leave the game for the free simulation. */
   free(): void;
 }

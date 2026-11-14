@@ -13,6 +13,7 @@ export interface HudOptions {
   onSkip(): void;
   onFocus?(city: number): void;
   onAuto?(): void;
+  onSettings?(): void;
 }
 
 export interface ShiftHud {
@@ -114,7 +115,7 @@ export function shiftHud(o: HudOptions): ShiftHud {
   const root = h('div', { class: `shp-hud${compact ? ' is-many' : ''}` },
     h('header', { class: 'shp-hud-top' },
       h('div', { class: 'shp-title' }, mark(), h('div', {}, h('h1', {}, h('span', { class: 'shp-wide', text: 'Level ' }), `${level.id} · ${level.name}`), sub)),
-      h('div', { class: 'shp-hud-right' }, time, progress)),
+      h('div', { class: 'shp-hud-right' }, time, progress, o.onSettings ? h('button', { class: 'shp-pick shp-hud-gear', type: 'button', text: '⚙', 'aria-label': 'Settings', onclick: () => o.onSettings?.() }) : null)),
     gone,
     h('aside', { class: 'shp-hud-side', 'aria-label': 'Cities still loading' }, list),
     h('footer', { class: 'shp-hud-bottom' }, moneyCard, controls),
