@@ -18,10 +18,10 @@
 // hall's beats, so the hall and the clock can never drift apart.
 import * as THREE from 'three';
 
+import { CITY_COLOURS, cityHex } from '../shifts/colours';
 import type { Director, Level, Timeline } from '../shifts/contract';
 import { CITIES, areas, split } from '../sim/postcodes';
 import {
-  CITY_COLOURS,
   CLEARDOWN_MINUTES,
   arrivedAt,
   buildSchedule,
@@ -303,7 +303,7 @@ export function createDirector(scene: Sorter): Director {
         cages: st.open,
         people: st.people,
         name,
-        colour: `#${(CITY_COLOURS[((st.city % CITY_COLOURS.length) + CITY_COLOURS.length) % CITY_COLOURS.length] ?? 0x5a6170).toString(16).padStart(6, '0')}`,
+        colour: cityHex(st.city),
         // (The cards carry the city's own postcodes when the country has that town.)
         ranges: city && city.name === name ? split(city, 6) : null,
         allow: st.open && st.stint ? inHall(sample(st.stint.loaded, minute, s.stepMinutes), factor) : 0,
