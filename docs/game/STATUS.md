@@ -141,6 +141,22 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
     the floor inside the loop among the dancers; the camera stays there until the next attempt. The night is
     only laid over the player's look and goes at the next `enter` or `exit`; a change of look or quality during
     a shift was tried (Minimal to Day, low to normal) without errors.
+- Round 4:
+  - Signs: only a door with an open block shows a city (screen, pillar display, cage boards); a door being
+    made ready shows `closed · opens hh:mm`; south screens show a city only where a robot city's truck
+    leaves; the boards on the robots' boxes show `box n`. All back on `exit`.
+  - Closing shot: timed in hall beats (8 beats, measured 8.0 to 8.6); the last trucks' doors stay up until one
+    beat into it; party camera above the dancers' heads inside the loop; night gone at the next `enter`/`exit`.
+  - Pace, measured at 60 frames a second without drawing, at 16×, on a full belt, between trailer swaps: one
+    person about 100 an hour, two about 200 (model 90 and 170: the crew is a little faster and the director
+    holds parcels back upstream). Level 4 follows its timeline within about 10 parcels; the 45 behind was the
+    slow machine. Found and fixed on the way: a place kept in the trailer by someone sent off mid-push held the
+    door up for the rest of the shift (cages then stayed in sight and the next block loaded into the old trailer).
+  - Free look: drag turns the camera round its target, two fingers (or right button, or Shift) move it, pinch
+    or wheel zooms; automatic direction off until `setAutoCamera(true)`. Listeners on the canvas, in
+    `director.ts`; no file under `src/ui`.
+  - Colours in `src/shifts/colours.ts` (the planner's fallback list now imports it; `style.css` still has the
+    same values as CSS variables).
 - Rough: robots are about 15 % under the model's pace, and full boxes wait for the three forklifts, so robot
   cities fall behind in the hall (the counts on screen are the timeline's); people still appear at their
   place; the nested stacks of empty cages stay at every door; a belt's parcels are taken away (and come round

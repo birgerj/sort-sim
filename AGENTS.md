@@ -40,6 +40,10 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/audio/drums.ts` | The kick and snare as short samples, made once at start in an `OfflineAudioContext` (no files): kicks `round` / `punch` / `tight`, snares `classic` / `crisp` / `snappy`; music.ts uses punch and crisp (the old synths until they are ready). |
 | `src/audio/music.ts` | WebAudio synths and the clock; the tempo can change bar by bar (`setTempo`, 60–160 BPM, `bars` map), and the composer's mood follows it. The clock runs without sound too. `frame()` returns beats, drum envelopes, chord colours and the notes that just sounded (latency-compensated). |
 | `src/ui/info.ts`, `src/ui/productInfo.ts` | Demo build only: product-info card at tour stops (`STOP_INFO` by `Poi.name`). Sets `Sorter.dwellFor` so the tour only visits stops with a card and stays its reading time; `tourStop()`, `holdTour()`, `nextStop()` drive its progress bar, pause and Next. Only with `?pv=true` (or `?pv=1`) in the address: without it there are no cards, no setting and the tour keeps its own pace; with it, setting in More and `?info=0\|1`. The cards name the vendor's products: they are on `main` only behind `?pv=true`; keep them out of everything else (signs, textures, the rest of the docs). |
+| `src/shifts/colours.ts` | Ten Shifts: one colour per city (`CITY_COLOURS`, `cityHex`), for the planner and the cards and for the hall's parcel bands and cage boards. `src/ui/shifts/style.css` sets the same values as `--sh-city-0…15`. |
+| `src/sim/shiftSchedule.ts` | Ten Shifts: a `Timeline` turned into what the hall shows (`buildSchedule`): per block a `Stint` (door, parcels per step shared over a city's open doors by their pace, truck status), robot cities (what loads without an open door), events; `doorAt(schedule, door, minute)`, `robotsAt`, `bufferAt`; and the plan's parcels: `arrivedAt`, `parcelFactor` (one parcel in the hall for 1 or a fixed few), `inHall`. Pure, tested in `tests/shiftsDirector.test.ts`. |
+| `src/scene/director.ts` | `createDirector(scene)`: the hall plays a shift of the planning game (the `Director` of `src/shifts/contract.ts`). The timeline is the truth; the hall shows it with the plan's own parcels (a band in the city's colour): in as the level says, down the chute of an open dock only as far as the timeline has loaded, to robot stations, into the buffer rack as full as `timeline.buffer`. Doors, people (1 or 2 per dock, a little brisker than the free simulation: about 100 and 200 an hour of hall time), cage boards (city and colour), door screens (a city only on a door with an open block), trailer swaps (the real truck cycle), fleet size. Camera: automatic overview of the open docks with cuts to events, `focusCity`, looking around by hand (drag, two-finger drag, pinch or wheel on the canvas: `Sorter.shiftLook`), the closing shot inside the hall (`finale`, timed in hall beats). Works through the scene's shift hooks: `Sorter.shift` (`ShiftHooks`; null = the free simulation, and every change in the scene is behind it), `shiftReset`, `shiftPlace`, `shiftSend`, `shiftStore`, `shiftRetrieve`, `shiftBuffer`, `shiftView`; `Docks.setDirected` / `directDock` / `closeOut`; `Trucks.direct` / `want` / `swap` / `say` / `freeze`; `Fleet.limit` / `retask`; `RobotFloor.near` / `shiftBoards`; `BreakCrew.hold`; `FaultCrew.recall`. |
+| `scripts/directorShots.mjs` | Headless screenshots of played levels with the director's own camera (default levels 1 and 10, desktop and phone size), with checks of `onDone`, a second `enter`, `skip`, the camera calls and the hall after `exit`. |
 | `src/scene/types.ts` | `SceneInput` (what the scene gets every frame) and control types. |
 | `src/scene/sorter.ts` | The `Sorter` scene: renderer, post-processing, hall, infeed, loop, chutes, store and lift, parcels, club (night), day scenery, camera and tour. Owns the kit (`box`, `std`, `put`, `inkify`, `person`, `sign`) that the other scene modules use. |
 | `src/scene/floor.ts` | `RobotFloor`: pickup stations, boxes on pallets, robots, flow projectors (all of them, including over the dock belts), manual sort table, floor details. |
@@ -94,6 +98,10 @@ Read this before changing code. README.md describes the hall and the controls.
 
 - `bt`: the music's beats. Robots, workers, forklifts, the lift and shuttles,
   lights and the camera run on it.
+  During a played shift `bt` can run a whole number of times as fast as the music (4, 8, 16:
+  `ShiftHooks.warp`; 0 is a pause): the whole hall speeds up and still moves on beats. `mbt` is
+  the music's own beat, which the night's lights and dancers keep to. A shift minute is four
+  hall beats, and the shift clock is counted in them.
 - `ct`: the conveyor clock, `bt × speed` (`BELT_SPEEDS` 0.5, 1, 2, 4; set by
   `setBeltSpeed`). Lanes, the loop, trays, chutes and dock belts are timed in
   it, so all `Parcel.t0/t1/tIn/divertAt` in `path` and `loop` mode are `ct`
@@ -116,6 +124,9 @@ Read this before changing code. README.md describes the hall and the controls.
   robot; `dropAt` tips it into the box) → `held` in the box → a forklift takes
   the box into a truck (`RobotFloor.onEmptied`); small envelopes (by day, west stations) go to the
   manual drop instead → `manual` (owned by `ManualSort`);
+- during a played shift a parcel has a `city` (and its band) and, on the loop, is `spare` until
+  the director sends it down a chute (`shiftSend`, or straight away as it comes onto the loop:
+  `ShiftHooks.route`) or into the rack (`shiftStore`); a full or closed end makes it spare again.
 - destination full (`room()`): the parcel stays on its tray and goes round
   the loop again (`laps`).
 - store: `path` (intake) → `queue` → `carriage` (lift) → `shuttle` → `fixed`
