@@ -1,6 +1,7 @@
 // The result of one shift: stars, profit against par, the level score, where the
 // money went (and what changed since the attempt before), the trucks and the
 // buffer as it really filled.
+import { TROPHIES } from '../../../shifts/trophies';
 import { PRICES, type Result, type TruckStatus } from '../../../shifts/contract';
 import { button, h, stars, tag, topBar } from '../dom';
 import { cityColor, cityName, clock, cost, hours, money, num, planTime, plural } from '../format';
@@ -82,8 +83,9 @@ export function resultScreen(ctx: Ctx, o: Outcome): HTMLElement {
     h('div', { class: 'sh-hero-score' }, h('span', { text: 'Level score' }), h('b', { text: num(result.score) })),
   );
 
+  const trophy = TROPHIES.find((t) => t.level === level.id);
   const badge = result.badge
-    ? h('p', { class: 'sh-badge sh-badge--got' }, h('b', { text: 'Badge earned. ' }), `${level.badge.text}.`)
+    ? h('p', { class: 'sh-badge sh-badge--got' }, h('b', { text: 'Badge earned. ' }), `${level.badge.text}.`, trophy ? h('span', { class: 'sh-badge-trophy', text: ` Trophy in the hall: ${trophy.name}.` }) : null)
     : h('p', { class: 'sh-badge' }, h('b', { text: p.level(level.id)?.badge ? 'Extra goal not met this time. ' : 'Extra goal not met. ' }), `${level.badge.text}.`);
 
   // Profit and loss.

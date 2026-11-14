@@ -15,7 +15,7 @@
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
 import { COUNTRIES, COUNTRY, setCountry } from './sim/countries';
-import { setXmas } from './sim/season';
+import { setTrophies, setXmas } from './sim/season';
 import './ui/style.css';
 
 import { Music } from './audio/music';
@@ -148,6 +148,8 @@ const shifts = showUi
         nightBefore = false;
       },
       views: { planner: plannerView, shiftHud },
+      // A badge earns a Christmas decoration in the hall, in the game and in the free simulation.
+      onBadges: (levels) => setTrophies(levels),
       settings: {
         look: () => (settings.look === 'real' ? 'real' : 'minimal'),
         setLook: (v) => hud.setTime('day', v),

@@ -1,5 +1,6 @@
 // The briefing of one level: the orders on a small time line, what is open
 // tonight, the prices that matter, the profit needed per star and the extra goal.
+import { TROPHIES } from '../../../shifts/trophies';
 import { PRICES, type City, type Level } from '../../../shifts/contract';
 import { button, h, stars, tag, topBar } from '../dom';
 import { cityColor, cityName, clock, firstParcel, hours, lastParcel, num, plural, price, robotForShift, starTargets, totalParcels, wage } from '../format';
@@ -111,12 +112,14 @@ export function briefingScreen(ctx: Ctx, id: number): HTMLElement {
 
   const targets = starTargets(level);
   const goal = level.badge.text;
+  const trophy = TROPHIES.find((t) => t.level === level.id);
   const toBeat = h(
     'section',
     { class: 'sh-panel sh-panel--soft' },
     h('h2', { class: 'sh-h3', text: 'Profit to beat' }),
     h('ul', { class: 'sh-targets' }, ...targets.map((t, i) => h('li', null, stars(i + 1), h('b', { text: price(t) })))),
     h('p', { class: 'sh-goal', text: `Extra goal: ${/^[A-Z][a-z]/.test(goal) ? goal[0]!.toLowerCase() + goal.slice(1) : goal}` }),
+    trophy ? h('p', { class: 'sh-goal', text: `Trophy for the hall: ${trophy.name}` }) : null,
   );
 
   const best = ctx.progress.level(level.id);

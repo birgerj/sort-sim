@@ -31,6 +31,8 @@ export interface ShiftsDeps {
   progress?: Progress;
   /** Look, quality, sound and country; no settings button when absent. */
   settings?: GameSettings;
+  /** Told which levels have their badge: at the start and when a result is shown. */
+  onBadges?(levels: number[]): void;
 }
 
 const EMPTY_PLAN: Plan = { blocks: [], robotCities: [], robots: 0 };
@@ -54,6 +56,8 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
     return views;
   };
 
+  const tellBadges = (): void => deps.onBadges?.(deps.levels.filter((l) => progress.level(l.id)?.badge).map((l) => l.id));
+  tellBadges();
   const settings = deps.settings;
   const ctx = (): Ctx => ({
     levels: deps.levels,
@@ -129,6 +133,8 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
     const finish = () => {
       if (shown || mine !== run || !outcome) return;
       shown = true;
+      // Only now, so a new trophy does not give the result away while the shift still plays.
+      tellBadges();
       go({ name: 'result', outcome });
     };
 
