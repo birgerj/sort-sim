@@ -202,8 +202,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
       if (!blocks && !robots) return 'not planned';
       const how = blocks && robots ? 'docks + robots' : robots ? 'robots' : 'planned';
       if (robots && !blocks && plan.robots === 0) return 'robots · no fleet yet';
-      const left = flow.left[c] ?? 0;
-      return left >= 0.5 ? `${how} · ${count(Math.ceil(left))} too many` : `${how} · fits`;
+      // No verdict on whether the city fits: the block's fill bar is all the planner gives away.
+      return how;
     }
 
     function drawSide(list: PlanProblem[], left: number[]): void {
@@ -410,24 +410,17 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         const bad = badBlocks.get(i);
         if (bad) parts.push(h('div', { class: 'shp-alert', role: 'alert', text: bad.join(' ') }));
         const reach = f.loaded + f.waitingAtEnd;
-        const short = flow.left[c] ?? 0;
-        const tooMany = short >= 0.5 ? `About ${count(Math.ceil(short))} parcels more than this plan can load for ${name(c)}.` : '';
         parts.push(
           h('div', { class: 'shp-facts shp-num shp-wide' },
             h('div', {}, h('b', { text: 'Work: ' }), `about ${count(reach)} parcels can reach this block (${count(arrivedBy(city, b.end))} are in by ${clock(b.end)}).`),
             h('div', {}, h('b', { text: 'Crew: ' }), `${dockRate(b.people)} an hour${b.docks > 1 ? ` on each of ${b.docks} docks` : ''}, ${count(f.capacity)} in this block.`),
-            h('div', {}, h('b', { text: 'Cost: ' }), `${money(cost!.docks + cost!.people)} (dock ${count(cost!.docks)} · people ${count(cost!.people)}).`),
-            tooMany ? h('div', { class: 'shp-warn', text: tooMany }) : null),
-          h('div', { class: 'shp-facts shp-num shp-narrow' }, `Work about ${count(reach)} · crew can load ${count(f.capacity)}`, tooMany ? h('span', { class: 'shp-warn', text: ` · ${count(Math.ceil(short))} too many for the plan` }) : null),
+            h('div', {}, h('b', { text: 'Cost: ' }), `${money(cost!.docks + cost!.people)} (dock ${count(cost!.docks)} · people ${count(cost!.people)}).`)),
+          h('div', { class: 'shp-facts shp-num shp-narrow' }, `Work about ${count(reach)} · crew can load ${count(f.capacity)}`),
         );
       } else if (!own.length) {
         parts.push(h('p', { class: 'shp-muted', text: hasRobots && plan.robotCities.includes(c) ? 'This city goes to the robots only. Add a block to give it a dock as well.' : 'No block yet.' }));
       } else {
         parts.push(h('p', { class: 'shp-muted', text: `${plural(own.length, 'block', 'blocks')}. Tap one on the time line to change it.` }));
-      }
-      const left = flow.left[c] ?? 0;
-      if (!b && left >= 0.5 && (own.length || (hasRobots && plan.robotCities.includes(c)))) {
-        parts.push(h('div', { class: 'shp-warn shp-num', text: `About ${count(Math.ceil(left))} parcels more than this plan can load for ${name(c)}.` }));
       }
       const foot = h('div', { class: 'shp-insp-foot' });
       parts.push(foot);

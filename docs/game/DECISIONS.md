@@ -19,3 +19,4 @@
 - 2026-11-14 The game is wired into the app: after the start card the player chooses free simulation or game (`?start=free|game` skips the choice; a department or the demo tour in the address goes to the free simulation). The old night game is removed.
 - 2026-11-14 Until the hall's director is merged, a clock-only stand-in (`src/shifts/clockDirector.ts`) plays the shift: the game is fully playable, the hall just keeps running as in the free simulation.
 - 2026-11-14 While the game's screens cover the hall, the hall is not drawn (saves the device; it only draws during a shift).
+- 2026-11-14 The planner gives no verdict per city (no "fits", no "N too many"): only the block's fill bar.
