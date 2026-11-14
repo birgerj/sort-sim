@@ -38,6 +38,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   let plan = clonePlan(o.plan);
   let sel: Selection | null = null;
   let asking = false; // the "start without these cities?" question is open
+  let costsOpen = false; // the cost breakdown above the bottom bar is open
   let pph = 64; // pixels per hour on the time line
   let quietClick = false; // a drag just ended: the click that follows is not a tap on the row
 
@@ -412,10 +413,10 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         const reach = f.loaded + f.waitingAtEnd;
         parts.push(
           h('div', { class: 'shp-facts shp-num shp-wide' },
-            h('div', {}, h('b', { text: 'Work: ' }), `about ${count(reach)} parcels can reach this block (${count(arrivedBy(city, b.end))} are in by ${clock(b.end)}).`),
-            h('div', {}, h('b', { text: 'Crew: ' }), `${dockRate(b.people)} an hour${b.docks > 1 ? ` on each of ${b.docks} docks` : ''}, ${count(f.capacity)} in this block.`),
+            h('div', {}, h('b', { text: 'Parcels: ' }), `about ${count(reach)} are there to load during this block (${count(arrivedBy(city, b.end))} of ${count(city.volume)} are in by ${clock(b.end)}).`),
+            h('div', {}, h('b', { text: 'Crew: ' }), `${b.people === 2 ? '2 people load' : '1 person loads'} ${dockRate(b.people)} an hour${b.docks > 1 ? ` on each of ${b.docks} docks` : ''}: room for ${count(f.capacity)} in this block.`),
             h('div', {}, h('b', { text: 'Cost: ' }), `${money(cost!.docks + cost!.people)} (dock ${count(cost!.docks)} · people ${count(cost!.people)}).`)),
-          h('div', { class: 'shp-facts shp-num shp-narrow' }, `Work about ${count(reach)} · crew can load ${count(f.capacity)}`),
+          h('div', { class: 'shp-facts shp-num shp-narrow' }, `About ${count(reach)} parcels to load here · room for ${count(f.capacity)}`),
         );
       } else if (!own.length) {
         parts.push(h('p', { class: 'shp-muted', text: hasRobots && plan.robotCities.includes(c) ? 'This city goes to the robots only. Add a block to give it a dock as well.' : 'No block yet.' }));
@@ -475,13 +476,35 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     function drawBar(): void {
       const cell = (label: string, value: string, cls = '') => h('div', { class: `shp-cell-money ${cls}` }, h('span', { text: label }), h('b', { class: 'shp-num', text: value }));
       const blocked = problems.length > 0;
+      // The fixed costs open into how they add up: hours × price, from the plan alone.
+      const hours = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)} h`;
+      const dockHours = plan.blocks.reduce((a, b) => a + (b.docks * (b.end - b.start)) / 60, 0);
+      const personHours = plan.blocks.reduce((a, b) => a + (b.docks * b.people * (b.end - b.start)) / 60, 0);
+      const wage = PRICES.personPerHour * level.wageFactor;
+      const line = (label: string, how: string, value: string) => h('div', { class: 'shp-costs-row shp-num' }, h('span', { text: label }), h('span', { class: 'shp-costs-how', text: how }), h('b', { text: value }));
+      const breakdown = costsOpen
+        ? h('div', { class: 'shp-costs', id: 'shp-costs' },
+            line('Docks', `${hours(dockHours)} × ${money(PRICES.dockPerHour)}`, money(costs.docks)),
+            line('People', `${hours(personHours)} × ${money(wage)}`, money(costs.people)),
+            hasRobots ? line('Robots', `${plan.robots} × ${money(PRICES.robotPerShiftHour * (level.shiftMinutes / 60))} a shift`, money(costs.robots)) : null,
+            line('Buffer', `${CURRENCY} ${PRICES.bufferPerParcel.toFixed(2)} a parcel`, 'after the shift'),
+            h('div', { class: 'shp-costs-row shp-costs-sum shp-num' }, h('span', { text: 'Fixed costs' }), h('span'), h('b', { text: money(costs.total) })))
+        : null;
+      const total = h('button', { class: 'shp-cell-money shp-costs-toggle', type: 'button', 'data-key': 'costs', 'aria-expanded': String(costsOpen), 'aria-controls': 'shp-costs',
+        onclick: () => {
+          costsOpen = !costsOpen;
+          drawBar();
+          bar.querySelector<HTMLElement>('[data-key="costs"]')?.focus({ preventScroll: true });
+        } },
+        h('span', { text: `Fixed costs ${costsOpen ? '▾' : '▸'}` }), h('b', { class: 'shp-num', text: money(costs.total) }));
       bar.replaceChildren(
+        ...(breakdown ? [breakdown] : []),
         h('div', { class: 'shp-money' },
           cell('Docks', money(costs.docks), 'shp-wide'),
           cell('People', money(costs.people), 'shp-wide'),
           hasRobots ? cell('Robots', money(costs.robots), 'shp-wide') : null,
           cell('Buffer', 'after the shift', 'shp-wide'),
-          cell(phone && !problems.length ? 'Fixed costs, buffer comes later' : 'Fixed costs', money(costs.total)),
+          total,
           cell('Most you can earn', money(mostToEarn(level)), 'shp-wide'),
           cell('Result', 'after the shift', 'shp-wide')),
         h('div', { class: 'shp-go' },
