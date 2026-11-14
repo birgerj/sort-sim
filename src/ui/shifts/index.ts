@@ -12,7 +12,6 @@ import { endScreen } from './screens/end';
 import { introScreen } from './screens/intro';
 import { levelsScreen } from './screens/levels';
 import { resultScreen } from './screens/result';
-import { startScreen } from './screens/start';
 import './style.css';
 
 export type { PlannerView, ShiftHud } from './planner-seam';
@@ -65,8 +64,6 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
   function go(route: Route): void {
     run++;
     switch (route.name) {
-      case 'start':
-        return show(startScreen(ctx()));
       case 'intro':
         return show(introScreen(ctx(), route.from));
       case 'levels':
@@ -193,7 +190,8 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
     root,
     open() {
       root.hidden = false;
-      go({ name: 'start' });
+      // Straight in: the how-to the first time, the levels after that.
+      go(progress.introSeen() ? { name: 'levels' } : { name: 'intro', from: 'start' });
     },
     close,
   };

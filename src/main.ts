@@ -10,7 +10,7 @@
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
  *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
  *   night=party|calm|dark  what the night shows (Night effects panel; remembered otherwise)
- *   start=free|game        skip the choice at launch: the free simulation, or the planning game
+ *   start=game             with mute=1 (no start card): open the planning game
  *   quality=low|normal|high  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
@@ -75,15 +75,13 @@ const mute = q.get('mute') === '1' || !showUi;
 // pressed (and only shows if the hall is not ready by then).
 /** The settings the HUD works with, once they are loaded (Start may come before or after). */
 let liveSettings: Settings | null = null;
-// After Start the player chooses between the free simulation and the planning game, unless the
-// address already says where to go (a department, the demo tour, or start=free|game).
-const startParam = q.get('start');
-const skipChoice = startParam === 'free' || (startParam !== 'game' && (q.has('dept') || q.has('pv')));
-let started = !(showUi && !mute); // (no start card: nothing to wait for)
-let offerChoice = () => {};
+// The start card offers the free simulation or the planning game. Without a start card (mute=1)
+// `start=game` in the address opens the game.
+let wantGame = !(showUi && !mute) && q.get('start') === 'game';
+let offerGame = () => {};
 if (showUi && !mute) {
   loading?.classList.add('quiet');
-  startCard((sound) => {
+  startCard((sound, mode) => {
     const st = loadSettings();
     st.muted = !sound;
     saveSettings(st);
@@ -91,8 +89,8 @@ if (showUi && !mute) {
     music.setMuted(!sound);
     if (sound) void music.start();
     loading?.classList.remove('quiet');
-    started = true;
-    offerChoice();
+    wantGame = mode === 'game';
+    offerGame();
   });
 }
 await nextPaint();
@@ -152,11 +150,12 @@ function openShifts(): void {
   hud.root.style.display = 'none';
   shifts.open();
 }
-// The choice at launch: as soon as both Start has been pressed and the hall exists.
-offerChoice = () => {
-  if (started && !skipChoice) openShifts();
+// Play on the start card: as soon as the hall exists.
+offerGame = () => {
+  if (wantGame) openShifts();
+  wantGame = false;
 };
-offerChoice();
+offerGame();
 // Walk and fly controls sit under the menu (an open panel may cover them).
 hud.root.prepend(walk.root);
 const pwa = new Pwa(hud.root, music);

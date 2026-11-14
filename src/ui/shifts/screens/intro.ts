@@ -101,7 +101,7 @@ export function introScreen(ctx: Ctx, from: 'start' | 'levels'): HTMLElement {
     'div',
     { class: 'sh-screen sh-intro' },
     h('header', { class: 'sh-intro-top' }, h('div', { class: 'sh-bar-id' }, mark(40), h('div', { class: 'sh-intro-name', text: 'Ten Shifts · how to play' })), button(from === 'levels' ? 'Close' : 'Skip intro', done, 'link')),
-    h('div', { class: 'sh-intro-body' }, h('div', { class: 'sh-intro-side' }, list, h('p', { class: 'sh-intro-note', text: 'Shown once. You can replay it any time from the level screen.' })), card),
+    h('div', { class: 'sh-intro-body' }, h('div', { class: 'sh-intro-side' }, list), card),
   );
 
   const draw = (focus: boolean) => {

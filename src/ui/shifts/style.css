@@ -6,12 +6,12 @@
  *
  *   --sh-ink          text
  *   --sh-grey         secondary text
- *   --sh-bg           the ground behind the panels (light grey)
- *   --sh-panel        panel ground (white)
+ *   --sh-bg           the ground behind the panels (the paused hall, darkened)
+ *   --sh-panel        panel ground (dark glass, as the hall's own controls)
  *   --sh-line         panel and button border
  *   --sh-line-soft    border of a quieter panel, rules inside a panel
  *   --sh-line-strong  border of something that stands for a thing (a block, a tile, a bar)
- *   --sh-acc          the one accent: actions and selection (blue)
+ *   --sh-acc          the one accent: actions and selection (the hall's teal)
  *   --sh-acc-soft     ground of a selected or highlighted panel
  *   --sh-good         money in, on time
  *   --sh-bad          money out, late, left behind, buffer full
@@ -20,7 +20,7 @@
  *   --sh-new          ground of the card "New in this level"
  *   --sh-goal         ground of the extra goal and of a badge
  *   --sh-buffer       the buffer in charts
- *   --sh-city-0 … --sh-city-15   one muted colour per city, all light enough for --sh-ink text;
+ *   --sh-city-0 … --sh-city-15   one muted colour per city, all dark enough for --sh-ink text;
  *                     city i uses --sh-city-(i mod 16)
  *   --sh-radius       panel corners;  --sh-radius-s  buttons and blocks
  *   --sh-font         the system font stack
@@ -32,43 +32,44 @@
  */
 
 .sh-root {
-  --sh-ink: #1f2430;
-  --sh-grey: #515868;
-  --sh-bg: #f3f4f7;
-  --sh-panel: #ffffff;
-  --sh-line: #c3c8d4;
-  --sh-line-soft: #e1e4eb;
-  --sh-line-strong: #7b8296;
-  --sh-acc: #2457d6;
-  --sh-acc-soft: #e9effd;
-  --sh-good: #0a7a5c;
-  --sh-bad: #c2260c;
-  --sh-good-soft: #a5dccf;
-  --sh-warn-soft: #f2dc8c;
-  --sh-bad-soft: #f3b9ad;
-  --sh-star: #b77a00;
-  --sh-star-off: #c9cbe0;
-  --sh-new: #f3c3a2;
-  --sh-goal: #cdc7ef;
-  --sh-buffer: #6b74c9;
-  --sh-city-0: #a5dccf;
-  --sh-city-1: #f3c3a2;
-  --sh-city-2: #cdc7ef;
-  --sh-city-3: #f2dc8c;
-  --sh-city-4: #a9c9f0;
-  --sh-city-5: #f0b3c8;
-  --sh-city-6: #bfe0a0;
-  --sh-city-7: #d9c2a3;
-  --sh-city-8: #8fd3e8;
-  --sh-city-9: #e6b8ec;
-  --sh-city-10: #e89f9f;
-  --sh-city-11: #c8d48a;
-  --sh-city-12: #9fb4e8;
-  --sh-city-13: #86c9a8;
-  --sh-city-14: #c4c9d4;
-  --sh-city-15: #e3a66b;
-  --sh-radius: 10px;
+  --sh-ink: #f4f5f7;
+  --sh-grey: #a9adb5;
+  --sh-bg: rgba(11, 9, 16, 0.62);
+  --sh-panel: rgba(22, 24, 29, 0.86);
+  --sh-line: rgba(255, 255, 255, 0.14);
+  --sh-line-soft: rgba(255, 255, 255, 0.08);
+  --sh-line-strong: rgba(255, 255, 255, 0.34);
+  --sh-acc: #2fa58f;
+  --sh-acc-soft: rgba(47, 165, 143, 0.2);
+  --sh-good: #86d3c3;
+  --sh-bad: #ff9484;
+  --sh-good-soft: #1f6557;
+  --sh-warn-soft: #6e5c14;
+  --sh-bad-soft: #7c2c20;
+  --sh-star: #f2c200;
+  --sh-star-off: rgba(255, 255, 255, 0.22);
+  --sh-new: #7a4a2a;
+  --sh-goal: #4a418f;
+  --sh-buffer: #9aa3ff;
+  --sh-city-0: #2b7f70;
+  --sh-city-1: #a4623a;
+  --sh-city-2: #5b4fa8;
+  --sh-city-3: #8a6f14;
+  --sh-city-4: #2f62a8;
+  --sh-city-5: #a23d68;
+  --sh-city-6: #4c7d2a;
+  --sh-city-7: #7a6042;
+  --sh-city-8: #1f7892;
+  --sh-city-9: #8a3f97;
+  --sh-city-10: #a04040;
+  --sh-city-11: #6b7422;
+  --sh-city-12: #3c53a6;
+  --sh-city-13: #2a7a55;
+  --sh-city-14: #5a6170;
+  --sh-city-15: #9a5a1c;
+  --sh-radius: 12px;
   --sh-radius-s: 8px;
+  --sh-deep: rgba(14, 15, 19, 0.84);
   --sh-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
   position: fixed;
@@ -77,8 +78,10 @@
   overflow: auto;
   overscroll-behavior: contain;
   background: var(--sh-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   color: var(--sh-ink);
-  color-scheme: light;
+  color-scheme: dark;
   font: 15px/1.4 var(--sh-font);
   font-variant-numeric: tabular-nums;
   -webkit-text-size-adjust: 100%;
@@ -93,6 +96,8 @@
 /* While a shift plays: the hall shows through and only the panel on top takes clicks. */
 .sh-root--live {
   background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   overflow: hidden;
   pointer-events: none;
 }
@@ -214,7 +219,7 @@
   justify-content: center;
   min-height: 46px;
   padding: 0 20px;
-  background: var(--sh-panel);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--sh-ink);
   border: 1px solid var(--sh-line);
   border-radius: var(--sh-radius-s);
@@ -236,8 +241,8 @@
 }
 
 .sh-root .sh-btn--primary:hover {
-  background: #1c47b4;
-  border-color: #1c47b4;
+  background: #27907c;
+  border-color: #86d3c3;
 }
 
 .sh-root .sh-btn--big {
@@ -635,7 +640,7 @@
 }
 
 .sh-intro-step--seen .sh-intro-num {
-  background: var(--sh-ink);
+  background: var(--sh-deep, rgba(14, 15, 19, 0.84));
   color: #ffffff;
 }
 
@@ -809,7 +814,7 @@
 }
 
 .sh-demo-key--on {
-  background: var(--sh-ink);
+  background: var(--sh-acc, #2fa58f);
   color: #ffffff;
 }
 
@@ -879,8 +884,8 @@
 }
 
 .sh-root .sh-tile--locked {
-  background: #e9ebf0;
-  border: 1px dashed #9aa0b0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.22);
   color: var(--sh-grey);
 }
 
@@ -1194,7 +1199,7 @@
 }
 
 .sh-root .sh-hud-key[aria-pressed='true'] {
-  background: var(--sh-ink);
+  background: var(--sh-acc, #2fa58f);
   border-color: var(--sh-ink);
   color: #ffffff;
 }
@@ -1249,7 +1254,7 @@
   align-items: center;
   margin-top: 8px;
   padding: 8px 14px;
-  background: var(--sh-ink);
+  background: var(--sh-deep, rgba(14, 15, 19, 0.84));
   color: #ffffff;
   border-radius: var(--sh-radius-s);
   font-weight: 600;
@@ -1571,7 +1576,7 @@
     z-index: 1;
     margin: 0 -12px -12px;
     padding: 10px 12px max(12px, env(safe-area-inset-bottom));
-    background: var(--sh-bg);
+    background: rgba(11, 9, 16, 0.92);
     border-top: 1px solid var(--sh-line);
   }
 

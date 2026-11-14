@@ -48,7 +48,7 @@ export function levelsScreen(ctx: Ctx): HTMLElement {
     );
   });
 
-  const actions = [button('How to play', () => ctx.go({ name: 'intro', from: 'levels' })), button('Free simulation', () => ctx.free())];
+  const actions = [button('How to play', () => ctx.go({ name: 'intro', from: 'levels' })), button('Simulation', () => ctx.free())];
   if (allDone) actions.unshift(button('End score', () => ctx.go({ name: 'end' }), 'primary'));
 
   return h(
@@ -63,8 +63,6 @@ export function levelsScreen(ctx: Ctx): HTMLElement {
     h(
       'div',
       { class: 'sh-levels-foot' },
-      h('p', { class: 'sh-panel sh-panel--soft sh-note' }, h('b', { text: 'Stars. ' }), 'One star opens the next level. Three stars need a plan close to par. Every level also has one extra goal that earns a badge.'),
-      h('p', { class: 'sh-panel sh-panel--soft sh-note' }, h('b', { text: 'Same for everyone. ' }), 'The ten shifts never change. Only the city names follow your country.'),
       h('div', { class: 'sh-actions' }, ...actions),
     ),
   );

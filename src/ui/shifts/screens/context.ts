@@ -14,7 +14,6 @@ export interface Outcome {
 }
 
 export type Route =
-  | { name: 'start' }
   | { name: 'intro'; from: 'start' | 'levels' }
   | { name: 'levels' }
   | { name: 'briefing'; id: number }
