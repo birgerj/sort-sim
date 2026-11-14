@@ -157,6 +157,14 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
     `director.ts`; no file under `src/ui`.
   - Colours in `src/shifts/colours.ts` (the planner's fallback list now imports it; `style.css` still has the
     same values as CSS variables).
+- Trophies (round 5): `src/shifts/trophies.ts` lists ten, level 1 to 10: light strings, wreaths on the doors,
+  candy canes, garlands, stars and roof hangers, lights on the forklifts, trees, hats and presents, the market,
+  snow and Father Christmas (with the countdown on the screens). `setTrophies(levels)` in `src/sim/season.ts`
+  is live: a kind shows when Christmas is on or its level is earned, and what is new comes in with the wave
+  from where the camera looks. The bells in the music stay with the Christmas setting (`src/audio` reads
+  `XMAS`). For the coordinator: call `setTrophies(levelsWithBadge)` once at start and again with the whole
+  list whenever a badge is earned; nothing else. Shots in `shots/trophies/` (free simulation, day and night,
+  none / levels 1 to 3 / all ten).
 - Rough: robots are about 15 % under the model's pace, and full boxes wait for the three forklifts, so robot
   cities fall behind in the hall (the counts on screen are the timeline's); people still appear at their
   place; the nested stacks of empty cages stay at every door; a belt's parcels are taken away (and come round
