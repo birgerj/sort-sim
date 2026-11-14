@@ -4,28 +4,35 @@
    "city": 0,
    "start": 0,
    "end": 60,
-   "people": 2,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 0,
+   "start": 30,
+   "end": 90,
+   "people": 1,
    "docks": 1
   },
   {
    "city": 0,
    "start": 60,
    "end": 120,
-   "people": 2,
+   "people": 1,
    "docks": 1
   },
   {
    "city": 0,
    "start": 90,
    "end": 150,
-   "people": 1,
+   "people": 2,
    "docks": 1
   },
   {
    "city": 0,
    "start": 120,
-   "end": 210,
-   "people": 2,
+   "end": 180,
+   "people": 1,
    "docks": 1
   },
   {
@@ -37,23 +44,30 @@
   },
   {
    "city": 0,
+   "start": 180,
+   "end": 240,
+   "people": 2,
+   "docks": 1
+  },
+  {
+   "city": 0,
    "start": 210,
    "end": 270,
-   "people": 2,
-   "docks": 2
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 0,
+   "start": 240,
+   "end": 340,
+   "people": 1,
+   "docks": 1
   },
   {
    "city": 0,
    "start": 270,
    "end": 330,
    "people": 2,
-   "docks": 1
-  },
-  {
-   "city": 0,
-   "start": 270,
-   "end": 340,
-   "people": 1,
    "docks": 1
   },
   {
@@ -66,15 +80,36 @@
   {
    "city": 1,
    "start": 0,
-   "end": 150,
+   "end": 90,
    "people": 2,
    "docks": 1
   },
   {
    "city": 1,
-   "start": 150,
-   "end": 210,
+   "start": 30,
+   "end": 90,
    "people": 2,
+   "docks": 1
+  },
+  {
+   "city": 1,
+   "start": 60,
+   "end": 120,
+   "people": 2,
+   "docks": 1
+  },
+  {
+   "city": 1,
+   "start": 90,
+   "end": 180,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 1,
+   "start": 120,
+   "end": 180,
+   "people": 1,
    "docks": 1
   },
   {
@@ -86,9 +121,16 @@
   },
   {
    "city": 2,
+   "start": 60,
+   "end": 120,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 2,
    "start": 120,
    "end": 180,
-   "people": 2,
+   "people": 1,
    "docks": 1
   },
   {
@@ -103,19 +145,26 @@
    "start": 240,
    "end": 300,
    "people": 2,
-   "docks": 2
+   "docks": 1
+  },
+  {
+   "city": 2,
+   "start": 270,
+   "end": 360,
+   "people": 2,
+   "docks": 1
   },
   {
    "city": 2,
    "start": 300,
    "end": 360,
    "people": 2,
-   "docks": 2
+   "docks": 1
   },
   {
    "city": 3,
    "start": 0,
-   "end": 150,
+   "end": 90,
    "people": 2,
    "docks": 1
   },
@@ -128,17 +177,10 @@
   },
   {
    "city": 3,
-   "start": 60,
+   "start": 90,
    "end": 150,
    "people": 2,
-   "docks": 1
-  },
-  {
-   "city": 4,
-   "start": 30,
-   "end": 90,
-   "people": 1,
-   "docks": 1
+   "docks": 2
   },
   {
    "city": 4,
@@ -163,6 +205,13 @@
   },
   {
    "city": 4,
+   "start": 240,
+   "end": 300,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 4,
    "start": 270,
    "end": 330,
    "people": 1,
@@ -171,7 +220,7 @@
   {
    "city": 5,
    "start": 180,
-   "end": 240,
+   "end": 330,
    "people": 1,
    "docks": 1
   },
@@ -184,8 +233,8 @@
   },
   {
    "city": 6,
-   "start": 60,
-   "end": 120,
+   "start": 30,
+   "end": 90,
    "people": 2,
    "docks": 1
   },
@@ -202,13 +251,41 @@
    "end": 240,
    "people": 2,
    "docks": 1
+  },
+  {
+   "city": 7,
+   "start": 0,
+   "end": 60,
+   "people": 2,
+   "docks": 1
+  },
+  {
+   "city": 7,
+   "start": 120,
+   "end": 180,
+   "people": 2,
+   "docks": 1
+  },
+  {
+   "city": 8,
+   "start": 180,
+   "end": 270,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 8,
+   "start": 270,
+   "end": 330,
+   "people": 2,
+   "docks": 1
   }
  ],
  "robotCities": [
-  1,
-  5,
-  7,
-  8
+  0,
+  2,
+  3,
+  5
  ],
- "robots": 12
+ "robots": 6
 }

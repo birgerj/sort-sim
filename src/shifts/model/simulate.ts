@@ -13,7 +13,7 @@ const PRICE = {
   parcel: 1.5, // per parcel shipped
   onTime: 0.3, // extra per parcel when its truck is complete and on time
   latePerMinute: 0.03, // per parcel on the truck, per minute the truck leaves late
-  leftBehind: 2.5, // per parcel not on its truck
+  leftBehind: 1.5, // per parcel not on its truck
   dockPerHour: 25,
   personPerHour: 30,
   robotPerShiftHour: 11,
@@ -32,8 +32,9 @@ const TWO_PEOPLE_PER_MINUTE = 170 / 60;
 /** A trailer is full at this many parcels; swapping it keeps the dock idle for some minutes. */
 const TRAILER = 220;
 const TRAILER_SWAP_MINUTES = 10;
-/** A robot carries a third of a parcel per minute (20 an hour); a line passes one a minute at most. */
-const ROBOTS_PER_PARCEL_MINUTE = 3;
+/** A robot loads 17 parcels an hour, so it takes 60/17 robots to move one parcel a minute; a line passes
+ *  one a minute at most. (The reference model divides by the same number.) */
+const ROBOTS_PER_PARCEL_MINUTE = 60 / 17;
 const LINE_PER_MINUTE = 1;
 /** The shift is played on for this long after its end, for trucks that leave late. */
 const OVERTIME_MINUTES = 30;
@@ -131,8 +132,14 @@ function badgeGoal(level: Level, plan: Plan, statuses: TruckStatus[], bufferPeak
       return bufferPeak <= level.bufferCap / 2;
     case 'allOnTime':
       return statuses.every((s) => s === 'onTime');
-    default:
-      return false;
+    default: {
+      // onTime9: at least nine trucks complete and on time (levels where not everything fits).
+      const atLeast = /^onTime(\d+)$/.exec(level.badge.id);
+      if (atLeast !== null) return statuses.filter((s) => s === 'onTime').length >= Number(atLeast[1]);
+      // fleet3: at most three robots.
+      const fleet = /^fleet(\d+)$/.exec(level.badge.id);
+      return fleet !== null && plan.robots <= Number(fleet[1]);
+    }
   }
 }
 

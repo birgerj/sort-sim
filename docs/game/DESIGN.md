@@ -46,7 +46,7 @@ The definition is `tools/balance/solve.py` (`sim`, `evaluate`) with `tools/balan
 
 - One person on a dock loads 90 parcels an hour, two load 170. A trailer holds 220; swapping it takes
   the dock 10 minutes. A dock belt holds 40 waiting parcels.
-- A robot carries 20 an hour; a robot line passes 60 an hour at most and its table holds 20. A robot
+- A robot carries 17 an hour; a robot line passes 60 an hour at most and its table holds 20. A robot
   city gets enough lines for its busiest minute (at most 4), open from its first parcel to its truck
   time. The fleet is shared by all open lines in proportion to what waits there.
 - Parcels that find no room on a belt or table go to the buffer (until it is full; then they wait
@@ -55,7 +55,7 @@ The definition is `tools/balance/solve.py` (`sim`, `evaluate`) with `tools/balan
 - A city's truck leaves when its last block or line ends. After its truck time that is late; whatever
   is not loaded by then is left behind.
 - Money: + § 1.50 per parcel shipped; + § 0.30 per parcel when the truck is on time and complete;
-  − § 0.30 per parcel per 10 minutes late; − § 2.50 per parcel left behind; docks § 25 an hour per
+  − § 0.30 per parcel per 10 minutes late; − § 1.50 per parcel left behind; docks § 25 an hour per
   block; people § 30 an hour per block (× the level's wage factor); robots § 11 × shift hours each, for
   the whole shift; buffer § 0.15 per parcel that goes in.
 - Level score = 1000 × profit ÷ par, never below 0, not capped. Stars at 500, 750, 900.

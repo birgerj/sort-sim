@@ -62,14 +62,14 @@ def need_rate(L, i):
 
 def plain(L):
     """What a careful player does without tuning anything: steady cities go to the robots, smallest first, while
-    the fleet covers what they need (a robot per 20 an hour); every other city, largest first, gets
+    the fleet covers what they need (a robot per 17 an hour); every other city, largest first, gets
     ceil(needed rate / 150) docks with two people from its first parcel to its truck time, one dock at a time
     while docks and people last. A city that got no dock at all is left to the robots when some are spare."""
     plan = {'blocks': [], 'robotCities': [], 'robots': 0}
     ds = L['dests']
     rest = []
     for i in sorted(range(len(ds)), key=lambda i: ds[i]['v']):
-        need = math.ceil(need_rate(L, i) / 20 - 1e-9)
+        need = math.ceil(need_rate(L, i) / solve.ROBOT_RATE - 1e-9)
         if L['robots'] and ds[i]['prof'] == 'flat' and need_rate(L, i) <= 240 and plan['robots'] + need <= L['robots']:
             plan['robotCities'].append(i)
             plan['robots'] += need
@@ -86,7 +86,7 @@ def plain(L):
             plan, got = q, got + 1
         if got == 0 and L['robots'] and plan['robots'] < L['robots']:
             plan['robotCities'].append(i)
-            plan['robots'] = min(L['robots'], plan['robots'] + math.ceil(need_rate(L, i) / 20))
+            plan['robots'] = min(L['robots'], plan['robots'] + math.ceil(need_rate(L, i) / solve.ROBOT_RATE))
     return canon(plan)
 
 
@@ -98,7 +98,7 @@ def plain_spread(L):
     ds = L['dests']
     dock_cities = set(b['city'] for b in plain(L)['blocks'])
     plan['robotCities'] = [c for c in plan['robotCities'] if c not in dock_cities]
-    plan['robots'] = min(L['robots'], sum(math.ceil(need_rate(L, i) / 20 - 1e-9) for i in plan['robotCities']))
+    plan['robots'] = min(L['robots'], sum(math.ceil(need_rate(L, i) / solve.ROBOT_RATE - 1e-9) for i in plan['robotCities']))
     rest = sorted((i for i in range(len(ds)) if i not in plan['robotCities']), key=lambda i: -ds[i]['v'])
     for rnd in range(1, 9):
         for i in rest:
@@ -276,6 +276,18 @@ def search(L, iters, restarts, value=None, seed0=1000, log=None, first=()):
     return res
 
 
+def known(L, n):
+    """The best plan on file, scored under the rules as they are now (prices and levels have changed since
+    some of these were found). None when there is none or the game no longer lets it start."""
+    old = load(f'par{n}.json')
+    if not old:
+        return None
+    v = score(L, old['plan'])
+    if v is None:
+        return dict(old, profit=-1e18, plan={'blocks': [], 'robotCities': [], 'robots': 0})
+    return dict(old, profit=v)
+
+
 def save(name, data):
     os.makedirs(OUT, exist_ok=True)
     json.dump(data, open(os.path.join(OUT, name), 'w'), indent=1, default=float)
@@ -307,10 +319,14 @@ def badge_rule(L, bid):
         return (lambda plan: all(b['city'] == biggest for b in plan['blocks'])), none
     if bid == 'smallFleet':
         return (lambda plan: plan['robots'] <= 6), none
+    if bid.startswith('fleet'):
+        return (lambda plan: plan['robots'] <= int(bid[5:])), none
     if bid == 'halfBuffer':  # the highest minute, a little stricter than the 5-minute curve the player sees
         return yes, (lambda r: max(0.0, r['peak'] - L['store'] / 2))
     if bid == 'allOnTime':
         return yes, (lambda r: float(len(ds) - r['ontime']))
+    if bid.startswith('onTime'):
+        return yes, (lambda r: float(max(0, int(bid[6:]) - r['ontime'])))
     raise ValueError(bid)
 
 
@@ -347,8 +363,9 @@ def cmd_check(Ls):
 
 def cmd_par(Ls, n, iters, restarts):
     L = Ls[n - 1]
-    old = load(f'par{n}.json')
-    res = search(L, iters, restarts, seed0=1000 + 100 * len(old['runs'] if old else []), log=f'level {n}')  # new seeds on every further run
+    old = known(L, n)
+    res = search(L, iters, restarts, seed0=1000 + 100 * len(old['runs'] if old else []), log=f'level {n}',  # new seeds on every further run
+                 first=[old['plan']] if old and old['plan']['blocks'] else [])
     v, p = res[0]
     runs = (old['runs'] if old else []) + [{'iters': iters, 'restarts': [round(x, 2) for x, _ in res]}]
     if old and old['profit'] >= v:
@@ -362,7 +379,7 @@ def cmd_par(Ls, n, iters, restarts):
 def cmd_polish(Ls, n, iters, restarts, T0=12):
     """Cooler runs that start from the best plan known: closes most of the gap the warm restarts leave."""
     L = Ls[n - 1]
-    old = load(f'par{n}.json')
+    old = known(L, n)
     value = lambda p: score(L, p)
     v, p = old['profit'], old['plan']
     got = []
@@ -415,10 +432,10 @@ def cmd_price(Ls, n, iters, restarts):
     save(f'plain{n}.json', {'plan': pl, 'peaks': peaks(pl), 'detail': score(L, pl, True)})
 
 
-def cmd_badge(Ls, n, iters, restarts):
+def cmd_badge(Ls, n, iters, restarts, bid=None):
     L = Ls[n - 1]
-    bid = fixture.BADGE[n - 1][0]
-    par = load(f'par{n}.json')
+    bid = bid or fixture.BADGE[n - 1][0]
+    par = known(L, n)
     res = search(L, iters, restarts, value=badge_value(L, bid), seed0=3000, log=f'level {n} badge {bid}', first=[par['plan']] if par else [])
     good = [(score(L, p), p) for _, p in res if earns(L, bid, p)]
     if not good and bid == 'allOnTime':
@@ -442,14 +459,14 @@ def cmd_badge(Ls, n, iters, restarts):
            'plainEarns': earns(L, bid, plain(L)), 'plainProfit': score(L, plain(L)),
            'found': bool(good), 'profit': good[0][0] if good else None, 'plan': good[0][1] if good else None,
            'closest': None if good else score(L, res[0][1], True), 'closestPlan': None if good else res[0][1]}
-    save(f'badge{n}.json', out)
+    save(f'badge{n}_{bid}.json', out)
     print('level', n, bid, 'with badge', out['profit'], 'par', out['par'], 'par plan earns it', out['parPlanEarns'], 'plain earns it', out['plainEarns'], out['closest'])
 
 
 if __name__ == '__main__':
     Ls = solve.levels()
     cmd = sys.argv[1]
-    a = [int(x) for x in sys.argv[2:]]
+    a = [int(x) if x.lstrip('-').isdigit() else x for x in sys.argv[2:]]
     if cmd == 'check':
         cmd_check(Ls)
     elif cmd == 'par':

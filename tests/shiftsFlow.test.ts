@@ -34,7 +34,7 @@ describe('inflow against capacity', () => {
     const steps = capacitySteps(l, plan);
     const at = (m: number) => steps.find((q) => q.from <= m && m < q.to)?.value ?? 0;
     expect(at(from + 10)).toBe(0);
-    expect(at(from - 10)).toBe(100);
-    expect(at(to + 10)).toBe(100);
+    expect(at(from - 10)).toBe(85); // 5 robots at 17 an hour
+    expect(at(to + 10)).toBe(85);
   });
 });

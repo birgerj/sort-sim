@@ -15,17 +15,17 @@ FRESH = ['Plan one dock: start, end, and 1 or 2 people.',
          'More cities than docks. A dock can switch city in 15 minutes; waiting parcels go to the buffer.',
          'Parcels come in peaks. Start blocks later and change the crew size during the night.',
          'The buffer is small tonight. Choose what you let wait.',
-         'Full hall: you need every dock and every robot. The robots are off from 01:00 to 02:00 and one truck leaves early.',
+         'Full hall: you need every dock. The robots are off from 01:00 to 02:00 and one truck leaves early.',
          'A large batch for one city at 01:00. Not everything fits tonight: choose what stays behind.',
-         'People cost 50% more and you get 16 at most.',
+         'People cost 50% more tonight. Two on every dock is no longer the easy answer.',
          'Everything at once: batch, late inbound, small buffer, a limit on people.']
 SET = [['Unloading', 'Robots are off', 'Doors'], ['Unloading', 'Robots are off', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Robots are off', 'Doors'],
        ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors']]
-BADGE = [('lean', 'One person is enough'), ('oneDock', 'Never more than 2 docks open'), ('noDockSmall', 'Only the biggest city on a dock'), ('lean3', 'Never more than 3 people at work'),
-         ('smallFleet', 'At most 6 robots'), ('halfBuffer', 'Buffer never over half full'), ('allOnTime', 'Every truck on time'), ('allOnTime', 'Every truck on time'),
-         ('lean12', 'Never more than 12 people at work'), ('allOnTime', 'Every truck on time')]
+BADGE = [('lean', 'One person is enough'), ('lean3', 'Never more than 3 people at work'), ('fleet3', 'At most 3 robots'), ('lean3', 'Never more than 3 people at work'),
+         ('smallFleet', 'At most 6 robots'), ('halfBuffer', 'Buffer never over half full'), ('allOnTime', 'Every truck on time'), ('onTime9', 'At least 9 trucks on time'),
+         ('lean12', 'Never more than 12 people at work'), ('onTime15', 'At least 15 trucks on time')]
 # Best profit found per level with plans in the game's shape (par.py; see REPORT.md).
-PAR = [177, 628, 836, 669, 1688, 2537, 7637, 13699, 13743, 26233]  # rounded down, so the best known plan scores at least 1000
+PAR = [177, 628, 809, 669, 1622, 2443, 7780, 12726, 13429, 24214]  # rounded down, so the best known plan scores at least 1000
 
 
 def level_json(L):
@@ -156,10 +156,14 @@ def badge_condition(L, bid, plan, r):
         return all(b['city'] == biggest for b in plan['blocks'])
     if bid == 'smallFleet':
         return plan['robots'] <= 6
+    if bid.startswith('fleet'):  # fleet3: at most 3 robots
+        return plan['robots'] <= int(bid[5:])
     if bid == 'halfBuffer':  # every minute of the shift, not only the 5-minute curve the result shows
         return r['peak'] <= L['store'] / 2 + 1e-9
     if bid == 'allOnTime':  # complete and not late, for every city
         return r['ontime'] == len(ds)
+    if bid.startswith('onTime'):  # onTime9: at least 9 trucks complete and not late
+        return r['ontime'] >= int(bid[6:])
     raise ValueError(bid)
 
 

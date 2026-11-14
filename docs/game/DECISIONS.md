@@ -26,3 +26,9 @@
 - 2026-11-14 The hall's director is wired in (`createDirector(scene)`); the clock-only stand-in is gone.
 - 2026-11-14 Open: the camera does not yet go to the docks that are open during a shift; space still pauses the scene (and with it the shift clock).
 - 2026-11-14 The planner shows no buffer at all (no rough guess either). Instead one diagram: total inflow per hour against the total capacity of crews and robots per hour.
+- 2026-11-14 A parcel left behind costs § 1.50 (was § 2.50): what it would have earned.
+- 2026-11-14 A robot loads 17 parcels an hour (was 20), as the hall's robots do. Line limit 60 an hour and table 20 stay.
+- 2026-11-14 Level 7: 10 docks. Level 8: volume × 2.8, 24 robots. Level 9: 16 docks, 32 people at most. Level 10:
+  volume × 2.8. Aim met: the plain plan earns one star in levels 7–10 (560, 514, 557, 528).
+- 2026-11-14 Badges: level 2 lean3, level 3 fleet3 (at most 3 robots), level 8 onTime9, level 10 onTime15.
+- 2026-11-14 Par under these rules: 177, 628, 809, 669, 1622, 2443, 7780, 12726, 13429, 24214 (see tools/balance/REPORT.md).

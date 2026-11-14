@@ -28,16 +28,17 @@ Each agent keeps its own section up to date in its own branch: done, doing, bloc
 
 
 ## B · balance
-- Done: search in the game's plan shape (`tools/balance/par.py`); par for all ten levels in `levels.json`
-  and `fixture.py` (177, 628, 836, 669, 1688, 2537, 7637, 13699, 13743, 26233, rounded down); best plans in
-  `tools/balance/best/`; left-behind price study and badge check in `tools/balance/REPORT.md`.
-- Done for the coordinator: `levels.json` unrounded; golden plans startable in the game (level 4 `safe`,
-  levels 7–10 `sensible` changed); `fixture.run` computes `badge` (level 4 example: true); `to_solver`
-  scores a plan the same whatever order its blocks and robot cities are listed in.
-- Fixture files changed against the first draft: `src/shifts/levels.json`, `tests/fixtures/shifts/golden.json`,
-  `tests/fixtures/shifts/level4.json` (only `result.badge` and the unrounded level figures; par 669, score 906 as before).
-- Not done: par for levels 9 and 10 was still rising when the runs were stopped; badges of levels 8 and 10
-  look impossible, 2 and 3 trivial (replacements proposed, not searched).
+- Done: left-behind price § 1.50 and robots at 17 an hour in both models, the contract and DESIGN.md.
+- Done: level 7 has 10 docks; level 8 volume × 2.8 and 24 robots; level 9 has 16 docks and 32 people at
+  most; level 10 volume × 2.8. Plain plan scores 560 / 514 / 557 / 528 in levels 7–10.
+- Done: par for all ten levels under these rules (177, 628, 809, 669, 1622, 2443, 7780, 12726, 13429,
+  24214, rounded down); best plans in `tools/balance/best/`; tables in `tools/balance/REPORT.md`.
+- Done: badges of levels 2, 3, 8, 10 replaced (lean3, fleet3, onTime9, onTime15); the model knows
+  `fleet<N>` and `onTime<N>`.
+- Fixture files regenerated: `src/shifts/levels.json`, `tests/fixtures/shifts/golden.json`,
+  `tests/fixtures/shifts/level4.json` (unchanged in content: profit 606, score 906, badge true).
+- Tests changed to follow: `tests/shiftsModel.test.ts`, `tests/shiftsPlanEdit.test.ts`, `tests/shiftsFlow.test.ts`.
+- Not done: levels 8 and 10 had a short search after their volume changed; a longer run may lift par 1–3%.
 
 ## C1 · screens
 - Done: `mountShifts` in `src/ui/shifts/index.ts` (overlay + router), Start, How to play (4 steps), Levels, Briefing,
@@ -249,3 +250,11 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
   blocks are 34 to 38 px high on the phone.
 - Not done: no shift played on the desktop size for levels 5 and 10; departed-truck badges seen only in levels 1
   and 2; frame rate on a real graphics chip.
+- B · C2 (planner): `goalStanding` in `src/ui/shifts/planner/rules.ts` has no line for the new badge ids;
+  it returns null, so nothing breaks. Wanted: `fleet3` like `smallFleet` with 3 (id pattern `fleet<N>`).
+  `onTime<N>` depends on the shift, no hint possible.
+- B · C2 (planner): switching a city to robots sets `lines * 3` robots (view.ts); at 17 an hour that fills
+  85% of a line. Suggested: `Math.ceil(lines * 60 / RATES.robot)`, at most the level's fleet.
+- B · C1 (screens): any text or mock that says 20 an hour, § 2.50, or "16 at most" in level 9 is out of date
+  (docs/game/mocks/LevelNotes.html and Briefing.html show the old level 9 note).
+
