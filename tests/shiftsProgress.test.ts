@@ -111,7 +111,7 @@ describe('shift progress', () => {
     const p = createProgress(memory());
     const r = p.record(4, fixture.plan as Plan, fixture.result as Result);
     expect(r.attempt).toBe(1);
-    expect(p.level(4)).toMatchObject({ best: 906, stars: 3, badge: false });
+    expect(p.level(4)).toMatchObject({ best: 906, stars: 3, badge: true });
     expect(p.level(4)!.lastPlan!.blocks).toHaveLength(3);
   });
 
