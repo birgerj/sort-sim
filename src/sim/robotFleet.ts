@@ -141,6 +141,11 @@ export class Fleet {
    * or −1 to wait at the station (its box is full or away).
    */
   choose: (bot: number) => number | null = () => null;
+  /**
+   * At most this many robots out at once; the rest stay parked. (All of them unless a shift
+   * of the planning game says how many drive. Robots already out finish their trip.)
+   */
+  limit = Infinity;
 
   constructor(
     readonly grid: Grid,
@@ -205,8 +210,9 @@ export class Fleet {
       } else if (b.state === 'toPark' && !b.path.length) b.state = 'idle';
     }
     // Send the nearest idle robot to each station with a parcel waiting.
+    let out = this.limit < this.bots.length ? this.bots.reduce((a, b) => a + (b.state === 'idle' ? 0 : 1), 0) : 0;
     this.stations.forEach((st, s) => {
-      if (this.stationBot[s] !== null || !waiting(s)) return;
+      if (this.stationBot[s] !== null || !waiting(s) || out >= this.limit) return;
       let best: Bot | undefined;
       let bd = Infinity;
       for (const b of this.bots) {
@@ -218,6 +224,7 @@ export class Fleet {
         }
       }
       if (!best) return;
+      out++;
       this.stationBot[s] = best.k;
       this.parkBot[best.park] = null;
       best.park = -1;

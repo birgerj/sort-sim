@@ -977,6 +977,8 @@ export interface Parcel {
   tray2?: number;
   /** Sent to the wrong chute by mistake: it goes back to the infeed from the dock. */
   missorted?: boolean;
+  /** During a shift of the planning game: rides the loop until the director sends it to a chute. */
+  spare?: boolean;
   /** Not counted as leaving the hub (it came back in). */
   recycled?: boolean;
   /** On its way down the no-read chute. */
@@ -1014,6 +1016,21 @@ export interface Parcel {
   dropAt?: number;
   /** Times it went round the loop again because its chute was full. */
   laps?: number;
+}
+
+/**
+ * What a shift of the planning game being played asks of the hall (see director.ts). The
+ * scene calls these; with no shift (`Sorter.shift` null) it is the free simulation.
+ */
+export interface ShiftHooks {
+  /** Every frame, before anything moves. */
+  frame(dt: number, bt: number): void;
+  /** Every beat, before the robots and the docks take theirs. */
+  beat(b: number): void;
+  /** Is north door `door` (0-based, west to east) loading now? */
+  doorOpen(door: number): boolean;
+  /** Parcels per beat to bring in from the inbound docks. */
+  inflow: number;
 }
 
 interface Slot {
@@ -2008,7 +2025,9 @@ export class Sorter implements Scene3D {
     this.ct = Number.isNaN(this.lastCt) ? bt : this.ct + (bt - prev) * this.speed;
     this.dct = this.ct - prevCt;
     this.bpmNow = i.bpm ?? BPM;
-    this.due = Math.min(this.due + ((bt - prev) * this.rate) / this.bpmNow, 4);
+    // (During a shift of the planning game the director says what comes in, per beat.)
+    this.shift?.frame(dt, bt);
+    this.due = Math.min(this.due + (this.shift ? (bt - prev) * this.shift.inflow : ((bt - prev) * this.rate) / this.bpmNow), 4);
     this.lastCt = this.ct;
     const crossed = Math.floor(bt) !== Math.floor(prev);
 
@@ -2074,7 +2093,7 @@ export class Sorter implements Scene3D {
     this.wing.update(dt, bt);
     this.canteen.update(dt, bt);
     this.breaks.update(dt, bt, this.dayShown !== false);
-    this.batches.tick(this.hubTime());
+    if (!this.shift) this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
       chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && k !== NOREAD && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),
       robotsBusyPct: (100 * this.floor.fleet.bots.filter((b) => b.state !== 'idle').length) / this.floor.fleet.bots.length,
@@ -2133,6 +2152,7 @@ export class Sorter implements Scene3D {
 
   // ---------- music events ----------
   private onBeat(b: number): void {
+    this.shift?.beat(b);
     this.floor.beat(b);
     this.docks.beat(b, !!this.dayShown);
     if (b % 2 === 0) this.floor.tableBeat(b / 2, this.cols);
@@ -2164,6 +2184,12 @@ export class Sorter implements Scene3D {
     for (let k = 0; k < this.lanes.length; k++) if (this.feedable(k) && (best < 0 || n(k) < n(best))) best = k;
     return best;
   }
+
+  /**
+   * A shift of the planning game is being played: the director's hooks (see director.ts).
+   * Null: the free simulation, and none of the code that asks for it does anything else.
+   */
+  shift: ShiftHooks | null = null;
 
   /** Parcels per minute coming into the hub (set from the controls). */
   rate = 150;
@@ -2431,6 +2457,8 @@ export class Sorter implements Scene3D {
 
   /** Calls a buffered parcel back out of the store once its chute has room again (oldest first). */
   private requestRetrieve(): void {
+    // (During a shift the rack is filled and emptied from the timeline: see `shiftBuffer`.)
+    if (this.shift) return;
     if (this.retrieving >= 3 || this.lift.steps.length > 10) return;
     let best: Slot | null = null;
     for (const s of this.slots) {
@@ -2513,7 +2541,7 @@ export class Sorter implements Scene3D {
     const bag = !env && r < 0.3;
     const tube = !env && !bag && r < 0.37;
     // Now and then a box too big for the sorter (it will be measured at the infeed and put aside).
-    const big = !env && !bag && !tube && Math.random() < 0.004;
+    const big = !env && !bag && !tube && !this.shift && Math.random() < 0.004;
     const w = env ? rnd(0.7, 0.9) : bag ? rnd(0.45, 0.8) : tube ? rnd(0.16, 0.26) : big ? rnd(0.8, 1.0) : rnd(0.35, 0.95);
     const h = env ? rnd(0.06, 0.12) : bag ? rnd(0.12, 0.25) : tube ? w : big ? rnd(0.6, 0.9) : rnd(0.22, 0.7);
     const d = env ? rnd(0.5, 0.7) : bag ? rnd(0.4, 0.65) : tube ? rnd(0.7, 1.1) : big ? rnd(1.25, 1.6) : rnd(0.35, 0.85);
@@ -2832,11 +2860,21 @@ export class Sorter implements Scene3D {
     p.sIn = s;
     p.tIn = t;
     p.sPrev = s;
+    if (this.shift) {
+      // A shift of the planning game: it rides round until a door of the plan wants it.
+      p.spare = true;
+      p.noread = false;
+      p.reason = undefined;
+    }
     this.retarget(p);
   }
 
   /** When to leave the loop: at its chute (or the no-read chute), the next time it passes. */
   private retarget(p: Parcel): void {
+    if (p.spare) {
+      p.divertAt = Infinity;
+      return;
+    }
     const target = p.noread ? this.chutes[p.reason === 'noread' ? NOREAD : REJECT]!.s : p.dest >= 0 ? this.chutes[p.dest]!.s : STORE_OUT;
     let at = p.tIn + beatsAlong(p.sIn, target);
     while (at <= this.ct + 0.01 && p.mode === 'loop' && at > p.tIn + 0.5) at += LOOP_LEN / BEAT_M;
@@ -2943,7 +2981,9 @@ export class Sorter implements Scene3D {
             if (p.sPrev < lane.tunnelS && s >= lane.tunnelS) {
               this.scan(p, lane.tunnel);
               // The scan tunnel also measures and weighs: too big or too heavy for the trays goes aside.
-              if (p.dest >= 0 && (Math.max(p.w, p.d, p.h) > 1.2 || p.kg > 31.5)) {
+              if (this.shift) {
+                // (No exceptions during a shift of the planning game.)
+              } else if (p.dest >= 0 && (Math.max(p.w, p.d, p.h) > 1.2 || p.kg > 31.5)) {
                 p.noread = true;
                 p.reason = 'oversize';
               } else if (!lane.tunnel.read && p.dest >= 0) {
@@ -3093,7 +3133,7 @@ export class Sorter implements Scene3D {
     t.flash = 1;
     t.scannedAt = this.time;
     // Now and then a label cannot be read (a red line); the next scanner gets it.
-    t.read = Math.random() > 0.02;
+    t.read = !!this.shift || Math.random() > 0.02;
     t.col.copy(p.glow);
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     const cm = (m: number) => Math.round(m * 100);
@@ -3214,6 +3254,8 @@ export class Sorter implements Scene3D {
 
   /** Take a dock chute down now (a random running one without `chute`); false when none could. */
   fault(chute?: number): boolean {
+    // (No faults during a shift of the planning game.)
+    if (this.shift) return false;
     const f = this.faults.trigger(this.bt, chute);
     if (f) this.crew?.report(f);
     if (f) this.kpi.fault();
@@ -3311,6 +3353,8 @@ export class Sorter implements Scene3D {
     if (!belt) return 0;
     // During a cleardown nothing more goes down this chute, until everything is in the truck.
     const door = NORTH_DOORS.indexOf(this.dockOf.get(dest) ?? NaN);
+    // (A shift of the planning game: only the doors that are loading take parcels.)
+    if (this.shift && door >= 0 && !this.shift.doorOpen(door)) return 0;
     if (door >= 0 && this.trucks && (this.trucks.clearing(door) || this.trucks.docks[door]?.state === 'closing')) return 0;
     return belt.len - this.docks.depth(dest) - (this.dockLoad.get(dest) ?? 0) - 0.2;
   }
@@ -3397,6 +3441,14 @@ export class Sorter implements Scene3D {
     // round too often, by the chute to manual sorting.
     const out = p.reason === 'noread' ? NOREAD : REJECT;
     const to = p.noread && p.dest >= 0 ? out : p.dest;
+    if (this.shift && !p.noread && (p.dest < 0 || this.room(p.dest, p.d + GAP) <= 0)) {
+      // A shift of the planning game: its door closed or its belt filled up meanwhile. Round
+      // again, until the director sends it somewhere (no store, no manual sorting).
+      p.dest = Math.max(0, p.dest);
+      p.spare = true;
+      this.retarget(p);
+      return;
+    }
     if (to !== p.dest) {
       if (this.room(out) <= 0) {
         if (p.reason === 'overflow') {
@@ -3438,7 +3490,7 @@ export class Sorter implements Scene3D {
       return;
     }
     // Now and then a tray tips a moment too early or late: the parcel lands in the next dock chute.
-    if (p.dest >= 0 && p.dest < 20 && Math.random() < MISSORT) {
+    if (p.dest >= 0 && p.dest < 20 && !this.shift && Math.random() < MISSORT) {
       const n = clamp(p.dest + (Math.random() < 0.5 ? -1 : 1), 0, 19);
       if (n !== p.dest && this.room(n, p.d + GAP) > 0) {
         p.dest = n;
@@ -3786,7 +3838,8 @@ export class Sorter implements Scene3D {
       ch.flash = Math.max(0, ch.flash - dt * 2);
       // A dock belt that is full: its lamp flashes red, and the sorter sends nothing more down
       // (parcels for it go round again, or into the buffer store).
-      if (ch.belt && (this.dockFree(k) < 0.9 || this.faults.isDown(k))) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
+      if (this.shift && this.shiftShut(k)) ch.lamp.color.setScalar(0.03);
+      else if (ch.belt && (this.dockFree(k) < 0.9 || this.faults.isDown(k))) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
       else ch.lamp.color.copy(ch.col).multiplyScalar(0.35 + ch.flash * 3 + this.kick * 0.3);
     });
     this.updateTowers();
@@ -4415,9 +4468,11 @@ export class Sorter implements Scene3D {
         const st = door >= 0 ? this.trucks.docks[door]?.state : undefined;
         clearing = st === 'cleardown' || st === 'closing';
       }
-      let red = fill >= 1 ? 1 : 0;
-      let amber = !red && (fill > 0.6 || clearing) ? 1 : 0;
-      let green = !red && !amber && fill > 0.001 ? 1 : 0;
+      // (A door that is not in a shift's plan: its tower is off.)
+      const shut = !!this.shift && this.shiftShut(k);
+      let red = !shut && fill >= 1 ? 1 : 0;
+      let amber = !shut && !red && (fill > 0.6 || clearing) ? 1 : 0;
+      let green = !shut && !red && !amber && fill > 0.001 ? 1 : 0;
       if (this.faults.isDown(k)) {
         // A fault: red flashing, on the beat (a full chute is steady red).
         red = Math.floor(this.bt * 2) % 2 ? 1 : 0.15;
@@ -7128,6 +7183,202 @@ export class Sorter implements Scene3D {
         return 'At the no-read table: a new label, then back on an infeed';
       default:
         return p.buffered !== undefined ? `In the buffer store: chute ${p.buffered + 1} is full; it comes back out when there is room` : 'In the store';
+    }
+  }
+
+  // ---------- a shift of the planning game (driven by director.ts) ----------
+
+  /** The parts of the hall the director runs itself. */
+  shiftParts(): { docks: Docks; trucks: Trucks; fleet: RobotFloor['fleet']; breaks: BreakCrew; batches: Batches; southDoors: number; northDoors: number; beat: number } {
+    return { docks: this.docks, trucks: this.trucks, fleet: this.floor.fleet, breaks: this.breaks, batches: this.batches, northDoors: NORTH_DOORS.length, southDoors: SOUTH_DOORS.length, beat: this.bt };
+  }
+
+  /** The chute of north door `door` (0-based, west to east), and the robot stations' chutes (as the loop passes them). */
+  shiftChutes(): { doors: number[]; stations: number[] } {
+    return { doors: [...this.dockOf.keys()], stations: [...this.stationOf.keys()].filter((k) => k !== REJECT && k !== NOREAD) };
+  }
+
+  /** Is this the chute of a north door that is not loading in the shift being played? */
+  private shiftShut(chute: number): boolean {
+    const door = NORTH_DOORS.indexOf(this.dockOf.get(chute) ?? NaN);
+    return door >= 0 && !this.shift!.doorOpen(door);
+  }
+
+  /**
+   * The hall made ready for a shift, or handed back after it. Ready: nothing is on its way to
+   * a north door any more (what was on a chute or a dock belt is gone, what rode the loop for
+   * one rides on until the director sends it), no fault is open and the technician is at his
+   * bench. Back: the parcels on the loop get a destination of their own again.
+   */
+  shiftReset(on: boolean): void {
+    for (const p of this.parcels) {
+      const north = this.dockOf.has(p.dest);
+      if (p.mode === 'path' && (p.pathKind === 'chute' || p.pathKind === 'dock') && north && !p.rejected) p.dead = true;
+      else if (p.mode === 'loop') {
+        if (on) {
+          if (p.noread || p.dest < 0 || p.slot) continue;
+          p.spare = true;
+        } else {
+          // (Also what the director had sent to a door: that door has its own city again.)
+          if (!p.spare && !north) continue;
+          p.spare = false;
+          this.assign(p);
+          if (p.labelCell) this.drawLabel(p.labelCell, p);
+        }
+        this.retarget(p);
+      }
+    }
+    for (const k of this.dockOf.keys()) this.inbound.set(k, 0);
+    if (on) {
+      this.crew?.recall(this.bt);
+      this.showNow.clear();
+    } else this.shiftSign(-1, '', '');
+  }
+
+  /**
+   * The display on the pillar of a north door's chute: what the shift's plan has there
+   * (door −1: all of them back to the free simulation's own).
+   */
+  shiftSign(door: number, main: string, sub: string): void {
+    const chutes = [...this.dockOf.keys()];
+    if (door < 0) {
+      const pcs = (c: (typeof CITIES)[number]) => rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]);
+      chutes.forEach((k, n) => {
+        const c = NORTH_CITIES[DOCK_CITY[n]!];
+        if (c && this.showText.has(k)) this.showText.set(k, [`${n + 1} · ${c.name}`, pcs(c)]);
+        this.showNow.set(k, '?');
+      });
+      return;
+    }
+    const k = chutes[door];
+    if (k === undefined || !this.showText.has(k)) return;
+    const was = this.showText.get(k)!;
+    if (was[0] === main && was[1] === sub) return;
+    this.showText.set(k, [main, sub]);
+    this.showNow.set(k, '?');
+  }
+
+  /** Parcels riding the loop that the director can still send somewhere. */
+  shiftStock(): number {
+    let n = 0;
+    for (const p of this.parcels) if (p.spare && p.mode === 'loop') n++;
+    return n;
+  }
+
+  /**
+   * Stock the loop for a shift: up to `most` parcels are set on empty trays, as if the lanes
+   * had just put them there. (The way from a trailer over a lane takes far longer than a
+   * squeezed shift can wait; the lanes bring theirs too.) Normally on the trays passing the
+   * west end and the infeeds now, upstream of every chute; with `round`, spread over the
+   * whole loop (the start of a shift in a hall that has only just been built).
+   */
+  shiftStockUp(most: number, round = false): number {
+    let n = 0;
+    const from = round ? 0 : LOOP_LEN - 14;
+    const to = round ? LOOP_LEN : LOOP_LEN + INDUCT[INDUCT.length - 1]!;
+    const stride = round ? Math.max(2, Math.floor(LOOP_LEN / Math.max(1, most))) : 1;
+    for (let at = from; at < to && n < most; at += stride) {
+      const tray = trayAt(at, this.ct);
+      // (Not next to a long parcel's second tray: keep a tray free behind and ahead.)
+      if (this.trayOwner[tray] || this.trayOwner[(tray + 1) % TRAYS] || this.trayOwner[(tray - 1 + TRAYS) % TRAYS]) continue;
+      const p = this.newParcel();
+      if (!p) break;
+      if (p.d > 0.9 || p.shape === 3) {
+        // (A long one would need the tray behind as well: this one never was.)
+        this.parcels.splice(this.parcels.indexOf(p), 1);
+        if (p.labelCell) this.freeCells.push(p.labelCell);
+        continue;
+      }
+      this.trayOwner[tray] = p;
+      p.tray = tray;
+      p.scanned = true;
+      this.induct(p, (((tray * PITCH + this.ct * BEAT_M) % LOOP_LEN) + LOOP_LEN) % LOOP_LEN, this.ct);
+      loopAt(p.sIn, p.pos, this.t);
+      this.orient(p, this.t);
+      n++;
+    }
+    return n;
+  }
+
+  /** Room at a chute's end for another parcel, in parcels (a dock belt by length, a robot table by places). */
+  shiftRoom(chute: number): number {
+    return this.room(chute);
+  }
+
+  /**
+   * Send one of the parcels riding the loop down this chute: the one that gets there first.
+   * It takes the postcode given (a parcel for the city the plan has at that door). False when
+   * the chute's end is full or no parcel is near enough on the loop.
+   */
+  shiftSend(chute: number, pc: number, within = LOOP_LEN): boolean {
+    const ch = this.chutes[chute];
+    if (!ch || this.room(chute) <= 0) return false;
+    let best: Parcel | null = null;
+    let bd = within;
+    for (const p of this.parcels) {
+      if (!p.spare || p.mode !== 'loop') continue;
+      const at = p.sIn + (this.ct - p.tIn) * BEAT_M;
+      const ahead = (((ch.s - at) % LOOP_LEN) + LOOP_LEN) % LOOP_LEN;
+      // (Not the one already at the chute: its tray needs a beat to tip.)
+      if (ahead > BEAT_M && ahead < bd) {
+        bd = ahead;
+        best = p;
+      }
+    }
+    if (!best) return false;
+    best.spare = false;
+    best.dest = chute;
+    best.pc = pc;
+    best.manual = false;
+    best.glow.copy(ch.col);
+    if (best.labelCell) this.drawLabel(best.labelCell, best);
+    this.retarget(best);
+    return true;
+  }
+
+  /** A north door stops loading: what was on its chute and belt is gone, what was coming rides on. */
+  shiftClear(chute: number): void {
+    for (const p of this.parcels) {
+      if (p.dest !== chute || p.rejected) continue;
+      if (p.mode === 'path' && (p.pathKind === 'chute' || p.pathKind === 'dock')) p.dead = true;
+      else if (p.mode === 'loop' && !p.spare && !p.noread) {
+        p.spare = true;
+        this.retarget(p);
+      }
+    }
+    this.inbound.set(chute, 0);
+  }
+
+  /**
+   * The buffer rack as full as the shift's timeline says (0…1 of its places): cartons are set
+   * in the places nearest the lift first and taken away from the far end, a few each call.
+   * (At minutes per beat the lift cannot bring them one by one.)
+   */
+  shiftBuffer(share: number, most = 12): void {
+    const want = Math.round(clamp(share, 0, 1) * this.slots.length);
+    let have = 0;
+    for (const s of this.slots) if (s.parcel || s.reserved) have++;
+    const near = (a: Slot, b: Slot) => Math.abs(a.z) + a.level * 0.3 - (Math.abs(b.z) + b.level * 0.3);
+    if (have < want) {
+      const free = this.slots.filter((s) => !s.parcel && !s.reserved).sort(near);
+      for (const slot of free.slice(0, Math.min(most, want - have))) {
+        const p = this.newParcel();
+        if (!p) break;
+        p.mode = 'fixed';
+        p.scanned = true;
+        p.slot = slot;
+        p.buffered = undefined;
+        p.bufferedAt = this.bt;
+        slot.parcel = p;
+        p.pos.set(SLOT_X, LEVELS[slot.level]!, slot.z);
+        this.orient(p, this.t.set(1, 0, 0));
+      }
+    } else if (have > want) {
+      const full = this.slots.filter((s) => s.parcel && !s.reserved && s.parcel.mode === 'fixed').sort((a, b) => near(b, a));
+      for (const slot of full.slice(0, Math.min(most, have - want))) {
+        slot.parcel!.dead = true;
+        slot.parcel = null;
+      }
     }
   }
 
