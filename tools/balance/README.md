@@ -18,3 +18,8 @@ robot city opens.
 
 Environment switches used while designing (the defaults are the rules as decided): `GRID`, `MINBLK`,
 `ROBOT`, `LINE`, `VSCALE`, `TAG`.
+
+`par.py` searches in the game's own plan shape and is what par comes from (`solve.py`'s own search moves
+door numbers and robot lines freely, which a player cannot): `par`, `polish`, `price` (the left-behind
+study) and `badge` per level; see the top of the file. Results go to `out/`, the best plan per level to
+`best/`, the tables to `REPORT.md`. Par is the `PAR` list in `fixture.py`, rounded down. One process at a time.

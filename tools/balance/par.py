@@ -7,6 +7,7 @@
 #
 #   python3 tools/balance/par.py check                    the level 4 example must still give 606.25
 #   python3 tools/balance/par.py par <level> <iters> <restarts>
+#   python3 tools/balance/par.py polish <level> <iters> <restarts> [T0]  cooler runs from the best plan known
 #   python3 tools/balance/par.py price <level> <iters> <restarts>   plain plan against the best per left-behind price
 #   python3 tools/balance/par.py badge <level> <iters> <restarts>
 #
@@ -86,6 +87,29 @@ def plain(L):
         if got == 0 and L['robots'] and plan['robots'] < L['robots']:
             plan['robotCities'].append(i)
             plan['robots'] = min(L['robots'], plan['robots'] + math.ceil(need_rate(L, i) / 20))
+    return canon(plan)
+
+
+def plain_spread(L):
+    """The same careful player, sharing out what there is instead of serving the largest city first: robots as in
+    plain(); then every other city gets one dock, largest first, then second docks, and so on up to
+    ceil(needed rate / 150) each. Two people per dock while people last, then one."""
+    plan = {'blocks': [], 'robotCities': list(plain(L)['robotCities']), 'robots': 0}
+    ds = L['dests']
+    dock_cities = set(b['city'] for b in plain(L)['blocks'])
+    plan['robotCities'] = [c for c in plan['robotCities'] if c not in dock_cities]
+    plan['robots'] = min(L['robots'], sum(math.ceil(need_rate(L, i) / 20 - 1e-9) for i in plan['robotCities']))
+    rest = sorted((i for i in range(len(ds)) if i not in plan['robotCities']), key=lambda i: -ds[i]['v'])
+    for rnd in range(1, 9):
+        for i in rest:
+            if rnd > math.ceil(need_rate(L, i) / 150 - 1e-9):
+                continue
+            for people in (2, 1):
+                q = {'blocks': plan['blocks'] + [{'city': i, 'start': L['first'][i], 'end': ds[i]['d'], 'people': people, 'docks': 1}],
+                     'robotCities': plan['robotCities'], 'robots': plan['robots']}
+                if solver_plan(L, q) is not None:
+                    plan = q
+                    break
     return canon(plan)
 
 
@@ -238,9 +262,9 @@ def starts(L):
     return [p for p in out if score(L, p) is not None] or [{'blocks': [], 'robotCities': [], 'robots': 0}]
 
 
-def search(L, iters, restarts, value=None, seed0=1000, log=None):
+def search(L, iters, restarts, value=None, seed0=1000, log=None, first=()):
     value = value or (lambda p: score(L, p))
-    st = starts(L)
+    st = [p for p in first if value(p) is not None] + starts(L)
     res = []
     t = time.time()
     for s in range(restarts):
@@ -291,14 +315,15 @@ def badge_rule(L, bid):
 
 
 def earns(L, bid, plan):
-    ok, short = badge_rule(L, bid)
+    """The level's extra goal as the game judges it (fixture.badge_condition); the score of 500 is checked apart."""
     r = score(L, plan, True)
-    return r is not None and ok(plan) and short(r) < 1e-6
+    return r is not None and fixture.badge_condition(L, bid, canon(plan), r)
 
 
 def badge_value(L, bid):
     ok, short = badge_rule(L, bid)
-    weight = 3.0 if bid == 'halfBuffer' else 400.0  # per parcel over the half / per truck not on time
+    # Per parcel over the half, or per truck not on time: heavy enough that no late truck ever pays.
+    weight = 3.0 if bid == 'halfBuffer' else max(400.0, 0.25 * fixture.PAR[L['n'] - 1])
 
     def value(plan):
         if not ok(plan):
@@ -322,9 +347,9 @@ def cmd_check(Ls):
 
 def cmd_par(Ls, n, iters, restarts):
     L = Ls[n - 1]
-    res = search(L, iters, restarts, log=f'level {n}')
-    v, p = res[0]
     old = load(f'par{n}.json')
+    res = search(L, iters, restarts, seed0=1000 + 100 * len(old['runs'] if old else []), log=f'level {n}')  # new seeds on every further run
+    v, p = res[0]
     runs = (old['runs'] if old else []) + [{'iters': iters, 'restarts': [round(x, 2) for x, _ in res]}]
     if old and old['profit'] >= v:
         v, p = old['profit'], old['plan']
@@ -332,6 +357,26 @@ def cmd_par(Ls, n, iters, restarts):
     os.makedirs(BEST, exist_ok=True)
     json.dump(p, open(os.path.join(BEST, f'level{n}.json'), 'w'), indent=1)
     print('level', n, 'best', round(v, 2), [round(x) for x, _ in res])
+
+
+def cmd_polish(Ls, n, iters, restarts, T0=12):
+    """Cooler runs that start from the best plan known: closes most of the gap the warm restarts leave."""
+    L = Ls[n - 1]
+    old = load(f'par{n}.json')
+    value = lambda p: score(L, p)
+    v, p = old['profit'], old['plan']
+    got = []
+    for s in range(restarts):
+        q, w = anneal(L, p, iters, 5000 + 10 * len(old['runs']) + s, value, T0=float(T0))
+        got.append(round(w, 2))
+        print('level', n, 'polish', s, round(w, 2), flush=True)
+        if w > v:
+            v, p = w, q
+    old['runs'].append({'iters': iters, 'T0': T0, 'polish': got})
+    old.update(profit=v, plan=p, detail=score(L, p, True), peaks=peaks(p))
+    save(f'par{n}.json', old)
+    json.dump(p, open(os.path.join(BEST, f'level{n}.json'), 'w'), indent=1)
+    print('level', n, 'best', round(v, 2))
 
 
 def cmd_price(Ls, n, iters, restarts):
@@ -374,8 +419,24 @@ def cmd_badge(Ls, n, iters, restarts):
     L = Ls[n - 1]
     bid = fixture.BADGE[n - 1][0]
     par = load(f'par{n}.json')
-    res = search(L, iters, restarts, value=badge_value(L, bid), seed0=3000, log=f'level {n} badge {bid}')
+    res = search(L, iters, restarts, value=badge_value(L, bid), seed0=3000, log=f'level {n} badge {bid}', first=[par['plan']] if par else [])
     good = [(score(L, p), p) for _, p in res if earns(L, bid, p)]
+    if not good and bid == 'allOnTime':
+        # The fine per truck gives the search nothing to follow. Ask first whether the goal can be met at all
+        # (a parcel left behind or a minute late made very dear), then look for profit among plans that meet it.
+        def feasible(plan):
+            r = score(L, plan, True)
+            return None if r is None else r['profit'] - 20 * r['left'] - 10 * r['late']
+
+        def strict(plan):
+            r = score(L, plan, True)
+            return r['profit'] if r is not None and r['ontime'] == len(L['dests']) else None
+        res = search(L, iters, restarts, value=feasible, seed0=3100, log=f'level {n} can every truck be on time', first=[par['plan']] if par else [])
+        for _, p in res:
+            if earns(L, bid, p):
+                q, v = anneal(L, p, iters, 3200, strict, T0=12.0)
+                good.append((v, q))
+                print('level', n, 'every truck on time', round(v, 2), flush=True)
     good.sort(key=lambda x: -x[0])
     out = {'level': n, 'badge': bid, 'par': par['profit'] if par else None, 'parPlanEarns': earns(L, bid, par['plan']) if par else None,
            'plainEarns': earns(L, bid, plain(L)), 'plainProfit': score(L, plain(L)),
@@ -393,6 +454,8 @@ if __name__ == '__main__':
         cmd_check(Ls)
     elif cmd == 'par':
         cmd_par(Ls, *a)
+    elif cmd == 'polish':
+        cmd_polish(Ls, *a)
     elif cmd == 'price':
         cmd_price(Ls, *a)
     elif cmd == 'badge':

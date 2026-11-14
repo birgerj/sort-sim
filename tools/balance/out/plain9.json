@@ -1,0 +1,58 @@
+{
+ "plan": {
+  "blocks": [
+   {
+    "city": 0,
+    "start": 0,
+    "end": 450,
+    "people": 2,
+    "docks": 2
+   },
+   {
+    "city": 1,
+    "start": 0,
+    "end": 300,
+    "people": 2,
+    "docks": 3
+   },
+   {
+    "city": 2,
+    "start": 30,
+    "end": 480,
+    "people": 2,
+    "docks": 2
+   },
+   {
+    "city": 3,
+    "start": 0,
+    "end": 240,
+    "people": 2,
+    "docks": 1
+   }
+  ],
+  "robotCities": [
+   4,
+   7,
+   8,
+   11
+  ],
+  "robots": 24
+ },
+ "peaks": [
+  16,
+  8
+ ],
+ "detail": {
+  "profit": -2734.9076534164224,
+  "rev": 12944.406504968842,
+  "bonus": 1874.9999999999998,
+  "late": 0.0,
+  "left": 9675.989158385264,
+  "dock": 1225.0,
+  "staff": 4410.0,
+  "robots": 2112.0,
+  "store": 131.32499999999996,
+  "peak": 800.0,
+  "ontime": 5
+ }
+}

@@ -1,0 +1,25 @@
+{
+ "level": 1,
+ "badge": "lean",
+ "par": 177.5,
+ "parPlanEarns": false,
+ "plainEarns": false,
+ "plainProfit": 100.0,
+ "found": true,
+ "profit": 160.0,
+ "plan": {
+  "blocks": [
+   {
+    "city": 0,
+    "start": 0,
+    "end": 120,
+    "people": 1,
+    "docks": 1
+   }
+  ],
+  "robotCities": [],
+  "robots": 0
+ },
+ "closest": null,
+ "closestPlan": null
+}
