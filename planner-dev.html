@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Planner trial</title>
+    <meta name="description" content="Trial page, not linked from the hall: the Ten Shifts planner (?level=1…10, &fill=1 for a filled plan) and the shift overlay (?hud=1)." />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #d9dce3;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      /* Stands in for the 3D hall under the shift overlay. */
+      #app.hall {
+        background: repeating-linear-gradient(135deg, #cfd3dc 0 24px, #c6cad4 24px 48px);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./src/ui/shifts/planner/dev.ts"></script>
+  </body>
+</html>
