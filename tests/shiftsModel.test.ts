@@ -89,8 +89,8 @@ describe('the reference model', () => {
     const { badge: _theirs, ...want } = level4.result;
     expectClose(result, want, 0.1, 'result');
     expectClose(out.timeline, level4.timeline, 0.1, 'timeline');
-    expect(out.result.score).toBe(906);
-    expect(out.result.stars).toBe(3);
+    expect(out.result.score).toBe(842);
+    expect(out.result.stars).toBe(2);
   });
 
   it('samples every 5 minutes over the shift and half an hour after it', () => {
@@ -192,7 +192,7 @@ describe('checkPlan', () => {
     const lv = level(4); // city 0: truck at 105
     expect(checkPlan(lv, plan([block(0, 0, 105)]))).toEqual([]);
     expect(checkPlan(lv, plan([block(0, 30, 120)]))).toEqual([]);
-    expect(checkPlan(level(3), plan([block(3, 30, 240)]))).toEqual([]);
+    expect(checkPlan(level(3), plan([block(3, 30, 180)]))).toEqual([]);
     const l6 = level(6); // city 7: first parcel at 100
     expect(checkPlan(l6, plan([block(7, 100, 330)]))).toEqual([]);
   });
@@ -258,7 +258,7 @@ describe('badges', () => {
   const named = (id: number, name: string): Plan => golden.find((g) => g.level === id && g.name === name)!.plan;
 
   it('every level has a badge the model knows', () => {
-    expect(LEVELS.map((l) => l.badge.id)).toEqual(['lean', 'lean3', 'fleet3', 'lean3', 'smallFleet', 'halfBuffer', 'allOnTime', 'onTime9', 'lean12', 'onTime15']);
+    expect(LEVELS.map((l) => l.badge.id)).toEqual(['lean', 'lean3', 'fleet3', 'lean3', 'smallFleet', 'lean6', 'allOnTime', 'onTime9', 'lean16', 'allOnTime']);
   });
 
   it('lean: one person is enough', () => {
@@ -287,11 +287,11 @@ describe('badges', () => {
 
   it('noDockSmall: only the biggest city on a dock', () => {
     // No level asks for this one any more; the model still knows it.
-    const lv: Level = { ...level(3), badge: { id: 'noDockSmall', text: '' } };
+    const lv: Level = { ...level(3), par: 100, badge: { id: 'noDockSmall', text: '' } };
     const robots = simulate(lv, plan([block(0, 0, 240, 2)], [1, 2, 3], 6)).result;
     expect(robots.score).toBeGreaterThanOrEqual(500);
     expect(robots.badge).toBe(true);
-    const mixed = simulate(lv, plan([block(0, 0, 240, 2), block(3, 30, 240, 1)], [1, 2], 5)).result;
+    const mixed = simulate(lv, plan([block(0, 0, 240, 2), block(3, 30, 180, 1)], [1, 2], 5)).result;
     expect(mixed.score).toBeGreaterThanOrEqual(500);
     expect(mixed.badge).toBe(false);
   });
@@ -328,7 +328,8 @@ describe('badges', () => {
         lv.badge.id === 'smallFleet' ? g.plan.robots <= 6
         : lv.badge.id === 'halfBuffer' ? out.bufferPeak <= lv.bufferCap / 2
         : lv.badge.id === 'allOnTime' ? r.trucks.every((t) => t.status === 'onTime')
-        : people <= 12;
+        : /^onTime\d+$/.test(lv.badge.id) ? r.trucks.filter((t) => t.status === 'onTime').length >= Number(lv.badge.id.slice(6))
+        : people <= Number(lv.badge.id.slice(4)); // lean6, lean16
       expect(r.badge, `level ${g.level} ${g.name}`).toBe(goal && r.score >= 500);
     }
   });
@@ -352,7 +353,7 @@ describe('badges', () => {
     const onTime = star(night('allOnTime'), robotsPlan(6));
     expect(onTime.trucks.map((t) => t.status)).toEqual(['onTime', 'onTime', 'onTime', 'onTime']);
     expect(onTime.badge).toBe(true);
-    const late = star(night('allOnTime'), plan([block(0, 0, 240, 2), block(3, 30, 270)], [1, 2], 6));
+    const late = star(night('allOnTime'), plan([block(0, 0, 240, 2), block(3, 30, 210)], [1, 2], 6));
     expect(late.trucks[3]!.status).toBe('late');
     expect(late.badge).toBe(false);
     const short = star(night('allOnTime'), plan([block(0, 0, 240, 2)], [1, 2], 6));

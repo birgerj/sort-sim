@@ -45,12 +45,19 @@ The definition is `tools/balance/solve.py` (`sim`, `evaluate`) with `tools/balan
 (`to_solver`, `run`). In words:
 
 - One person on a dock loads 90 parcels an hour, two load 170. A trailer holds 220; swapping it takes
-  the dock 10 minutes. A dock belt holds 40 waiting parcels.
+  the dock 10 minutes. A dock belt holds 40 waiting parcels. The trailer, its swap and the belt belong
+  to the door and the city, not to the block: a block that starts the minute another block of the same
+  city ends goes on at the same door with the same trailer and belt, also with another crew size. So a
+  block cut in two is the same plan as the block left whole.
 - A robot carries 17 an hour; a robot line passes 60 an hour at most and its table holds 20. A robot
   city gets enough lines for its busiest minute (at most 4), open from its first parcel to its truck
   time. The fleet is shared by all open lines in proportion to what waits there.
-- Parcels that find no room on a belt or table go to the buffer (until it is full; then they wait
-  upstream). The buffer gives back 150 an hour, earliest truck first.
+- Parcels that find no room on a belt or table go to the buffer. The buffer gives back 150 an hour,
+  earliest truck first. Full is full: a parcel that finds no room while the buffer is full is refused.
+  It is missed for the night, counts as left behind for its city and never comes back. Parcels of a
+  city nobody serves stay in the buffer and keep it full for the others. What waits on a belt when
+  its block ends (and the door does not go on for that city) looks for a place again the next minute,
+  like a parcel that has just arrived, and is refused too when there is none.
 - A dock that switches city is idle for 15 minutes.
 - A city's truck leaves when its last block or line ends. After its truck time that is late; whatever
   is not loaded by then is left behind.

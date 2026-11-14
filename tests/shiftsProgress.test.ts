@@ -28,7 +28,7 @@ function result(score: number, stars: 0 | 1 | 2 | 3, badge = false, profit = sco
     badge,
     lines: { revenue: 900, bonus: 100, late: 0, left: 0, docks: 150, people: 300, robots: 0, buffer: 10 },
     trucks: [],
-    buffer: { series: [0, 5, 0], cap: 800, fullRanges: [] },
+    buffer: { series: [0, 5, 0], cap: 800, fullRanges: [], refused: 0 },
   };
 }
 
@@ -111,7 +111,7 @@ describe('shift progress', () => {
     const p = createProgress(memory());
     const r = p.record(4, fixture.plan as Plan, fixture.result as Result);
     expect(r.attempt).toBe(1);
-    expect(p.level(4)).toMatchObject({ best: 906, stars: 3, badge: true });
+    expect(p.level(4)).toMatchObject({ best: 842, stars: 2, badge: true });
     expect(p.level(4)!.lastPlan!.blocks).toHaveLength(3);
   });
 

@@ -37,43 +37,69 @@ export function robotCities(plan: Plan): number[] {
 }
 
 /**
- * Hands out doors. Blocks are taken by start (then city, then their order in the plan); each dock
- * of a block takes the door that last served the same city if it is free, else the door that has
+ * Hands out doors. Blocks are taken by start, then city, people, docks and end (the end last, so
+ * that cutting a block in two never changes its turn). Blocks that start together for the same
+ * city are placed in two rounds. First every dock that can goes on with a door where a block of
+ * this city with the same crew ends this very minute: that is the same work carried on (same
+ * trailer, same belt). Then the docks still without a door take, in this order of preference: a
+ * door where this city ends this minute, a free door that last served this city, the door that has
  * been free longest. A door that served another city is free 15 minutes after that block ended.
  * `unplaced` lists the blocks (plan indices) that found no door for one of their docks.
  */
 export function assignDoors(level: Level, plan: Plan): { placed: DoorBlock[]; unplaced: number[] } {
   const order = plan.blocks.map((b, block) => ({ b, block }));
-  order.sort((x, y) => x.b.start - y.b.start || x.b.city - y.b.city || x.block - y.block);
+  order.sort((x, y) => x.b.start - y.b.start || x.b.city - y.b.city || x.b.people - y.b.people || x.b.docks - y.b.docks || x.b.end - y.b.end || x.block - y.block);
   const freeFrom: number[] = new Array<number>(level.docks).fill(-999);
   const lastCity: number[] = new Array<number>(level.docks).fill(-1);
+  const lastPeople: number[] = new Array<number>(level.docks).fill(0);
   const placed: DoorBlock[] = [];
   const unplaced: number[] = [];
-  for (const { b, block } of order) {
-    for (let n = 0; n < b.docks; n++) {
-      let pick = -1;
-      let same = false;
-      for (let k = 0; k < level.docks; k++) {
-        const last = lastCity[k]!;
-        const free = freeFrom[k]!;
-        const known = last === b.city || last === -1;
-        if ((known ? free : free + SWITCH_MINUTES) > b.start) continue;
-        if (last === b.city) {
-          // The first free door that already has this city's cages wins outright.
-          if (!same) pick = k;
-          same = true;
-        } else if (!same && (pick < 0 || free < freeFrom[pick]!)) {
-          pick = k;
+  const take = (k: number, b: Plan['blocks'][number], block: number): void => {
+    freeFrom[k] = b.end;
+    lastCity[k] = b.city;
+    lastPeople[k] = b.people;
+    placed.push({ city: b.city, door: k, start: b.start, end: b.end, people: b.people, block });
+  };
+  for (let i = 0; i < order.length; ) {
+    let j = i;
+    while (j < order.length && order[j]!.b.start === order[i]!.b.start && order[j]!.b.city === order[i]!.b.city) j++;
+    const group = order.slice(i, j);
+    i = j;
+    // Round 1: carry on where the same crew for this city stops this minute.
+    const need: number[] = [];
+    for (const { b, block } of group) {
+      let n = b.docks;
+      for (let k = 0; k < level.docks && n > 0; k++) {
+        if (lastCity[k] === b.city && freeFrom[k] === b.start && lastPeople[k] === b.people) {
+          take(k, b, block);
+          n--;
         }
       }
-      if (pick < 0) {
-        unplaced.push(block);
-        break;
-      }
-      freeFrom[pick] = b.end;
-      lastCity[pick] = b.city;
-      placed.push({ city: b.city, door: pick, start: b.start, end: b.end, people: b.people, block });
+      need.push(n);
     }
+    // Round 2: the rest.
+    group.forEach(({ b, block }, g) => {
+      for (let n = need[g]!; n > 0; n--) {
+        let pick = -1;
+        let rank = 0; // 3 this city ends here now, 2 this city's door, 1 any free door
+        for (let k = 0; k < level.docks; k++) {
+          const last = lastCity[k]!;
+          const free = freeFrom[k]!;
+          const known = last === b.city || last === -1;
+          if ((known ? free : free + SWITCH_MINUTES) > b.start) continue;
+          const r = last === b.city ? (free === b.start ? 3 : 2) : 1;
+          if (r > rank || (r === 1 && rank === 1 && free < freeFrom[pick]!)) {
+            pick = k;
+            rank = r;
+          }
+        }
+        if (pick < 0) {
+          unplaced.push(block);
+          break;
+        }
+        take(pick, b, block);
+      }
+    });
   }
   return { placed, unplaced };
 }

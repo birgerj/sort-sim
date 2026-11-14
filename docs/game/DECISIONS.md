@@ -32,3 +32,9 @@
   volume × 2.8. Aim met: the plain plan earns one star in levels 7–10 (560, 514, 557, 528).
 - 2026-11-14 Badges: level 2 lean3, level 3 fleet3 (at most 3 robots), level 8 onTime9, level 10 onTime15.
 - 2026-11-14 Par under these rules: 177, 628, 809, 669, 1622, 2443, 7780, 12726, 13429, 24214 (see tools/balance/REPORT.md).
+- 2026-11-14 Model: the trailer, its swap and the belt belong to the door and the city, not to the block; a block
+  cut in two is the same plan.
+- 2026-11-14 Model: full is full. A parcel that finds no room while the buffer is full is refused: left behind, never back.
+- 2026-11-14 Level 3: small cities' trucks at 00:30, 00:30, 01:00. Level 4: third city 90 parcels. Level 8: 14 docks.
+  Level 10: volume × 2.2. Badges: level 6 lean6, level 9 lean16, level 10 allOnTime.
+- 2026-11-14 Par under these rules: 177, 621, 779, 596, 1601, 2398, 7577, 12570, 13029, 19342 (level 10 not settled).

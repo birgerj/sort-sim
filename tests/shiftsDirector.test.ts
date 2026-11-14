@@ -79,9 +79,9 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
     expect(doorAt(s, 0, 60).trailerFill).toBeCloseTo(160 / TRAILER_PARCELS, 2);
     expect(doorAt(s, 0, 104.9).swaps).toBe(1);
     expect(doorAt(s, 0, 104.9).trailerFill).toBeGreaterThan(0.95);
-    // City 2 loads 150 on door 2: no swap, and its one trailer is planned for 150.
+    // City 2 loads 90 on door 2: no swap, and its one trailer is planned for 90 (72 have come in by 00:00).
     expect(s.events.some((e) => e.kind === 'swap' && e.door === 1)).toBe(false);
-    expect(doorAt(s, 1, 120).trailerFill).toBeCloseTo(90 / 150, 2);
+    expect(doorAt(s, 1, 120).trailerFill).toBeCloseTo(72 / 90, 2);
   });
 
   it('knows how hard a door works', () => {
@@ -110,8 +110,8 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
 
   it('follows the buffer against the rack size', () => {
     expect(bufferAt(s, 0)).toBe(0);
-    expect(bufferAt(s, 60)).toBeCloseTo(120 / 800, 5);
-    expect(bufferAt(s, 62.5)).toBeCloseTo(116.25 / 800, 5);
+    expect(bufferAt(s, 60)).toBeCloseTo(96.0 / 800, 5);
+    expect(bufferAt(s, 62.5)).toBeCloseTo(92.25 / 800, 5);
     expect(bufferAt(s, 1000)).toBe(0);
     expect(robotsAt(s, 100)).toBe(0);
   });
@@ -288,7 +288,7 @@ describe('the plan\'s parcels in the hall', () => {
     expect(arrivedAt(level, 0, 45)).toBeCloseTo(120, 2);
     expect(arrivedAt(level, 0, 500)).toBe(240);
     expect(arrivedAt(level, 9, 60)).toBe(0);
-    expect(peakPerMinute(level)).toBeCloseTo(4.67, 1);
+    expect(peakPerMinute(level)).toBeCloseTo(4.27, 1);
   });
 
   it('shows every parcel in levels 1 to 6 and one for a fixed few after that', () => {
@@ -299,7 +299,7 @@ describe('the plan\'s parcels in the hall', () => {
       expect(peakPerMinute(lv) / 4 / f[i]!).toBeLessThanOrEqual(3.05);
       if (f[i]! > 1) expect(peakPerMinute(lv) / 4).toBeGreaterThan(3.05);
     }
-    expect(f.slice(6)).toEqual([3, 8, 4, 8]);
+    expect(f.slice(6)).toEqual([3, 8, 4, 6]);
   });
 
   it('counts whole parcels that never go back', () => {

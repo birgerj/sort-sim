@@ -1,96 +1,47 @@
 {
  "level": 8,
- "profit": 12726.591720856326,
+ "profit": 12570.988732905942,
  "plan": {
   "blocks": [
    {
     "city": 0,
-    "start": 0,
-    "end": 60,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 0,
     "start": 30,
     "end": 120,
-    "people": 2,
+    "people": 1,
     "docks": 1
    },
    {
     "city": 0,
-    "start": 60,
-    "end": 150,
+    "start": 90,
+    "end": 330,
     "people": 2,
     "docks": 1
    },
    {
     "city": 0,
     "start": 120,
-    "end": 180,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 0,
-    "start": 150,
-    "end": 240,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 0,
-    "start": 180,
-    "end": 240,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 0,
-    "start": 240,
-    "end": 300,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 0,
-    "start": 240,
-    "end": 330,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 0,
-    "start": 300,
     "end": 360,
     "people": 2,
     "docks": 1
    },
    {
     "city": 0,
-    "start": 330,
-    "end": 390,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 0,
     "start": 360,
-    "end": 450,
+    "end": 420,
     "people": 1,
-    "docks": 1
+    "docks": 2
    },
    {
     "city": 0,
     "start": 390,
     "end": 450,
     "people": 1,
-    "docks": 1
+    "docks": 2
    },
    {
     "city": 1,
     "start": 0,
-    "end": 60,
+    "end": 150,
     "people": 2,
     "docks": 1
    },
@@ -99,33 +50,19 @@
     "start": 30,
     "end": 90,
     "people": 2,
-    "docks": 2
-   },
-   {
-    "city": 1,
-    "start": 60,
-    "end": 120,
-    "people": 2,
     "docks": 1
    },
    {
     "city": 1,
-    "start": 120,
-    "end": 270,
+    "start": 30,
+    "end": 300,
     "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 1,
-    "start": 270,
-    "end": 330,
-    "people": 1,
     "docks": 1
    },
    {
     "city": 2,
     "start": 30,
-    "end": 300,
+    "end": 210,
     "people": 2,
     "docks": 1
    },
@@ -134,74 +71,39 @@
     "start": 180,
     "end": 240,
     "people": 2,
-    "docks": 1
+    "docks": 6
    },
    {
     "city": 2,
-    "start": 180,
-    "end": 270,
-    "people": 2,
-    "docks": 3
+    "start": 210,
+    "end": 330,
+    "people": 1,
+    "docks": 1
    },
    {
     "city": 2,
     "start": 240,
-    "end": 300,
+    "end": 420,
     "people": 2,
     "docks": 1
    },
    {
     "city": 2,
-    "start": 300,
-    "end": 360,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 2,
-    "start": 300,
+    "start": 330,
     "end": 450,
     "people": 2,
     "docks": 1
    },
    {
-    "city": 2,
-    "start": 360,
-    "end": 420,
-    "people": 1,
-    "docks": 1
-   },
-   {
     "city": 3,
-    "start": 120,
-    "end": 180,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 3,
-    "start": 180,
-    "end": 300,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 3,
-    "start": 330,
-    "end": 390,
+    "start": 240,
+    "end": 360,
     "people": 2,
     "docks": 1
    },
    {
     "city": 3,
     "start": 360,
-    "end": 420,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 3,
-    "start": 390,
     "end": 450,
     "people": 2,
     "docks": 2
@@ -210,33 +112,26 @@
     "city": 3,
     "start": 420,
     "end": 480,
-    "people": 1,
+    "people": 2,
     "docks": 1
    },
    {
     "city": 4,
     "start": 0,
-    "end": 60,
+    "end": 210,
     "people": 2,
     "docks": 1
    },
    {
     "city": 4,
-    "start": 60,
+    "start": 30,
     "end": 120,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 4,
-    "start": 90,
-    "end": 150,
     "people": 1,
     "docks": 1
    },
    {
     "city": 4,
-    "start": 150,
+    "start": 120,
     "end": 210,
     "people": 2,
     "docks": 1
@@ -246,83 +141,55 @@
     "start": 210,
     "end": 270,
     "people": 1,
-    "docks": 1
+    "docks": 2
    },
    {
     "city": 5,
-    "start": 60,
-    "end": 390,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 5,
-    "start": 390,
-    "end": 450,
+    "start": 90,
+    "end": 150,
     "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 5,
+    "start": 150,
+    "end": 420,
+    "people": 2,
     "docks": 1
    },
    {
     "city": 6,
     "start": 0,
     "end": 60,
-    "people": 2,
+    "people": 1,
+    "docks": 2
+   },
+   {
+    "city": 6,
+    "start": 30,
+    "end": 120,
+    "people": 1,
     "docks": 1
    },
    {
     "city": 6,
     "start": 30,
-    "end": 90,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 6,
-    "start": 60,
-    "end": 150,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 6,
-    "start": 150,
     "end": 210,
     "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 9,
-    "start": 240,
-    "end": 300,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 9,
-    "start": 300,
-    "end": 360,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 9,
-    "start": 360,
-    "end": 480,
-    "people": 1,
     "docks": 1
    }
   ],
   "robotCities": [
    0,
    1,
+   2,
    3,
-   4,
    5,
-   6,
    7,
-   8
+   8,
+   9
   ],
-  "robots": 19
+  "robots": 24
  },
  "runs": [
   {
@@ -377,23 +244,44 @@
    "polish": [
     12726.59
    ]
+  },
+  {
+   "iters": 80000,
+   "restarts": [
+    11590.98
+   ]
+  },
+  {
+   "iters": 120000,
+   "restarts": [
+    12493.66,
+    11958.45
+   ]
+  },
+  {
+   "iters": 100000,
+   "T0": 40,
+   "polish": [
+    12570.99
+   ]
   }
  ],
  "detail": {
-  "profit": 12726.591720856326,
-  "rev": 17231.949999999983,
+  "profit": 12570.988732905942,
+  "rev": 17345.59453674187,
   "bonus": 2771.9999999999995,
   "late": 0.0,
-  "left": 408.0500000000177,
-  "dock": 1637.5,
-  "staff": 3405.0,
-  "robots": 1672.0,
-  "store": 154.80827914363917,
-  "peak": 800.0,
-  "ontime": 9
+  "left": 294.40546325812807,
+  "dock": 1600.0,
+  "staff": 3375.0,
+  "robots": 2112.0,
+  "store": 165.2003405778022,
+  "peak": 772.6036421720872,
+  "ontime": 9,
+  "refused": 0.0
  },
  "peaks": [
-  24,
-  12
+  28,
+  14
  ]
 }

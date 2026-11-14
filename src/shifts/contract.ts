@@ -68,8 +68,9 @@ export interface Result {
   /** All amounts positive; late, left, docks, people, robots and buffer are subtracted. */
   lines: { revenue: number; bonus: number; late: number; left: number; docks: number; people: number; robots: number; buffer: number };
   trucks: { city: number; loaded: number; planned: number; left: number; status: TruckStatus }[];
-  /** The buffer every 5 minutes, and the stretches when it was full. */
-  buffer: { series: number[]; cap: number; fullRanges: [number, number][] };
+  /** The buffer every 5 minutes, the stretches when it was full, and the parcels it refused while full:
+   *  those found no room on a belt or table either, are missed for the night and count as left behind. */
+  buffer: { series: number[]; cap: number; fullRanges: [number, number][]; refused: number };
 }
 
 /** Everything the hall needs to play the shift, sampled every 5 minutes. */

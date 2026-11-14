@@ -36,7 +36,7 @@ describe('rough buffer guess', () => {
     // Two cities wait for their dock in the first hours; by the last hour the crews have caught up.
     expect(roughBuffer(FIX.level, FIX.plan)).toEqual([1, 1, 1, 0]);
     const f = nominalFlow(FIX.level, FIX.plan);
-    expect(f.waiting[60]).toBeCloseTo(120, 0);
+    expect(f.waiting[60]).toBeCloseTo(96, 0);
     expect(f.left.every((x) => x < 0.5)).toBe(true);
     expect(f.blocks[0]!.capacity).toBeCloseTo(297.5, 1);
     expect(f.blocks[0]!.loaded).toBeCloseTo(240, 0);
