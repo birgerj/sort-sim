@@ -66,36 +66,65 @@ Each agent keeps its own section up to date in its own branch: done, doing, bloc
 - Not done: the trial page is not part of `npm run build` (see Requests); no browser test in the repository (E owns those).
 
 ## D · hall
-- Done: (a) `src/sim/shiftSchedule.ts`, pure and tested in `tests/shiftsDirector.test.ts` (door states per minute,
-  parcels per door, trailer swaps, late and incomplete trucks, robot cities, events); (b) `enter` / `exit`;
-  (c) doors, staff, cage cards, door screens and pillar displays per block, signs changing in the 15-minute switch;
-  (d) departures: on time, late (amber lamp from the truck time, red screen), incomplete (trailer not full, cages
-  with the parcels left behind stay at the closed door, count on the screen), robot cities from a south door;
-  (e) fleet size (`Fleet.limit`); (f) buffer rack from `timeline.buffer`; (g) parcel flow: parcels ride the loop
-  until the director sends them to an open dock or a robot station, belts short while a dock keeps up and full
-  (chute lamp red) from 85 % of its pace. `enter` may be called again without `exit` (every attempt); `skip`
-  before or after the first frame ends the shift once. `scripts/directorShots.mjs` plays the fixture and a
-  made-up busy shift and checks both.
-- Rough, not done ((h) polish): people appear at their place when a dock opens (nobody walks in); a trailer
-  swap is the trailer driving off and back in two beats with the door up; cages fill from the timeline and a
-  full one is emptied in one go when nobody happens to push it; the nested stacks of empty cages beside every
-  door (fixed scenery) stay at doors that are not in the plan; the south side (boxes, forklifts) runs by itself
-  apart from the robot cities' departures; at 16× nothing but the signs, fills and doors can keep up.
+Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departures) stands, except where noted.
+
+- Speed. The hall's own pace is a quarter of a shift minute per beat; the director sets the tempo to 96 beats a
+  minute while a shift plays, so `setSpeed(0.4)` is exactly the free simulation's pace. Faster shifts run the
+  whole hall in whole factors (4, 8, 16 hall beats per music beat: `ShiftHooks.warp`), so every music beat is
+  still a hall beat; 0 freezes the hall. The shift clock is counted in hall beats, so clock and hall cannot
+  drift. The night's lights and dancers stay on the music's beats (sixteen times as fast they would strobe).
+- Measured, hall's own pace against the model:
+  - Free simulation as it was: a picker takes 4 beats a parcel (60 an hour of hall time); a cage to the trailer
+    and an empty one back is about 25 beats; a robot's round trip is about 100 beats (2 to 3 parcels an hour).
+  - Directed pace now (measured in a played shift with more allowed than anyone can load): one person alone
+    90 an hour (model 90); two people about 158 an hour before the last tuning of the cage runs (model 170;
+    not measured again after it); a robot about 17 an hour (model 20), by calling robots again on their way
+    back to parking and using the nearest box (`Fleet.retask`, `RobotFloor.near`; tested on the fleet alone).
+  - What the hall is behind at the end of a block goes on board in one go (`Docks.closeOut`).
+  - Frame time, software GL, 640 × 360, machine shared with four other agents: level 10 at 16× about 1.2 s a
+    frame with about 1,250 parcels in the hall; level 1 at 4× and the made-up pace shift about 0.9 to 1.0 s. The
+    shift's own work is a small part of a frame; nothing was thinned out. Not measured on a real graphics chip.
+- Real parcels. Every parcel in the hall during a shift is one of the plan's (the free simulation's are taken
+  off the loop, chutes, belts and tables on `enter`): it comes in as the level's arrivals say, early by the time
+  it rides to where it is going, wears a band in its city's colour, goes down the chute of an open dock of its
+  city or to its robot stations, or into the buffer rack as far as `timeline.buffer` says, and otherwise rides
+  the loop (above 150 riding, the lanes hold theirs back). Pickers take nothing off a belt before
+  `cityLoaded` has it loaded. The rack is drawn as full as the buffer against the level's size, in the colours
+  of what is in it; a parcel goes in at the lift and comes out on the return belt. Parcels are small cartons
+  during a shift (22 fit a roll cage, ten cages a trailer of 220).
+  - One parcel stands for: levels 1 to 6: 1; level 7: 3; level 8: 8; level 9: 4; level 10: 8 (`parcelFactor`:
+    the smallest of 1, 2, 3, 4, 5, 6, 8, 10… that keeps what comes in to about three parcels a beat, which the
+    loop carries at twice its slowest speed; tested).
+  - Trailer swaps are now the real truck cycle (door down, truck away, a new one in, door up: 18 beats).
+- Camera. `focusCity`, `setAutoCamera`, `onAutoCamera`, `finale` are in. Automatic direction on `enter`: an
+  overview of the plan's open docks (further back on a narrow screen), cuts on the beat to a truck about to
+  leave, a dock made ready for another city, a belt backing up, the buffer half and nearly full, robots
+  stopping or starting; a cut is held 4.5 s, at most one every 9 s, none at 8× and 16×. `finale`: the last
+  truck from the yard, at three stars the night comes on; `done` after 4.6 s; after `skip` it ends at once.
+  `exit` puts the camera back where and how it was.
+- Rough: robots are about 15 % under the model's pace, and full boxes wait for the three forklifts, so robot
+  cities fall behind in the hall (the counts on screen are the timeline's); people still appear at their
+  place; the nested stacks of empty cages stay at every door; a belt's parcels are taken away (and come round
+  again) when the door goes to another city; after `skip` the hall is simply empty.
 - File-map lines for AGENTS.md:
   - `src/sim/shiftSchedule.ts` | Ten Shifts: a `Timeline` turned into what the hall shows (`buildSchedule`): per
-    block a `Stint` (door, signs from, parcels per step shared over a city's open doors by their pace, pressure,
-    truck status), robot cities (what loads without an open door), events; `doorAt(schedule, door, minute)`,
-    `robotsAt`, `robotRate`, `bufferAt`. Pure, tested in `tests/shiftsDirector.test.ts`.
-  - `src/scene/director.ts` | `createDirector(scene)`: plays a shift in the hall. The clock runs in real time,
-    the hall changes on whole beats to the schedule's state for that minute. Uses the scene's shift hooks:
-    `Sorter.shift` (`ShiftHooks`; null = free simulation), `shiftParts`, `shiftReset`, `shiftSend` (a parcel
-    riding the loop goes down a chute), `shiftStockUp`, `shiftClear`, `shiftBuffer`, `shiftSign`;
-    `Docks.setDirected` / `directDock` / `directTrailer`; `Trucks.direct` / `want` / `swap` / `showLoad` /
-    `say` / `warn` / `freeze` / `label` / `settle`; `Fleet.limit`; `BreakCrew.hold`; `FaultCrew.recall`.
-  - `scripts/directorShots.mjs` | Headless screenshots of a played shift (fixture and a made-up busy one) at
-    several clock times, day and night; checks `onDone` once, a second `enter`, `skip`, and the hall after `exit`.
-  - Parcel flag `spare` (How a parcel travels): during a shift a parcel on the loop has no chute until the
-    director sends it (`shiftSend`); a full or closed end makes it spare again (no store, no manual sorting).
+    block a `Stint` (door, signs from, parcels per step shared over a city's open doors by their pace, truck
+    status), robot cities, events; `doorAt`, `robotsAt`, `bufferAt`; and the plan's parcels: `arrivedAt`,
+    `parcelFactor`, `inHall`, `CITY_COLOURS`. Pure, tested in `tests/shiftsDirector.test.ts`.
+  - `src/scene/director.ts` | `createDirector(scene)`: plays a shift in the hall with the plan's parcels, and
+    directs the camera. Uses the scene's shift hooks: `Sorter.shift` (`ShiftHooks`: `warp`, `next`/`took` for
+    the lanes, `colours`, `night`; null = free simulation), `shiftReset`, `shiftPlace`, `shiftSend`,
+    `shiftStore`, `shiftRetrieve`, `shiftDrop`, `shiftClear`, `shiftBuffer`, `shiftView`, `shiftCamera`;
+    `Docks.setDirected` / `directDock` / `closeOut`; `Trucks.direct` / `want` / `swap` / `say` / `warn` /
+    `freeze` / `label` / `settle`; `Fleet.limit` / `retask`; `RobotFloor.near`; `BreakCrew.hold`;
+    `FaultCrew.recall`.
+  - `scripts/directorShots.mjs` | Headless screenshots of played levels (default 1 and 10, desktop and phone
+    size) with the director's own camera; checks `onDone` once, a second `enter`, `skip`, the automatic
+    direction's callback, the closing shot, and the hall after `exit`.
+  - Two clocks: add that `bt` can run ahead of the music during a played shift (`Sorter.mbt` is the music's
+    beat, `ahead` the lead); lights and dancers use the music's.
+  - How a parcel travels: during a shift a parcel has a `city` and, on the loop, is `spare` until the director
+    sends it (`shiftSend`, `shiftStore`); a full or closed end makes it spare again.
 
 ## E · test
 
@@ -149,3 +178,16 @@ Each agent keeps its own section up to date in its own branch: done, doing, bloc
 - D · coordinator (`package.json`): `scripts/directorShots.mjs` needs `playwright` like `scripts/shots.mjs`
   (neither is in devDependencies); it starts its own dev server on port 5183.
 - D · coordinator: if the country is changed during a shift the door signs keep the names given to `enter`.
+- D · coordinator (round 2, colours): the sixteen city colours are copied into `src/sim/shiftSchedule.ts`
+  (`CITY_COLOURS`, from `--sh-city-0…15` in `src/ui/shifts/style.css`). Better in `src/shifts`, read by both.
+- D · coordinator (round 2, camera by hand): during the game nothing lets the player move the camera (the free
+  simulation's controls are hidden with its HUD, and `WalkControls` only acts in walk mode). The director
+  notices any change of camera mode away from its own shot (walk, fly, follow, another stop) and then reports
+  the automatic direction off; something in `src/ui` has to offer that control, for instance a drag on the hall
+  calling `scene.setControl('cam', 'walk')`.
+- D · coordinator (round 2, tempo): the director now holds `scene.rate` at 121 during a shift (96 beats a
+  minute), so 0.4 shift minutes a second is the hall's own pace. The tempo moves a few beats a bar towards it,
+  so the first bars of a shift run a little fast or slow, clock and hall together.
+- D · coordinator (round 2, plans for the screenshots): the last plan per level in
+  `tests/fixtures/shifts/golden.json` does not pass `checkPlan` for level 10 (five problems), so
+  `scripts/directorShots.mjs` calls `simulate` directly.

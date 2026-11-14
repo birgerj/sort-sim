@@ -252,6 +252,30 @@ describe('robot fleet during a shift', () => {
     expect(r.out()).toBe(0);
   });
 
+  it('keeps the plan\'s robots on the move when they may be called on their way home', () => {
+    // The free simulation: a robot parks before its next trip, and takes a parcel to any box.
+    const slow = run(1200, () => 6).delivered;
+    // A shift: called again on the way back, and to the nearest box.
+    const { grid, parks, stations, bins } = sorterFloor(cols);
+    const rng = new Rng(11);
+    const fleet = new Fleet(grid, parks, stations, bins, 40, () => rng.next());
+    fleet.limit = 6;
+    fleet.retask = true;
+    fleet.choose = (k) => {
+      const st = stations[fleet.bots[k]!.station]!;
+      return bins.map((b, i) => ({ i, d: Math.abs(b.i - st[0]), manual: b.manual })).filter((b) => !b.manual).sort((a, b) => a.d - b.d)[0]!.i;
+    };
+    let delivered = 0;
+    for (let beat = 0; beat < 1200; beat++) {
+      for (const e of fleet.step(beat, (s) => s < 4, beat % 4 === 1 || beat % 4 === 3)) if (e.t === 'dropped') delivered++;
+      expect(fleet.bots.filter((b) => b.state !== 'idle').length).toBeLessThanOrEqual(6);
+    }
+    // About 17 parcels a robot an hour (four beats a minute): near the model's 20, far above the free simulation's pace.
+    const perRobotHour = (delivered / 6 / 1200) * 240;
+    expect(perRobotHour).toBeGreaterThan(14);
+    expect(delivered).toBeGreaterThan(slow * 3);
+  });
+
   it('changes nothing when no shift sets a limit', () => {
     expect(Math.max(...run(400, () => Infinity).most)).toBeGreaterThan(12);
   });
