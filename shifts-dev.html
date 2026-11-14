@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Ten Shifts · screens</title>
+    <meta name="description" content="Work page for the screens of Ten Shifts: no hall, a fake score service and a fake director." />
+    <style>
+      /* Stands in for the hall: a dark ground, so it is plain where the game lets it show through. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        gap: 12px;
+        align-content: center;
+        background: #2b3140 repeating-linear-gradient(45deg, transparent 0 24px, rgba(255, 255, 255, 0.05) 24px 48px);
+        color: #e8eaf0;
+        font: 16px/1.4 system-ui, sans-serif;
+      }
+      #reopen {
+        min-height: 44px;
+        padding: 0 18px;
+        font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hall-note">Free simulation (the hall as it was)</div>
+    <button id="reopen" type="button" hidden>Open the game again</button>
+    <script type="module" src="/src/ui/shifts/dev.ts"></script>
+  </body>
+</html>
