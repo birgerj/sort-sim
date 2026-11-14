@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Level, Timeline } from '../src/shifts/contract';
 import { CAGE_PARCELS, TRAILER_PARCELS, bufferAt, buildSchedule, doorAt, doorsUsed, robotRate, robotsAt, sample } from '../src/sim/shiftSchedule';
+import { Fleet, PARK_COLS, sorterFloor } from '../src/sim/robotFleet';
+import { Rng } from '../src/sim/rng';
 import fixture from './fixtures/shifts/level4.json';
 
 const level = fixture.level as unknown as Level;
@@ -211,5 +213,45 @@ describe('shift schedule: late, incomplete, robots, several doors', () => {
     expect(sample([0, 10, 30], 7.5)).toBe(20);
     expect(sample([0, 10, 30], 99)).toBe(30);
     expect(sample([], 3)).toBe(0);
+  });
+});
+
+describe('robot fleet during a shift', () => {
+  const cols = Array.from({ length: 20 }, (_, k) => PARK_COLS + 2 + 4 * k);
+  /** Run a fleet with parcels always waiting at every station; `limit(beat)` robots may be out. */
+  function run(beats: number, limit: (beat: number) => number): { most: number[]; delivered: number; out: () => number } {
+    const { grid, parks, stations, bins } = sorterFloor(cols);
+    const rng = new Rng(11);
+    const fleet = new Fleet(grid, parks, stations, bins, 40, () => rng.next());
+    const out = () => fleet.bots.filter((b) => b.state !== 'idle').length;
+    const most: number[] = [];
+    let delivered = 0;
+    for (let beat = 0; beat < beats; beat++) {
+      fleet.limit = limit(beat);
+      const before = out();
+      for (const e of fleet.step(beat, () => true, beat % 4 === 1 || beat % 4 === 3)) if (e.t === 'dropped') delivered++;
+      // Never more out than the plan has, unless they were out already (those finish their trip).
+      expect(out()).toBeLessThanOrEqual(Math.max(before, fleet.limit));
+      most.push(out());
+    }
+    return { most, delivered, out };
+  }
+
+  it('keeps all but the plan\'s robots parked', () => {
+    const r = run(600, () => 6);
+    expect(Math.max(...r.most)).toBe(6);
+    expect(r.delivered).toBeGreaterThan(20);
+  });
+
+  it('sends nobody out with no robots in the plan, and brings them home in an outage', () => {
+    expect(Math.max(...run(200, () => 0).most)).toBe(0);
+    const r = run(700, (beat) => (beat < 300 ? 12 : 0));
+    expect(Math.max(...r.most.slice(0, 300))).toBe(12);
+    // Those out when the outage began finish and park; nobody leaves after that.
+    expect(r.out()).toBe(0);
+  });
+
+  it('changes nothing when no shift sets a limit', () => {
+    expect(Math.max(...run(400, () => Infinity).most)).toBeGreaterThan(12);
   });
 });

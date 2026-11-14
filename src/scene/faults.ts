@@ -143,6 +143,25 @@ export class FaultCrew {
     return this.task?.pose === 'repair' ? 'working' : 'coming';
   }
 
+  /**
+   * Everything runs again and he is at his bench, at once (a shift of the planning game
+   * begins: no faults there). Whatever he was on is dropped.
+   */
+  recall(bt: number): void {
+    for (const chute of [...this.plan.down.keys()]) this.plan.repaired(chute, bt);
+    this.queue.length = 0;
+    this.on = null;
+    const away = this.site !== null || this.leg !== null || this.tasks.some((t) => t.pose !== 'bench');
+    if (!away) return;
+    this.site = null;
+    this.task = null;
+    this.leg = null;
+    [this.x, this.z] = this.L.bench;
+    [this.sx, this.sz] = this.L.park;
+    this.syaw = this.L.parkYaw;
+    this.idle();
+  }
+
   /** A new fault: he goes as soon as he is free. */
   report(f: Fault): void {
     if (!this.sites.has(f.chute)) return;

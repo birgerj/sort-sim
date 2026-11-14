@@ -76,7 +76,35 @@ interface Dock extends TruckDoor {
   doorsShut: (shut: boolean) => void;
   /** What the screen shows now (redrawn when it changes). */
   shown: string;
+  /** Set while the shift director runs this door itself (see `Trucks.direct`); null: the free cycle. */
+  run: Run | null;
 }
+
+/**
+ * A door during a shift of the planning game: no timetable and no cleardown of its own. It is
+ * up or down as the plan says, its trailer is swapped when the plan's is full, and its screen
+ * and lamp say what the director tells them.
+ */
+interface Run {
+  want: 'open' | 'shut';
+  lamp: boolean;
+  /** Beat a full trailer started to pull away for an empty one (−1: none). */
+  swapT0: number;
+  main: string;
+  sub: string;
+  tone: ScreenTone;
+}
+
+/** How a directed door's screen looks: dark (not in use), in use, warning, or bad news. */
+export type ScreenTone = 'off' | 'ok' | 'warn' | 'bad';
+const TONES: Record<ScreenTone, { bg: string; fg: string; sub: string }> = {
+  off: { bg: '#101114', fg: '#4d525b', sub: '#4d525b' },
+  ok: { bg: '#101114', fg: '#ffffff', sub: '#5be0a0' },
+  warn: { bg: '#3a1f00', fg: '#ffffff', sub: '#ffb020' },
+  bad: { bg: '#4a0d0d', fg: '#ffffff', sub: '#ff5a4f' },
+};
+/** Beats a trailer swap takes during a shift (out and back in, the door stays up). */
+const SWAP_BEATS = 2;
 
 const L = 12; // trailer length
 const W = 3.1;
@@ -134,14 +162,19 @@ export class Trucks {
     const doorM = k.std(0x2c3038, 0.6, 0.4, 0xffffff);
     doorM.map = sectionalDoor();
     k.realNormal(doorM, sectionalDoorNormal());
-    const cageM = k.std(0x5d6670, 0.5, 0.6, 0x2fa58f);
     const boxM = k.std(0x8a7050, 0.95, 0, 0xe0b882);
     const shell = new THREE.BoxGeometry(W, H, L);
     const floorG = new THREE.BoxGeometry(W - 0.1, 0.04, L);
     const lampG = new THREE.BoxGeometry(0.2, 0.04, L - 2);
     // The door panel: 1 m high geometry, anchored at its top edge, scaled down from the roll.
     const doorG = new THREE.BoxGeometry(3.2, 1, 0.08).translate(0, -0.5, 0);
-    const cageG = new THREE.BoxGeometry(1.3, 1.7, 1.0).translate(0, 0.95, 0);
+    // A roll cage's load of cartons, as a block (only shown during a shift of the planning game,
+    // inside a cage frame the docks put round it: see `showLoad`).
+    const cageG = mergeGeometries([
+      new THREE.BoxGeometry(1.2, 0.5, 0.9).translate(0, 0.6, 0),
+      new THREE.BoxGeometry(1.1, 0.45, 0.86).translate(0.03, 1.08, 0.01),
+      new THREE.BoxGeometry(0.7, 0.36, 0.8).translate(-0.2, 1.49, -0.02),
+    ].map((g) => g.toNonIndexed()))!;
     const boxG = new THREE.BoxGeometry(1.2, 1.0, 1.2).translate(0, 0.5, 0);
     // The trailer's outside: a box without the end at the door and without a floor.
     const skin = (open: number) => {
@@ -196,7 +229,7 @@ export class Trucks {
       // Cargo slots: two across, from the far end towards the door.
       const slots: THREE.Object3D[] = [];
       for (let n = 0; n < SLOTS[d.cargo]; n++) {
-        const s = k.batch(d.cargo === 'cage' ? cageG : boxG, d.cargo === 'cage' ? cageM : boxM, trailer);
+        const s = k.batch(d.cargo === 'cage' ? cageG : boxG, boxM, trailer);
         // (Cages two across, 1.1 m deep each; boxes two across, 1.35 m.)
         const pitch = d.cargo === 'cage' ? 1.12 : 1.35;
         s.position.set((n % 2 ? 0.72 : -0.72), 0.05, -d.dir * (L / 2 - 0.75 - Math.floor(n / 2) * pitch));
@@ -208,7 +241,7 @@ export class Trucks {
       k.put(door);
       const panel = k.batch(doorG, doorM, door);
       panel.scale.y = 0.6;
-      this.docks.push({ ...d, state: 'open', t0: 0, load: 0, vol: 0, kg: 0, cutoff: 0, full: false, reserved: 0, door: panel, trailer, slots, shown: '', doorsShut });
+      this.docks.push({ ...d, state: 'open', t0: 0, load: 0, vol: 0, kg: 0, cutoff: 0, full: false, reserved: 0, door: panel, trailer, slots, shown: '', doorsShut, run: null });
     }
     this.screens = new Labels(doors.length, 3.4, 1.0, 340, 100);
     const sm = new THREE.Matrix4();
@@ -321,9 +354,11 @@ export class Trucks {
       if (beat % 2 === 0) for (const d of this.docks) if (d.state === 'cleardown' || d.state === 'closing') this.sounds.push({ kind: 'buzz', at: new THREE.Vector3(d.x, 4, d.wallZ) });
     }
     for (const d of this.docks) {
-      if (d.state === 'open') {
-        // Cleardown when full, or in time for the departure (the cutoff).
-        const due = now >= d.cutoff - CLEARDOWN_LEAD;
+      if (d.run) this.stepDirected(d, d.run, bt);
+      else if (d.state === 'open') {
+        // Cleardown when full, or in time for the departure (the cutoff). (During a shift of the
+        // planning game the other doors keep no timetable: `frozen`.)
+        const due = !this.frozen && now >= d.cutoff - CLEARDOWN_LEAD;
         if (this.fill(d) >= 0.9 || due) {
           d.state = 'cleardown';
           d.t0 = Math.ceil(bt);
@@ -352,17 +387,162 @@ export class Trucks {
       const down = d.state === 'closing' ? ease(f) : d.state === 'opening' ? 1 - ease(f) : d.state === 'open' || d.state === 'cleardown' ? 0 : 1;
       d.door.scale.y = 0.6 + (DOOR_H - 0.6) * down;
       // Trailer: pulls away from the wall and comes back.
-      const out = d.state === 'leaving' ? ease(f) : d.state === 'away' ? 1 : d.state === 'arriving' ? 1 - ease(f) : 0;
+      let out = d.state === 'leaving' ? ease(f) : d.state === 'away' ? 1 : d.state === 'arriving' ? 1 - ease(f) : 0;
+      if (d.run && d.run.swapT0 >= 0) {
+        // A full trailer pulls away and an empty one backs in, a beat each.
+        const u = (bt - d.run.swapT0) / SWAP_BEATS;
+        if (u >= 1) d.run.swapT0 = -1;
+        else if (u > 0) out = Math.max(out, u < 0.5 ? ease(u * 2) : ease(2 - u * 2));
+      }
       d.trailer.position.z = d.wallZ - d.dir * (L / 2 + 0.02 + out * 16);
       d.trailer.visible = d.state !== 'away';
       d.doorsShut(d.state === 'leaving');
       // The warning lamp flashes on the half beat during cleardown and while the door comes down.
-      const warn = d.state === 'cleardown' || d.state === 'closing';
+      const k = this.docks.indexOf(d);
+      const warn = d.state === 'cleardown' || d.state === 'closing' || d.run?.lamp === true || this.warned.has(k);
       const on = warn && bt * 2 - Math.floor(bt * 2) < 0.5;
-      this.lamps.setColorAt(this.docks.indexOf(d), on ? this.c.setRGB(3, 1.4, 0.1) : this.c.setRGB(0.25, 0.12, 0.02));
+      this.lamps.setColorAt(k, on ? this.c.setRGB(3, 1.4, 0.1) : this.c.setRGB(0.25, 0.12, 0.02));
     }
     if (this.lamps.instanceColor) this.lamps.instanceColor.needsUpdate = true;
     this.drawScreens();
+  }
+
+  // ---------- a shift of the planning game (see director.ts) ----------
+
+  /** No timetable: nothing leaves by the clock (a full truck still does). The director's doors are separate. */
+  private frozen = false;
+  /** Doors whose lamp flashes although they are not in cleardown (a truck that is late). */
+  private readonly warned = new Set<number>();
+
+  /**
+   * The director takes door `i` (down, no truck business of its own), or gives it back to the
+   * free cycle (a truck at the door, the door rolling up, an empty trailer).
+   */
+  direct(i: number, on: boolean, bt: number): void {
+    const d = this.docks[i];
+    if (!d || !!d.run === on) return;
+    d.reserved = 0;
+    d.load = 0;
+    d.vol = 0;
+    d.kg = 0;
+    d.full = false;
+    d.slots.forEach((s) => (s.visible = false));
+    d.shown = '';
+    if (on) {
+      d.run = { want: 'shut', lamp: false, swapT0: -1, main: String(d.number), sub: '', tone: 'off' };
+      if (d.state === 'arriving' || d.state === 'away') d.state = 'away';
+      else if (d.state !== 'closing' && d.state !== 'leaving') {
+        d.state = 'closing';
+        d.t0 = Math.ceil(bt);
+      }
+    } else {
+      d.run = null;
+      if (d.state !== 'open') {
+        d.state = 'opening';
+        d.t0 = Math.ceil(bt);
+      }
+    }
+  }
+
+  /** One step of a directed door: towards up with a trailer behind it, or down and the truck gone. */
+  private stepDirected(d: Dock, r: Run, bt: number): void {
+    if (r.want === 'open') {
+      if (d.state !== 'open' && d.state !== 'opening') {
+        // (The trailer backed in behind the closed door, out of sight.)
+        d.state = 'opening';
+        d.t0 = Math.ceil(bt);
+      } else if (d.state === 'opening' && bt >= d.t0 + DUR.opening) d.state = 'open';
+      return;
+    }
+    if (d.state === 'open' || d.state === 'opening' || d.state === 'cleardown') {
+      d.state = 'closing';
+      d.t0 = Math.ceil(bt);
+    } else if (d.state === 'closing' && bt >= d.t0 + DUR.closing) {
+      d.state = 'leaving';
+      d.t0 += DUR.closing;
+    } else if (d.state === 'arriving' || (d.state === 'leaving' && bt >= d.t0 + DUR.leaving)) {
+      d.state = 'away';
+      d.load = 0;
+      d.slots.forEach((s) => (s.visible = false));
+    }
+  }
+
+  /** A directed door: up (with a trailer) or down. */
+  want(i: number, open: boolean): void {
+    const r = this.docks[i]?.run;
+    if (r) r.want = open ? 'open' : 'shut';
+  }
+
+  /** A directed door at once in its end position (a jump in time): no rolling, no driving. */
+  settle(i: number, bt: number): void {
+    const d = this.docks[i];
+    if (!d?.run) return;
+    d.run.swapT0 = -1;
+    d.state = d.run.want === 'open' ? 'open' : 'away';
+    d.t0 = Math.floor(bt);
+    if (d.state === 'away') {
+      d.load = 0;
+      d.slots.forEach((s) => (s.visible = false));
+    }
+  }
+
+  /** A directed door's trailer: this many roll cages' loads standing in it (drawn, 0–10). */
+  showLoad(i: number, cages: number): void {
+    const d = this.docks[i];
+    if (!d?.run) return;
+    d.load = Math.max(0, Math.min(d.slots.length, Math.round(cages)));
+    d.slots.forEach((s, n) => (s.visible = n < d.load));
+  }
+
+  /** Where load `n` stands in the trailer at door `i` (world, on the floor), from the far end. */
+  slotAt(i: number, n: number, out: THREE.Vector3): THREE.Vector3 {
+    const d = this.docks[i]!;
+    const s = d.slots[Math.min(n, d.slots.length - 1)]!;
+    // (From the trailer's place at the door, also while it is away for a swap.)
+    return out.set(d.x + s.position.x, 0, d.wallZ - d.dir * (L / 2 + 0.02) + s.position.z);
+  }
+
+  /** A directed door: the full trailer pulls away and an empty one backs in (the door stays up). */
+  swap(i: number, bt: number): void {
+    const r = this.docks[i]?.run;
+    if (r) r.swapT0 = Math.ceil(bt);
+  }
+
+  /** A directed door's screen. */
+  say(i: number, main: string, sub: string, tone: ScreenTone): void {
+    const r = this.docks[i]?.run;
+    if (!r) return;
+    r.main = main;
+    r.sub = sub;
+    r.tone = tone;
+  }
+
+  /** The warning lamp of a directed door, or (any door) of a truck that is late. */
+  warn(i: number, on: boolean): void {
+    const r = this.docks[i]?.run;
+    if (r) r.lamp = on;
+    else if (on) this.warned.add(i);
+    else this.warned.delete(i);
+  }
+
+  /**
+   * While a shift is played the doors the director does not run keep no timetable (nothing
+   * leaves by the clock); afterwards the departures are shared out again from now.
+   */
+  freeze(on: boolean): void {
+    this.frozen = on;
+    this.warned.clear();
+    if (!on) this.scheduled = false;
+    for (const d of this.docks) d.shown = '';
+  }
+
+  /** Another name on a door's screen (a robot city of the shift at a south door), or its own back. */
+  label(i: number, city: string, pc: string): void {
+    const d = this.docks[i];
+    if (!d) return;
+    d.city = city;
+    d.pc = pc;
+    d.shown = '';
   }
 
   /** Doors for the cleardown panel: number, city, postcodes and state. */
@@ -389,13 +569,22 @@ export class Trucks {
   private drawScreens(): void {
     const now = this.clock();
     this.docks.forEach((d, i) => {
+      if (d.run) {
+        const key = `${d.run.main}|${d.run.sub}|${d.run.tone}`;
+        if (d.shown === key) return;
+        d.shown = key;
+        this.screens.set(i, d.run.main, d.run.sub, TONES[d.run.tone]);
+        return;
+      }
       const hhmm = `${String(Math.floor(d.cutoff / 60) % 24).padStart(2, '0')}:${String(Math.floor(d.cutoff % 60)).padStart(2, '0')}`;
       const left = Math.ceil(d.cutoff - now);
       const atDoor = d.state === 'open' || d.state === 'cleardown' || d.state === 'closing';
       const late = atDoor && left < 0;
       const inMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`);
       const fill = d.cages ? `cages ${Math.round(d.cages() * 100)}%` : `truck ${Math.round(this.fill(d) * 100)}%`;
-      const status = late
+      const status = this.frozen
+        ? d.state === 'open' ? fill : d.state === 'cleardown' || d.state === 'closing' ? 'CLEARDOWN' : 'Truck on its way'
+        : late
         ? `LATE +${-left} min · dep ${hhmm}`
         : d.state === 'open'
           ? `dep ${hhmm} · ${inMin(left)} · ${fill}`
@@ -404,14 +593,14 @@ export class Trucks {
             : d.state === 'opening'
               ? `Opening · dep ${hhmm}`
               : 'Truck on its way';
-      const key = status;
+      const key = `${d.city}|${status}`;
       if (d.shown === key) return;
       d.shown = key;
       const warn = d.state === 'cleardown' || d.state === 'closing';
       this.screens.set(i, `${d.number} · ${d.city}`, `${d.pc} · ${status}`, {
-        bg: late ? '#4a0d0d' : warn ? '#3a1f00' : '#101114',
+        bg: late && !this.frozen ? '#4a0d0d' : warn ? '#3a1f00' : '#101114',
         fg: '#ffffff',
-        sub: late ? '#ff5a4f' : warn ? '#ffb020' : d.state === 'open' ? (left <= 10 ? '#ffd24a' : '#5be0a0') : '#9aa0a8',
+        sub: this.frozen ? (warn ? '#ffb020' : '#5be0a0') : late ? '#ff5a4f' : warn ? '#ffb020' : d.state === 'open' ? (left <= 10 ? '#ffd24a' : '#5be0a0') : '#9aa0a8',
       });
     });
     this.screens.flush();

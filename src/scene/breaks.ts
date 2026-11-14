@@ -120,11 +120,21 @@ export class BreakCrew {
     this.draw();
   }
 
+  /**
+   * Nobody new goes on a break or changes shift (a shift of the planning game is played: the
+   * plan says who stands where). Those already walking finish their way.
+   */
+  hold = false;
+
   update(dt: number, bt: number, day: boolean): void {
     // (Beats since the last frame, from the clock itself: a slow frame still walks the full way.)
     const beats = Math.min(2, Math.max(0, bt - this.btNow));
     this.btNow = bt;
-    if (day && bt >= this.nextShift) {
+    if (this.hold) {
+      // (The next break is not due the moment the hold ends.)
+      this.nextBreak = Math.max(this.nextBreak, bt + 16);
+      this.nextShift = Math.max(this.nextShift, bt + 64);
+    } else if (day && bt >= this.nextShift) {
       this.nextShift = bt + SHIFT_EVERY;
       this.shiftChange(bt);
     } else if (day && bt >= this.nextBreak) {
