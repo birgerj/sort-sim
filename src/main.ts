@@ -30,7 +30,7 @@ import { WalkControls } from './ui/walk';
 import { mountShifts } from './ui/shifts/index';
 import { plannerView, shiftHud } from './ui/shifts/planner/index';
 import { LEVELS, LocalScoreService } from './shifts/model/index';
-import { clockDirector } from './shifts/clockDirector';
+import { createDirector } from './scene/director';
 import { ANTICS } from './scene/antics';
 
 const q = new URLSearchParams(location.search);
@@ -136,7 +136,7 @@ document.body.append(hud.root);
 const shifts = showUi
   ? mountShifts({
       score: new LocalScoreService(),
-      director: clockDirector(),
+      director: createDirector(scene),
       levels: LEVELS,
       // City i of a level is the i-th largest town of the chosen country.
       cityNames: () => [...COUNTRY.cities].sort((a, b) => b.pop - a.pop).map((c) => c.name),

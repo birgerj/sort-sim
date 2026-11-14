@@ -1476,15 +1476,16 @@
 .shp-hud {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
-.shp-hud-gone {
+.shp-hud .shp-hud-gone {
   grid-column: 1 / -1;
   grid-row: 2;
+  flex: none;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   pointer-events: none;
 }
-.shp-hud-gone:empty {
+.shp-hud .shp-hud-gone:empty {
   display: none;
 }
 .shp-hud-badge {
@@ -1498,27 +1499,33 @@
   border-left: 8px solid var(--c);
   font-size: 13px;
 }
-.shp-hud-side {
+.shp-hud .shp-hud-side {
   grid-row: 3;
 }
-.shp-hud-card[hidden] {
+.shp-hud .shp-hud-card[hidden] {
   display: none;
 }
-.shp-hud-bottom {
+.shp-hud .shp-hud-bottom {
   grid-column: 1 / -1;
   grid-row: 4;
-  display: flex;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px 18px;
-  flex-wrap: wrap;
+  gap: 8px 18px;
   padding: 8px 10px 8px 16px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
   pointer-events: auto;
 }
-.shp-hud-bottom .shp-hud-money {
+.shp-hud .shp-hud-bottom .shp-hud-speed {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.shp-hud .shp-hud-bottom .shp-hud-money {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -1526,34 +1533,34 @@
   padding: 0;
   background: none;
   border-radius: 0;
+  min-width: 0;
 }
-.shp-hud-bottom .shp-hud-money b {
+.shp-hud .shp-hud-bottom .shp-hud-money b {
   margin-right: 10px;
   border-top: 0;
   padding-top: 0;
   font-size: 15px;
 }
-.shp-hud-bottom .shp-hud-money .shp-hud-sum {
+.shp-hud .shp-hud-bottom .shp-hud-money .shp-hud-sum {
   border-top: 0;
   padding-top: 0;
 }
 @media (max-width: 760px) {
-  .shp-hud-side {
-    grid-column: 1;
-    grid-row: 3;
-    align-self: end;
+  /* Cards for the cities still loading sit just above the bottom bar. */
+  .shp-hud .shp-hud-side {
+    margin-top: auto;
   }
-  .shp-hud-bottom {
-    flex-direction: column;
-    align-items: stretch;
+  .shp-hud .shp-hud-bottom {
+    grid-template-columns: minmax(0, 1fr);
     padding: 8px;
   }
-  .shp-hud-bottom .shp-hud-money {
-    justify-content: space-between;
+  .shp-hud .shp-hud-bottom .shp-hud-money {
     padding: 0 6px;
   }
-  .shp-hud-bottom .shp-hud-speed .shp-pick {
+  .shp-hud .shp-hud-bottom .shp-hud-speed .shp-pick {
     flex: 1 1 0;
     min-width: 0;
+    padding-left: 0;
+    padding-right: 0;
   }
 }

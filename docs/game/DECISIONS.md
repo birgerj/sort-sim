@@ -20,3 +20,8 @@
 - 2026-11-14 Until the hall's director is merged, a clock-only stand-in (`src/shifts/clockDirector.ts`) plays the shift: the game is fully playable, the hall just keeps running as in the free simulation.
 - 2026-11-14 While the game's screens cover the hall, the hall is not drawn (saves the device; it only draws during a shift).
 - 2026-11-14 The planner gives no verdict per city (no "fits", no "N too many"): only the block's fill bar.
+- 2026-11-14 The first screen is the start card: sound, country, update, and two ways in, Simulation or Play. The game has no choice screen of its own.
+- 2026-11-14 The game's menus and buttons use the hall's own style (dark glass panels, teal accent). Menus are kept terse.
+- 2026-11-14 Shift HUD: clock and the badges of departed trucks at the top; money and the speed buttons at the bottom.
+- 2026-11-14 The hall's director is wired in (`createDirector(scene)`); the clock-only stand-in is gone.
+- 2026-11-14 Open: the camera does not yet go to the docks that are open during a shift; space still pauses the scene (and with it the shift clock).
