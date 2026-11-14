@@ -487,8 +487,16 @@ export class Trucks {
 
   /** A directed door: up (with a trailer) or down. */
   want(i: number, open: boolean): void {
-    const r = this.docks[i]?.run;
-    if (r) r.want = open ? 'open' : 'shut';
+    const d = this.docks[i];
+    const r = d?.run;
+    if (!d || !r) return;
+    r.want = open ? 'open' : 'shut';
+    // (The block is over and its people are gone: no cage is on its way in any more. A place
+    // kept for one would hold the door up for good.)
+    if (!open) {
+      d.reserved = 0;
+      r.cycling = false;
+    }
   }
 
   /** A directed door at once in its end position (a jump in time): no rolling, no driving. */

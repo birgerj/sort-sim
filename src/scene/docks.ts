@@ -183,8 +183,8 @@ interface Run {
   name: string;
 }
 /** How much shorter the cage runs are during a shift (beats × this), and how far a step goes then (m per beat). */
-const RUN_PACE = 0.5;
-const RUN_WALK = 2.4;
+const RUN_PACE = 0.4;
+const RUN_WALK = 2.8;
 /** The loader's place at the belt end during a shift (x offset from the belt, z offset from its end): beside the picker. */
 const SECOND_AT: [number, number] = [-1.0, -0.6];
 /** Places in a cage for the shift's small cartons: three across, two deep, four high. */
@@ -731,7 +731,7 @@ export class Docks {
     } else if (this.planLoad(d, w, true)) return;
     // (Otherwise: at cleardown the picker helps to push the cages into the trailer, with nothing in hand.)
     // Back to the belt end first (after helping at a cleardown).
-    if (w.root.position.distanceTo(at) > (run ? 2.6 : 0.6)) {
+    if (w.root.position.distanceTo(at) > (run ? 4.5 : 0.6)) {
       w.steps.push({ beats: 2, to: at, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'walk' });
       return;
     }
