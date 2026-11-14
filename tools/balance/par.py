@@ -264,7 +264,11 @@ def climb(L, plan, value):
                 plan, best, improved = q, v, True
                 break
         if not improved:
-            return canon(plan), best
+            # Written in the fixed order when that is the same plan to the model. (Two equal blocks side by side and
+            # one block with two docks can get their doors in another order when a third block starts with them.)
+            c = canon(plan)
+            w = value(c)
+            return (c if w is not None and abs(w - best) < 1e-9 else plan), best
 
 
 def anneal(L, start, iters, seed, value, T0=None):
@@ -317,9 +321,12 @@ def tidy_value(L):
 
 def tidy(L, plan):
     """The plan written with as few blocks as possible, when that scores exactly the same."""
-    m = merged(plan)
-    a, b = score(L, plan), score(L, m)
-    return m if b is not None and abs(a - b) < 1e-9 else canon(plan)
+    a = score(L, plan)
+    for other in (merged(plan), canon(plan)):
+        b = score(L, other)
+        if b is not None and abs(a - b) < 1e-9:
+            return other
+    return plan
 
 
 def search(L, iters, restarts, value=None, seed0=1000, log=None, first=()):
