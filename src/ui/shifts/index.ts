@@ -134,6 +134,11 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
         if (playing) deps.director.skip();
         finish();
       },
+      onFocus: (city) => deps.director.focusCity?.(city),
+      onAuto: () => deps.director.setAutoCamera?.(true),
+    });
+    deps.director.onAutoCamera?.((on) => {
+      if (mine === run) hud.setAuto?.(on);
     });
     show(h('div', { class: 'sh-live' }, hud.root), true);
 
@@ -157,7 +162,10 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
         () => {
           if (mine !== run) return;
           hud.done();
-          finish();
+          // The closing shot comes first; the result never waits on it for long.
+          if (!deps.director.finale || !outcome) return finish();
+          deps.director.finale(outcome.result.stars, finish);
+          setTimeout(finish, 8000);
         },
       );
     } catch (reason) {

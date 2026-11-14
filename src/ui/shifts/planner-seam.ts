@@ -24,9 +24,14 @@ export type ShiftHud = (o: {
   plan: Plan;
   onSpeed(minutesPerSecond: number): void;
   onSkip(): void;
-}) => { root: HTMLElement; setClock(minute: number): void; setTimeline(t: Timeline): void; done(): void };
+  /** The player tapped a city: show its dock. */
+  onFocus?(city: number): void;
+  /** The player asked for the automatic camera back. */
+  onAuto?(): void;
+}) => { root: HTMLElement; setClock(minute: number): void; setTimeline(t: Timeline): void; done(): void; setAuto?(on: boolean): void };
 
 /** Shift minutes per real second behind the speed buttons. */
-export const SPEEDS = { pause: 0, x1: 2, x4: 8, x16: 32 } as const;
+/** 1× is the hall's own pace: one shift hour in two and a half minutes. */
+export const SPEEDS = { pause: 0, x1: 0.4, x4: 1.6, x8: 3.2, x16: 6.4 } as const;
 /** The speed a shift starts at (4×). */
 export const DEFAULT_SPEED = SPEEDS.x4;

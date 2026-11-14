@@ -19,7 +19,7 @@ import type { ShiftHooks, Sorter } from './sorter';
 import type { ScreenTone } from './trucks';
 
 /** Shift minutes per real second unless the screens say otherwise. */
-const DEFAULT_SPEED = 8;
+const DEFAULT_SPEED = 1.6;
 /** The shift starts at ten in the evening (the door screens show clock times). */
 const START_MINUTES = 22 * 60;
 /** From this share of what its people can load, a dock's belt is kept full (it is backed up). */

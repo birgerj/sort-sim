@@ -107,12 +107,21 @@ export interface Director {
   enter(level: Level, cityNames: string[]): void;
   /** Play this shift from its start. onClock is called with the minutes played. */
   play(timeline: Timeline, onClock: (minute: number) => void, onDone: () => void): void;
-  /** Shift minutes per real second (the HUD's 1×, 4×, 16× map onto this). 0 = pause. */
+  /** Shift minutes per real second. 0 = pause; 0.4 is the hall's own pace (the HUD's 1×) and the
+   *  whole hall (people, belts, robots, trucks) moves faster with it. */
   setSpeed(minutesPerSecond: number): void;
   /** Jump to the end of the shift. */
   skip(): void;
   /** Back to the free simulation as it was. */
   exit(): void;
+  /** Fly the camera to this city's dock or robot lines and stay there; ends the automatic direction. */
+  focusCity?(city: number): void;
+  /** Automatic direction on (overview, cutting to events) or off (the player looks around). */
+  setAutoCamera?(on: boolean): void;
+  /** Called whenever the automatic direction goes on or off, also when the player moved the camera. */
+  onAutoCamera?(cb: (on: boolean) => void): void;
+  /** The closing shot after the last truck (a party at three stars); calls done when it is over. */
+  finale?(stars: number, done: () => void): void;
 }
 
 /** Prices and rates the briefing may show. The model has its own copy; these are for the screens. */

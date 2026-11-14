@@ -181,6 +181,19 @@
   border: 1px solid var(--edge);
   border-left: 12px solid var(--c);
   border-radius: 8px;
+  display: block;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shp-hud-card:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+.shp-hud-auto[hidden] {
+  display: none;
 }
 .shp-order.is-sel {
   outline: 2px solid var(--acc);

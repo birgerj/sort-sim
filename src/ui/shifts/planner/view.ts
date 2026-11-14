@@ -435,7 +435,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           h('div', { class: 'shp-facts shp-num shp-narrow' }, `About ${count(reach)} parcels to load here · room for ${count(f.capacity)}`),
         );
       } else if (!own.length) {
-        parts.push(h('p', { class: 'shp-muted', text: hasRobots && plan.robotCities.includes(c) ? 'This city goes to the robots only. Add a block to give it a dock as well.' : 'No block yet.' }));
+        parts.push(h('p', { class: 'shp-muted', text: hasRobots && plan.robotCities.includes(c) ? 'Robots load this city. A dock block is only needed if they cannot keep up.' : 'No block yet.' }));
       } else {
         parts.push(h('p', { class: 'shp-muted', text: `${plural(own.length, 'block', 'blocks')}. Tap one on the time line to change it.` }));
       }
@@ -445,9 +445,14 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         const on = plan.robotCities.includes(c);
         const lines = robotLines(city);
         foot.append(
-          h('button', { class: 'shp-switch-btn', type: 'button', role: 'switch', 'aria-checked': String(on), 'data-key': 'robots', onclick: () => commit(setRobotCity(level, plan, c, !on)) },
+          h('button', { class: 'shp-switch-btn', type: 'button', role: 'switch', 'aria-checked': String(on), 'data-key': 'robots', onclick: () => {
+            let next = setRobotCity(level, plan, c, !on);
+            // A switched-on city with no robots would do nothing: give the fleet enough for its lines.
+            if (!on && next.robots === 0) next = setRobots(level, next, lines * 3);
+            commit(next);
+          } },
             h('span', { class: 'shp-switch-knob', 'aria-hidden': 'true' }),
-            h('span', {}, h('b', { class: 'shp-wide', text: 'Robots for this city' }), h('b', { class: 'shp-narrow', text: 'Robots' }), h('small', { text: on ? `${plural(lines, 'line', 'lines')}, open ${clock(firstParcel(city))}–${clock(city.truck)}, up to ${lines * 60} an hour` : 'Off. A city can have docks and robots.' }))),
+            h('span', {}, h('b', { class: 'shp-wide', text: 'Robots for this city' }), h('b', { class: 'shp-narrow', text: 'Robots' }), h('small', { text: on ? (plan.robots ? `On · ${clock(firstParcel(city))}–${clock(city.truck)} · up to ${Math.min(lines * 60, plan.robots * RATES.robot)} an hour, shared with other robot cities. Docks are extra.` : 'On, but the fleet is 0: set robots below.') : 'Off. Robots load without a dock or people.' }))),
         );
       }
       foot.append(

@@ -11,6 +11,8 @@ export interface HudOptions {
   plan: Plan;
   onSpeed(minutesPerSecond: number): void;
   onSkip(): void;
+  onFocus?(city: number): void;
+  onAuto?(): void;
 }
 
 export interface ShiftHud {
@@ -18,14 +20,16 @@ export interface ShiftHud {
   setClock(minute: number): void;
   setTimeline(t: Timeline): void;
   done(): void;
+  setAuto(on: boolean): void;
 }
 
 /** The speed buttons: shift minutes per real second. */
 const SPEEDS = [
   { label: 'Pause', value: 0 },
-  { label: '1×', value: 2 },
-  { label: '4×', value: 8 },
-  { label: '16×', value: 32 },
+  { label: '1×', value: 0.4 },
+  { label: '4×', value: 1.6 },
+  { label: '8×', value: 3.2 },
+  { label: '16×', value: 6.4 },
 ] as const;
 const STATUS: Record<TruckStatus, string> = { onTime: 'On time', late: 'Late', incomplete: 'Not complete' };
 
@@ -73,7 +77,10 @@ export function shiftHud(o: HudOptions): ShiftHud {
       o.onSpeed(s.value);
     } }));
   const skip = h('button', { class: 'shp-pick shp-hud-skip', type: 'button', 'aria-label': 'Skip to result', onclick: () => o.onSkip() }, h('span', { class: 'shp-wide', text: 'Skip to result' }), h('span', { class: 'shp-narrow', text: 'Skip' }));
-  const controls = h('div', { class: 'shp-hud-speed', role: 'group', 'aria-label': 'Speed' }, ...speedButtons, skip);
+  // Shown only while the player has taken the camera: one tap gives it back to the direction.
+  const auto = h('button', { class: 'shp-pick shp-hud-auto', type: 'button', text: 'Auto', 'aria-label': 'Automatic camera', onclick: () => o.onAuto?.() });
+  auto.hidden = true;
+  const controls = h('div', { class: 'shp-hud-speed', role: 'group', 'aria-label': 'Speed' }, ...speedButtons, auto, skip);
 
   // Cards in the order the trucks are due.
   const order = level.cities.map((_, i) => i).sort((a, b) => level.cities[a]!.truck - level.cities[b]!.truck || a - b);
@@ -85,7 +92,7 @@ export function shiftHud(o: HudOptions): ShiftHud {
     const tag = h('span', { class: 'shp-hud-tag shp-num', title: 'Truck time', text: due(city.truck) });
     const bar = h('span');
     const line = h('div', { class: 'shp-hud-line shp-num', text: `0 of ${count(city.volume)}${compact ? '' : ' loaded'}` });
-    const el = h('div', { class: 'shp-hud-card', style: `--c:${cityColour(c)}` },
+    const el = h('button', { class: 'shp-hud-card', type: 'button', style: `--c:${cityColour(c)}`, 'aria-label': `Show ${name(c)}`, onclick: () => o.onFocus?.(c) },
       h('div', { class: 'shp-hud-card-top' }, h('b', { text: name(c) }), tag),
       h('div', { class: 'shp-hud-bar' }, bar),
       line);
@@ -167,6 +174,9 @@ export function shiftHud(o: HudOptions): ShiftHud {
       timeline = t;
       if (!over) sub.textContent = 'Plan locked · watch the shift';
       draw();
+    },
+    setAuto(on: boolean) {
+      auto.hidden = on;
     },
     done() {
       over = true;
