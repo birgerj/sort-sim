@@ -25,7 +25,7 @@ BADGE = [('lean', 'One person is enough'), ('lean3', 'Never more than 3 people a
          ('smallFleet', 'At most 6 robots'), ('lean6', 'Never more than 6 people at work'), ('allOnTime', 'Every truck on time'), ('onTime9', 'At least 9 trucks on time'),
          ('lean16', 'Never more than 16 people at work'), ('allOnTime', 'Every truck on time')]
 # Best profit found per level with plans in the game's shape (par.py; see REPORT.md).
-PAR = [177, 621, 779, 596, 1601, 2398, 7577, 12570, 13029, 19342]  # rounded down, so the best known plan scores at least 1000
+PAR = [177, 621, 779, 596, 1601, 2398, 7577, 12655, 13066, 19584]  # rounded down, so the best known plan scores at least 1000
 
 
 def level_json(L):

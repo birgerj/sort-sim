@@ -742,7 +742,7 @@
     "Doors"
    ]
   },
-  "par": 12570,
+  "par": 12655,
   "badge": {
    "id": "onTime9",
    "text": "At least 9 trucks on time"
@@ -927,7 +927,7 @@
     "Doors"
    ]
   },
-  "par": 13029,
+  "par": 13066,
   "badge": {
    "id": "lean16",
    "text": "Never more than 16 people at work"
@@ -1277,7 +1277,7 @@
     "Doors"
    ]
   },
-  "par": 19342,
+  "par": 19584,
   "badge": {
    "id": "allOnTime",
    "text": "Every truck on time"

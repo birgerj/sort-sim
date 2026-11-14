@@ -52,20 +52,28 @@ Level 10 is sensitive: at × 2.3 the plain plan scores about 390, at × 2.2 abou
 | 5 | 1601 | 1594, 1589, 1583, 1582; 1601.5 in the badge search | 380 | 511 | 7 (6) |
 | 6 | 2398 | 2399, 2397, 2378, 2350 | 412 | 535 | 6 (8) |
 | 7 | 7577 | 7565, 7520; polished 7577 | 213 | 575 | 27 (9) |
-| 8 | 12570 | 12494, 11958; polished 12571 | 0 | 525 | 25 (10) |
-| 9 | 13029 | polished 13020, 13020, 13029 | 0 | 574 | 40 (12) |
-| 10 | 19342 | polished 16651, then 19343 | 63 | 543 | 50 (16) |
+| 8 | 12655 | long run: 12571, 12403; polished 12633, 12633, 12656 | 0 | 522 | 26 (10) |
+| 9 | 13066 | long run: 13029, 13067; five polishing runs all 13067 | 0 | 573 | 34 (12) |
+| 10 | 19584 | long run: 19343, 19512; four polishing runs all 19585 | 63 | 536 | 53 (16) |
 
 Obvious plan: every city one dock with two people from first parcel to truck, no robots. Plain plan:
 `par.plain` (steady cities to robots, the others ceil(needed rate ÷ 150) docks with two people, largest
 first, while docks and people last).
 
-How sure: levels 1–6 are settled. Levels 7–9 had about six minutes of search each and moved under 1% in
-the last round. **Level 10 is not settled**: its last short run still gained 16%; expect more, which
-would pull its plain plan towards 500 or below. Run `par.py polish 10 300000 2 40` before par is frozen.
+How sure: levels 1–6 are settled. Levels 8, 9 and 10 had a longer search (about 15 minutes each, two
+restarts and four to five polishing runs from the best plan): level 10 rose 1.3% (19342 to 19584) and then
+stood still over four runs, level 9 rose 0.3% and stood still over five, level 8 rose 0.7% and was still
+creeping (12633 to 12656 in its last run). Level 7 had six minutes and moved under 1%. Nothing in the
+levels changed in that round; the plain plan stays above 500 in all three (522, 573, 536).
+
+One thing the long run showed: a block with two docks and two equal blocks side by side can score a
+little differently (a few Sorty, in one searched plan much more) when a third block of that city and crew
+starts with them, because the doors are then handed out in another order and docks are served by door.
+The saved best plans are in the form the search scored. Making docks of one city take parcels by what
+waits on their belt instead of by door number would remove this; that is a rule change and was not made.
 
 Blocks: the search prefers short plans (one Sorty per block as a tie-break) and writes blocks that follow
-each other as one. Levels 1–6 need 1 to 7 blocks. Levels 7–10 still take 25 to 50: the best plans change
+each other as one. Levels 1–6 need 1 to 7 blocks. Levels 7–10 still take 26 to 53: the best plans change
 crew size and dock count through the night, about three blocks a city. On a phone that is a lot; a
 plan with one or two blocks a city (the plain plan) earns one star, and what 2 blocks a city can reach
 has not been searched.

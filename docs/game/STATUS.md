@@ -32,13 +32,15 @@ Each agent keeps its own section up to date in its own branch: done, doing, bloc
   block cut in two is the same plan; `tests/shiftsCuts.test.ts`, `par.py invariance`). A full buffer
   refuses parcels (`Result.buffer.refused`). DESIGN.md says both in words.
 - Done: level 3 small cities' trucks earlier, level 4 third city 90 parcels, level 8 14 docks, level 10
-  volume × 2.2. Par 177, 621, 779, 596, 1601, 2398, 7577, 12570, 13029, 19342.
+  volume × 2.2. Par 177, 621, 779, 596, 1601, 2398, 7577, 12655, 13066, 19584.
 - Done: badges lean, lean3, fleet3, lean3, smallFleet, lean6, allOnTime, onTime9, lean16, allOnTime.
 - Fixtures regenerated: `src/shifts/levels.json`, `tests/fixtures/shifts/golden.json`,
   `tests/fixtures/shifts/level4.json` (example now profit 502, score 842, two stars, badge true).
 - Tests changed to follow the numbers: shiftsModel, shiftsPlanEdit, shiftsProgress, shiftsEstimate,
   shiftsDirector (level 4's third city, level 3's truck times, level 10's volume). New: shiftsCuts.
-- Not done: level 10's par was still rising when its six minutes were up. Best plans of levels 7–10
+- Done (round 6): longer par search for levels 8, 9, 10: par 12655, 13066, 19584 (was 12570, 13029, 19342);
+  plain plan 522, 573, 536; no level changed. `levels.json` and the fixtures regenerated (only `par` moved).
+- Open: level 8 was still creeping (under 0.2% a run). Best plans of levels 7–10
   have 25 to 50 blocks; what a plan of two blocks a city can reach has not been searched.
 
 ## C1 · screens
