@@ -2,7 +2,7 @@
 // boards, and wall clocks with the real time. Drawn on canvases and redrawn
 // every couple of seconds (clocks every second).
 import * as THREE from 'three';
-import { daysToChristmas, XMAS } from '../sim/season';
+import { daysToChristmas, shows } from '../sim/season';
 import type { ScanInfo } from './sorter';
 
 /** Counters the scene keeps; rates are worked out here. */
@@ -147,7 +147,7 @@ export class Screens {
     g.fillStyle = '#ffffff';
     g.font = '700 30px system-ui, sans-serif';
     g.textBaseline = 'middle';
-    g.fillText(XMAS ? 'Hub plan · live · Happy holidays ★' : 'Hub plan · live', 20, 27);
+    g.fillText(shows('snow') ? 'Hub plan · live · Happy holidays ★' : 'Hub plan · live', 20, 27);
     g.font = '600 18px system-ui, sans-serif';
     const clear = m.doors.filter((d) => d.state === 'cleardown' || d.state === 'closing').length;
     const away = m.doors.filter((d) => d.state !== 'open' && d.state !== 'cleardown' && d.state !== 'closing').length;
@@ -451,8 +451,8 @@ export class Screens {
     };
     cell(24, 'Parcels / hour', Math.round(this.rate()).toLocaleString('en'), PURPLE);
     cell(360, 'Boxes to trucks', String(s.boxesShipped), TEAL);
-    if (XMAS) {
-      // Christmas: a countdown instead of the full boxes.
+    if (shows('snow')) {
+      // Christmas (or the last trophy of the planning game): a countdown instead of the full boxes.
       const d = daysToChristmas();
       cell(690, d ? 'Days to Christmas' : 'Merry Christmas', d ? String(d) : '★', '#c8102e');
     } else cell(690, 'Full boxes', String(s.fullBoxes), MAGENTA);

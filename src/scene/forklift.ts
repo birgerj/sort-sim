@@ -9,7 +9,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { FloorKit } from './floor';
 import { buildHuman } from './people';
 import { sit } from './motion';
-import { onXmas, XMAS } from '../sim/season';
+import { onDecor, shows } from '../sim/season';
 
 export interface ForkliftModel {
   g: THREE.Group;
@@ -111,7 +111,13 @@ function geometry(): Record<string, G> {
 const xmasMats = new Map<number, THREE.MeshBasicMaterial>();
 /** Every forklift's Christmas lights. */
 const XMAS_PARTS: THREE.Object3D[] = [];
-onXmas((on) => XMAS_PARTS.forEach((x, i) => setTimeout(() => (x.visible = XMAS), on ? 600 + i * 400 : 0)));
+let lightsOn = shows('forklifts');
+onDecor(() => {
+  const on = shows('forklifts');
+  if (on === lightsOn) return;
+  lightsOn = on;
+  XMAS_PARTS.forEach((x, i) => setTimeout(() => (x.visible = shows('forklifts')), on ? 600 + i * 400 : 0));
+});
 /** Lit materials for the Christmas bulbs (shared, so the parts stay instanced). */
 function xmasMat(k: FloorKit, i: number, c: THREE.Color): THREE.MeshBasicMaterial {
   void k;
@@ -176,7 +182,7 @@ export function buildForklift(k: FloorKit, load: number | null): ForkliftModel {
     // Christmas: bulbs along the overhead guard (red, green, gold) and a red nose on the mast
     // (always there, shown while it is Christmas).
     const xg = new THREE.Group();
-    xg.visible = XMAS;
+    xg.visible = shows('forklifts');
     g.add(xg);
     XMAS_PARTS.push(xg);
     const bulb = (x: number, z: number) => new THREE.SphereGeometry(0.04, 6, 5).translate(x, 2.25, z);

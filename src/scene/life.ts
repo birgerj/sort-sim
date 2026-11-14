@@ -10,7 +10,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 import type { FloorKit } from './floor';
 import { buildForklift } from './forklift';
-import { onXmas, XMAS } from '../sim/season';
+import { onDecor, shows } from '../sim/season';
 import { buildHuman, type Human } from './people';
 import { gait, relaxArms, settle, settleFace, sit, swingArms } from './motion';
 import { CLIPS, poseClip } from './clips';
@@ -583,8 +583,8 @@ export class Life {
       // Father Christmas walks a round by the control room, waving (while it is Christmas).
       const h = buildHuman(k, { shirt: 0xc8102e, trousers: 0xc8102e, skin: 0xf0cfb0, hair: 0xffffff, santa: true });
       this.group.add(h.root);
-      h.root.visible = XMAS;
-      onXmas(() => setTimeout(() => (h.root.visible = XMAS), XMAS ? 1500 : 0));
+      h.root.visible = shows('snow');
+      onDecor(() => setTimeout(() => (h.root.visible = shows('snow')), shows('snow') ? 1500 : 0));
       h.armR.userData.wave = true;
       this.walkers.push(walker(h, new Route([[-55, 15], [-46.5, 15], [-46.5, 18.3], [-55, 18.3]]), 0.35, 0));
     }

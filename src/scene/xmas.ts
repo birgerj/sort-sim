@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
+import type { Decoration } from '../shifts/trophies';
 import type { FloorKit } from './floor';
 
 export interface XmasLayout {
@@ -120,6 +121,30 @@ const bounceOut = (x: number) => {
 };
 const elasticOut = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : 2 ** (-9 * x) * Math.sin((x * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1);
 
+/** The kinds of decoration this file builds (the others are with the forklifts, the people and the parcels). */
+const BUILT: Decoration[] = ['lights', 'wreaths', 'canes', 'garlands', 'stars', 'trees', 'market', 'snow'];
+
+/**
+ * All the decorations of this file, one `Xmas` per kind, so each can come and go on its own:
+ * when Christmas is switched, and when the trophy of its kind is earned in the planning game.
+ */
+export class XmasSet {
+  private readonly kinds = new Map<Decoration, Xmas>();
+
+  constructor(k: FloorKit, L: XmasLayout, shows: (id: Decoration) => boolean) {
+    for (const id of BUILT) this.kinds.set(id, new Xmas(k, L, shows(id), id));
+  }
+
+  /** Bring every kind to what should be in sight now; what changes comes in (or goes) as a wave from `from`. */
+  sync(shows: (id: Decoration) => boolean, from: THREE.Vector3): void {
+    for (const [id, x] of this.kinds) x.set(shows(id), from);
+  }
+
+  update(bt: number, night: number, kick: number): void {
+    for (const x of this.kinds.values()) x.update(bt, night, kick);
+  }
+}
+
 export class Xmas {
   /** Everything, hidden while it is not Christmas. */
   readonly root = new THREE.Group();
@@ -159,6 +184,8 @@ export class Xmas {
     private k: FloorKit,
     private L: XmasLayout,
     on: boolean,
+    /** Build only this kind of decoration (all of them without it). */
+    only?: Decoration,
   ) {
     this.on = on;
     this.root.visible = on;
@@ -191,17 +218,20 @@ export class Xmas {
       }
     });
     this.flakeMat = new THREE.MeshBasicMaterial({ map: flake, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(0.7, 0.85, 1) });
-    this.buildLightStrings();
-    this.buildGarlands();
-    this.buildWreaths();
-    this.trees(L.trees);
-    for (const c of L.canes) this.cane(c.x, c.z, c.ry);
-    this.buildStars();
-    this.buildSnow();
-    this.buildMarket();
-    this.buildHangers();
-    this.swagMesh = new THREE.Mesh(merge(this.swags.map((x) => x.geo)), this.k.std(0x14532d, 0.9, 0, GREEN));
-    this.add(this.swagMesh);
+    const has = (id: Decoration) => !only || only === id;
+    if (has('lights')) this.buildLightStrings();
+    if (has('garlands')) this.buildGarlands();
+    if (has('wreaths')) this.buildWreaths();
+    if (has('trees')) this.trees(L.trees);
+    if (has('canes')) for (const c of L.canes) this.cane(c.x, c.z, c.ry);
+    if (has('stars')) this.buildStars();
+    if (has('snow')) this.buildSnow();
+    if (has('market')) this.buildMarket();
+    if (has('stars')) this.buildHangers();
+    if (this.swags.length) {
+      this.swagMesh = new THREE.Mesh(merge(this.swags.map((x) => x.geo)), this.k.std(0x14532d, 0.9, 0, GREEN));
+      this.add(this.swagMesh);
+    }
   }
 
   // ---------- coming in and going ----------
@@ -218,11 +248,13 @@ export class Xmas {
     for (const h of this.hangers) h.del = delay(h.at) + 0.3;
     // The swags in the order the wave reaches them.
     const order = this.swags.map((sw) => ({ sw, del: delay(sw.at) })).sort((a, b) => a.del - b.del);
-    this.swagMesh!.geometry.dispose();
-    this.swagMesh!.geometry = merge(order.map((o) => o.sw.geo));
+    if (this.swagMesh) {
+      this.swagMesh.geometry.dispose();
+      this.swagMesh.geometry = merge(order.map((o) => o.sw.geo));
+    }
     let n = 0;
     this.swagEnds = order.map((o) => ({ n: (n += o.sw.geo.attributes.position!.count), del: o.del }));
-    this.lastDel = Math.max(...this.pieces.map((p) => p.del), ...this.insts.flatMap((x) => x.del), ...order.map((o) => o.del), ...this.hangers.map((h) => h.del));
+    this.lastDel = Math.max(0, ...this.pieces.map((p) => p.del), ...this.insts.flatMap((x) => x.del), ...order.map((o) => o.del), ...this.hangers.map((h) => h.del));
     this.root.visible = true;
   }
 
@@ -244,7 +276,7 @@ export class Xmas {
     }
     // The swags, nearest first: coming, those the wave has reached (the first one not yet whole
     // growing along its length); going, the nearest gone first.
-    const geo = this.swagMesh!.geometry;
+    const geo = this.swagMesh?.geometry;
     const ends = this.swagEnds;
     if (on) {
       let n = 0;
@@ -254,11 +286,11 @@ export class Xmas {
         n = start + Math.floor(((ends[i]!.n - start) * x) / 3) * 3;
         if (x < 1) break;
       }
-      geo.setDrawRange(0, n);
+      geo?.setDrawRange(0, n);
     } else {
       let start = 0;
       for (const e of ends) if (f(e.del) <= 0) start = e.n;
-      geo.setDrawRange(start, Math.max(0, (ends[ends.length - 1]?.n ?? 0) - start));
+      geo?.setDrawRange(start, Math.max(0, (ends[ends.length - 1]?.n ?? 0) - start));
     }
     this.flakeFade = on ? Math.min(1, t / 2) : 1 - Math.min(1, t / 0.8);
     if (t > (on ? this.lastDel + IN : this.lastDel * 0.4 + OUT) + 0.1) {
@@ -266,7 +298,7 @@ export class Xmas {
       this.flakeFade = 1;
       for (const h of this.hangers) h.f = 1;
       if (!on) this.root.visible = false;
-      geo.setDrawRange(0, Infinity);
+      geo?.setDrawRange(0, Infinity);
     }
   }
 

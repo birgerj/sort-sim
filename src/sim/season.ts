@@ -1,3 +1,5 @@
+import { decorationShown, type Decoration } from '../shifts/trophies';
+
 // Christmas: the hall dressed for the holidays (Settings → Christmas, or ?xmas=1 / ?xmas=0).
 // The decorations are always built with the hall, and shown or hidden: it can be switched while
 // the hall runs (setXmas).
@@ -32,6 +34,38 @@ export function setXmas(on: boolean): void {
   XMAS = on;
   for (const fn of xmasListeners) fn(on);
 }
+
+// Trophies: a badge earned in the planning game leaves one kind of decoration standing in the
+// hall, Christmas or not (see src/shifts/trophies.ts).
+
+let earned: number[] = [];
+const decorListeners: (() => void)[] = [];
+
+/** The levels whose badge has been earned: their decorations show from now on (live, like setXmas). */
+export function setTrophies(levels: number[]): void {
+  const next = [...new Set(levels.filter((l) => Number.isInteger(l)))].sort((a, b) => a - b);
+  if (next.length === earned.length && next.every((l, i) => l === earned[i])) return;
+  earned = next;
+  for (const fn of decorListeners) fn();
+}
+
+/** The levels whose trophy stands in the hall. */
+export function trophies(): number[] {
+  return earned.slice();
+}
+
+/** Is this kind of decoration in sight now (Christmas on, or its trophy earned)? */
+export function shows(id: Decoration): boolean {
+  return decorationShown(id, XMAS, earned);
+}
+
+/** Be told when what is in sight may have changed: Christmas switched, or a trophy earned. */
+export function onDecor(fn: () => void): void {
+  decorListeners.push(fn);
+}
+onXmas(() => {
+  for (const fn of decorListeners) fn();
+});
 
 /** Whole days until Christmas Day (0 on the 25th and 26th). */
 export function daysToChristmas(d = new Date()): number {

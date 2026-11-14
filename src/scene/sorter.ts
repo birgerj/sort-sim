@@ -44,8 +44,8 @@ import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShaft
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
-import { Xmas } from './xmas';
-import { onXmas, XMAS } from '../sim/season';
+import { XmasSet } from './xmas';
+import { onDecor, shows } from '../sim/season';
 import { Party } from './party';
 import { Roof, ceilingWithLights, roofLights } from './roof';
 import { Crowd } from './crowd';
@@ -1442,7 +1442,7 @@ export class Sorter implements Scene3D {
   // Day / night look.
   private day = 0;
   /** Christmas decorations (Settings → Christmas). */
-  private xmas: Xmas | null = null;
+  private xmas: XmasSet | null = null;
   private dayShown: boolean | null = null;
   private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number; rc?: THREE.Color; rr?: number; rm?: number }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
@@ -1639,7 +1639,7 @@ export class Sorter implements Scene3D {
       }
       const beams: number[] = [];
       for (let x = WX + 2; x <= EX - 2; x += 10) beams.push(x);
-      this.xmas = new Xmas(this, {
+      this.xmas = new XmasSet(this, {
         wx: WX,
         ex: EX,
         hz: HZ,
@@ -1678,8 +1678,9 @@ export class Sorter implements Scene3D {
         ],
         snow: [...Array.from({ length: 11 }, (_, k) => ({ x: -36 + k * 12, z: 0 })), { x: -58, z: 12 }, { x: -58, z: -14 }, { x: -26, z: -20 }],
         market: { x: -28.6, z: 32.6 },
-      }, XMAS);
-      onXmas((on) => this.xmas?.set(on, this.lookPoint()));
+      }, shows);
+      // (Christmas switched, or a trophy earned in the planning game: what is new comes in from where the camera looks.)
+      onDecor(() => this.xmas?.sync(shows, this.lookPoint()));
     }
     this.life = new Life(this, {
       wx: WX,
@@ -1837,8 +1838,13 @@ export class Sorter implements Scene3D {
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     // At Christmas the dancers keep clear of the trees in the middle.
     const treeSpots = XMAS_MID_TREES.map(({ x, z }) => ({ x, z, r: 2.6 }));
-    this.crowd.setAvoid(treeSpots, XMAS, true);
-    onXmas((on) => this.crowd.setAvoid(treeSpots, on));
+    this.crowd.setAvoid(treeSpots, shows('trees'), true);
+    let treesUp = shows('trees');
+    onDecor(() => {
+      if (shows('trees') === treesUp) return;
+      treesUp = !treesUp;
+      this.crowd.setAvoid(treeSpots, treesUp);
+    });
     this.eggs = new Eggs(this);
     this.eggs.link({ life: this.life, docks: this.docks, party: this.party, floor: this.floor, tableY: DECK_Y });
     ANTICS.build(this);
@@ -2606,7 +2612,7 @@ export class Sorter implements Scene3D {
       lead: false,
       shape: bag ? 1 : tube ? 2 : 0,
       // Christmas: some boxes are presents, in wrapping paper with a ribbon round them.
-      gift: XMAS && !env && !bag && !tube && !big && Math.random() < 0.18,
+      gift: shows('gifts') && !env && !bag && !tube && !big && Math.random() < 0.18,
       scanned: false,
       flash: 0,
       dest: 0,
