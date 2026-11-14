@@ -18,10 +18,10 @@
 // hall's beats, so the hall and the clock can never drift apart.
 import * as THREE from 'three';
 
+import { CITY_COLOURS, cityHex } from '../shifts/colours';
 import type { Director, Level, Timeline } from '../shifts/contract';
 import { CITIES, areas, split } from '../sim/postcodes';
 import {
-  CITY_COLOURS,
   CLEARDOWN_MINUTES,
   arrivedAt,
   buildSchedule,
@@ -300,10 +300,10 @@ export function createDirector(scene: Sorter): Director {
       trucks.warn(d, st.lamp);
       const city = st.city >= 0 ? CITIES[st.city] : undefined;
       docks.directDock(d, {
-        cages: st.city >= 0 && (st.open || !st.leftBehind),
+        cages: st.open,
         people: st.people,
         name,
-        colour: `#${(CITY_COLOURS[((st.city % CITY_COLOURS.length) + CITY_COLOURS.length) % CITY_COLOURS.length] ?? 0x5a6170).toString(16).padStart(6, '0')}`,
+        colour: cityHex(st.city),
         // (The cards carry the city's own postcodes when the country has that town.)
         ranges: city && city.name === name ? split(city, 6) : null,
         allow: st.open && st.stint ? inHall(sample(st.stint.loaded, minute, s.stepMinutes), factor) : 0,
@@ -312,7 +312,7 @@ export function createDirector(scene: Sorter): Director {
       });
       const [main, sub, tone] = screenText(s, d, st, name);
       trucks.say(d, main, sub, tone);
-      scene.shiftSign(d, main, st.open ? 'loading' : st.city >= 0 && !st.leftBehind ? 'getting ready' : 'closed');
+      scene.shiftSign(d, main, st.open ? 'loading' : 'closed');
     }
     fleet.limit = robotsAt(s, minute);
     s.robotCities.forEach((rc, n) => {
@@ -337,14 +337,11 @@ export function createDirector(scene: Sorter): Director {
       if (st.lamp) return [`${no} · ${name}`, `LAST CAGES · ${truck}`, 'warn'];
       return [`${no} · ${name}`, `loading · ${st.people === 2 ? '2 people' : '1 person'} · ${truck}`, 'ok'];
     }
-    if (st.leftBehind > 0) return [`${no} · ${name}`, `${st.leftBehind} parcels left behind`, 'bad'];
-    if (st.city >= 0) return [`${no} · ${name}`, `getting ready · opens ${hhmm(st.stint!.start)}`, 'ok'];
-    // Down: how the last truck from here left, until the door is used again.
-    const past = s.stints.filter((x) => x.door === d && x.end <= minute && x.status).sort((a, b) => b.end - a.end)[0];
-    if (past) {
-      const text = past.status === 'late' ? `truck left late · ${hhmm(past.end)}` : `truck left on time · ${hhmm(past.end)}`;
-      return [`${no} · ${cityName(past.city)}`, text, past.status === 'late' ? 'bad' : 'off'];
-    }
+    // Only a door with an open block shows a city. Any other is dark: closed, with at most when
+    // it opens next or what its last truck left standing.
+    void s;
+    if (st.leftBehind > 0) return [no, `${st.leftBehind} parcels left behind`, 'bad'];
+    if (st.city >= 0 && st.stint) return [no, `closed · opens ${hhmm(st.stint.start)}`, 'off'];
     return [no, 'closed', 'off'];
   }
 
@@ -480,6 +477,7 @@ export function createDirector(scene: Sorter): Director {
     scene.shiftReset(true);
     fleet.limit = 0;
     fleet.retask = true;
+    if (!floor.near) floor.shiftBoards(true);
     floor.near = true;
     scene.shiftBuffer(0, Infinity);
     hooks.inflow = 0;
@@ -619,7 +617,7 @@ export function createDirector(scene: Sorter): Director {
   function restoreSouth(): void {
     const { trucks } = scene.shiftParts();
     for (const [k, [city, pc]] of saved?.south ?? []) {
-      trucks.label(k, city, pc);
+      trucks.label(k, city, pc, false);
       trucks.warn(k, false);
     }
     saved?.south.clear();
@@ -739,6 +737,7 @@ export function createDirector(scene: Sorter): Director {
       p.fleet.limit = Infinity;
       p.fleet.retask = false;
       p.floor.near = false;
+      p.floor.shiftBoards(false);
       if (saved) {
         scene.rate = saved.rate;
         scene.setBeltSpeed(saved.belt);

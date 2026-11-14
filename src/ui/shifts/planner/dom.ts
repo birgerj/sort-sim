@@ -1,4 +1,5 @@
 // Ten Shifts planner: small helpers shared by the planner and the shift HUD (plain DOM, no framework).
+import { CITY_COLOURS } from '../../../shifts/colours';
 import { CURRENCY } from '../../../shifts/contract';
 
 type Child = Node | string | null | undefined | false;
@@ -29,8 +30,6 @@ export const count = (n: number): string => Math.round(n).toLocaleString('en-US'
 export const money = (n: number): string => `${Math.round(n) < 0 ? '− ' : ''}${CURRENCY} ${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 export const plural = (n: number, one: string, many: string): string => `${count(n)} ${n === 1 ? one : many}`;
 
-/** Muted colours per city, used when the game root does not define its own. */
-const CITY_COLOURS = ['#a5dccf', '#f3c3a2', '#cdc7ef', '#f2d98b', '#b9d7f2', '#f1bccb', '#c5e0a5', '#d9c2a7', '#9fd3e0', '#e3b9e6', '#e9cf9f', '#b7c4ee', '#bfe3c6', '#f0b7a8', '#d6d99c', '#c9c9d6'];
 export const cityColour = (city: number): string => `var(--sh-city-${((city % 16) + 16) % 16}, ${CITY_COLOURS[((city % 16) + 16) % 16]})`;
 
 export const cityName = (names: readonly string[], city: number): string => names[city] || `City ${city + 1}`;

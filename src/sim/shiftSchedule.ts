@@ -297,9 +297,6 @@ export function doorsUsed(s: ShiftSchedule): number {
 
 // ---------- the plan's parcels in the hall ----------
 
-/** The cities' colours, as on the game's cards (sixteen, then they repeat). */
-export const CITY_COLOURS = [0x2b7f70, 0xa4623a, 0x5b4fa8, 0x8a6f14, 0x2f62a8, 0xa23d68, 0x4c7d2a, 0x7a6042, 0x1f7892, 0x8a3f97, 0xa04040, 0x6b7422, 0x3c53a6, 0x2a7a55, 0x5a6170, 0x9a5a1c];
-
 /** Parcels of city `city` that have come in by `minute` (all of them once its arrivals are over). */
 export function arrivedAt(level: Level, city: number, minute: number): number {
   const c = level.cities[city];
