@@ -17,7 +17,7 @@ FRESH = ['Plan one dock: start, end, and 1 or 2 people.',
          'The buffer is small tonight. Choose what you let wait.',
          'Full hall: you need every dock and every robot. The robots are off from 01:00 to 02:00 and one truck leaves early.',
          'A large batch for one city at 01:00. Not everything fits tonight: choose what stays behind.',
-         'People cost 50% more and you get 28 at most.',
+         'People cost 50% more tonight. Two on every dock is no longer the easy answer.',
          'Everything at once: batch, late inbound, small buffer, a limit on people.']
 SET = [['Unloading', 'Robots are off', 'Doors'], ['Unloading', 'Robots are off', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Robots are off', 'Doors'],
        ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors'], ['Unloading', 'Doors']]

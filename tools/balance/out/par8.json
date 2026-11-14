@@ -1,19 +1,19 @@
 {
  "level": 8,
- "profit": 13699.017316056412,
+ "profit": 13557.282989686808,
  "plan": {
   "blocks": [
    {
     "city": 0,
-    "start": 0,
-    "end": 60,
+    "start": 30,
+    "end": 90,
     "people": 2,
     "docks": 1
    },
    {
     "city": 0,
-    "start": 30,
-    "end": 90,
+    "start": 60,
+    "end": 120,
     "people": 2,
     "docks": 1
    },
@@ -27,7 +27,7 @@
    {
     "city": 0,
     "start": 120,
-    "end": 270,
+    "end": 180,
     "people": 2,
     "docks": 1
    },
@@ -36,27 +36,48 @@
     "start": 180,
     "end": 240,
     "people": 2,
+    "docks": 2
+   },
+   {
+    "city": 0,
+    "start": 240,
+    "end": 300,
+    "people": 1,
     "docks": 1
    },
    {
     "city": 0,
     "start": 240,
-    "end": 390,
-    "people": 2,
+    "end": 330,
+    "people": 1,
     "docks": 1
    },
    {
     "city": 0,
-    "start": 270,
-    "end": 330,
+    "start": 300,
+    "end": 360,
     "people": 2,
     "docks": 1
    },
    {
     "city": 0,
     "start": 330,
-    "end": 420,
+    "end": 390,
     "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 360,
+    "end": 420,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 360,
+    "end": 450,
+    "people": 1,
     "docks": 1
    },
    {
@@ -71,19 +92,19 @@
     "start": 0,
     "end": 60,
     "people": 2,
-    "docks": 2
+    "docks": 1
    },
    {
     "city": 1,
     "start": 0,
     "end": 90,
-    "people": 1,
+    "people": 2,
     "docks": 1
    },
    {
     "city": 1,
     "start": 30,
-    "end": 90,
+    "end": 120,
     "people": 2,
     "docks": 1
    },
@@ -92,14 +113,14 @@
     "start": 60,
     "end": 120,
     "people": 2,
-    "docks": 2
+    "docks": 1
    },
    {
     "city": 1,
     "start": 90,
     "end": 150,
     "people": 2,
-    "docks": 2
+    "docks": 1
    },
    {
     "city": 1,
@@ -117,64 +138,78 @@
    },
    {
     "city": 1,
-    "start": 240,
-    "end": 300,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 1,
     "start": 270,
     "end": 330,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 2,
-    "start": 60,
-    "end": 120,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 2,
-    "start": 120,
-    "end": 180,
     "people": 2,
     "docks": 1
    },
    {
     "city": 2,
-    "start": 180,
-    "end": 240,
+    "start": 30,
+    "end": 90,
     "people": 2,
-    "docks": 3
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 90,
+    "end": 150,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 150,
+    "end": 210,
+    "people": 2,
+    "docks": 2
    },
    {
     "city": 2,
     "start": 180,
     "end": 270,
     "people": 2,
-    "docks": 1
+    "docks": 2
    },
    {
     "city": 2,
-    "start": 240,
+    "start": 210,
+    "end": 270,
+    "people": 2,
+    "docks": 2
+   },
+   {
+    "city": 2,
+    "start": 210,
     "end": 300,
     "people": 2,
     "docks": 1
    },
    {
     "city": 2,
-    "start": 240,
-    "end": 390,
+    "start": 270,
+    "end": 330,
     "people": 2,
+    "docks": 2
+   },
+   {
+    "city": 2,
+    "start": 270,
+    "end": 360,
+    "people": 1,
     "docks": 1
    },
    {
     "city": 2,
-    "start": 300,
-    "end": 360,
+    "start": 330,
+    "end": 390,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 360,
+    "end": 420,
     "people": 2,
     "docks": 1
    },
@@ -188,21 +223,21 @@
    {
     "city": 3,
     "start": 120,
-    "end": 210,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 3,
-    "start": 210,
-    "end": 390,
+    "end": 180,
     "people": 1,
     "docks": 1
    },
    {
     "city": 3,
-    "start": 300,
-    "end": 360,
+    "start": 180,
+    "end": 240,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 240,
+    "end": 390,
     "people": 2,
     "docks": 1
    },
@@ -211,7 +246,7 @@
     "start": 360,
     "end": 420,
     "people": 2,
-    "docks": 2
+    "docks": 1
    },
    {
     "city": 3,
@@ -222,10 +257,10 @@
    },
    {
     "city": 3,
-    "start": 420,
+    "start": 390,
     "end": 480,
-    "people": 1,
-    "docks": 2
+    "people": 2,
+    "docks": 1
    },
    {
     "city": 4,
@@ -236,13 +271,6 @@
    },
    {
     "city": 4,
-    "start": 30,
-    "end": 90,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 4,
     "start": 60,
     "end": 120,
     "people": 1,
@@ -250,8 +278,8 @@
    },
    {
     "city": 4,
-    "start": 90,
-    "end": 150,
+    "start": 60,
+    "end": 120,
     "people": 2,
     "docks": 1
    },
@@ -260,7 +288,7 @@
     "start": 120,
     "end": 180,
     "people": 2,
-    "docks": 1
+    "docks": 2
    },
    {
     "city": 4,
@@ -270,43 +298,70 @@
     "docks": 1
    },
    {
-    "city": 4,
-    "start": 180,
-    "end": 270,
-    "people": 2,
-    "docks": 1
-   },
-   {
     "city": 5,
-    "start": 150,
-    "end": 300,
+    "start": 120,
+    "end": 450,
     "people": 2,
     "docks": 1
    },
    {
     "city": 6,
-    "start": 30,
+    "start": 0,
+    "end": 60,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 6,
+    "start": 0,
+    "end": 90,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 6,
+    "start": 60,
+    "end": 150,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 6,
+    "start": 150,
     "end": 210,
     "people": 2,
     "docks": 1
    },
    {
-    "city": 7,
-    "start": 360,
-    "end": 450,
-    "people": 2,
+    "city": 9,
+    "start": 270,
+    "end": 330,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 9,
+    "start": 330,
+    "end": 390,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 9,
+    "start": 390,
+    "end": 480,
+    "people": 1,
     "docks": 1
    }
   ],
   "robotCities": [
    0,
-   2,
+   1,
    3,
+   4,
    5,
-   6,
    7,
-   8,
-   9
+   8
   ],
   "robots": 20
  },
@@ -335,23 +390,30 @@
     13699.02,
     13699.02
    ]
+  },
+  {
+   "iters": 150000,
+   "restarts": [
+    13557.28,
+    13393.31
+   ]
   }
  ],
  "detail": {
-  "profit": 13699.017316056412,
-  "rev": 18426.499999999996,
+  "profit": 13557.282989686808,
+  "rev": 18398.749999999993,
   "bonus": 2969.9999999999995,
   "late": 0.0,
-  "left": 789.1666666666674,
-  "dock": 1550.0,
-  "staff": 3435.0,
+  "left": 501.25000000000455,
+  "dock": 1700.0,
+  "staff": 3690.0,
   "robots": 1760.0,
-  "store": 163.31601727691714,
+  "store": 160.2170103131817,
   "peak": 800.0,
   "ontime": 9
  },
  "peaks": [
-  24,
-  12
+  22,
+  11
  ]
 }

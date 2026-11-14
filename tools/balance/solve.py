@@ -234,7 +234,7 @@ def levels0():
         vb = [1500, 1300, 1300, 1100] + [230] * 10
         ds = [D(vb[i], a10[i], d10[i] - 30, d10[i], p10[i]) for i in range(14)]
         Ls[9] = level(10, 480, ds, 20, 20, 30, store=400, cap=20)
-    vs = os.environ.get('VSCALE', '7:2.3,8:3,9:2.5,10:3')
+    vs = os.environ.get('VSCALE', '7:2.3,8:3,9:2.5,10:2.8')
     if vs:
         fs = {int(a.split(':')[0]): float(a.split(':')[1]) for a in vs.split(',')}
         for L in Ls:
@@ -244,7 +244,7 @@ def levels0():
                 for i, d in enumerate(L['dests']):
                     d['v'] = float(L['arr'][:, i].sum())
                 if L['n'] == 9:
-                    L['cap'] = 28
+                    L['cap'] = 32
                 if L['n'] == 10:
                     L['cap'] = 40
     return Ls
