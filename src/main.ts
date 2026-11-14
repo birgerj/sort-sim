@@ -54,6 +54,8 @@ window.addEventListener('error', (e) => {
   // "Script error." without a file comes from a script of another origin (the browser's page
   // translation, an extension): nothing of ours, and nothing to show.
   if (!e.filename && (!e.message || e.message === 'Script error.')) return;
+  // A browser notice, not a fault: a size observer could not deliver everything in one frame.
+  if (e.message?.startsWith('ResizeObserver loop')) return;
   showProblem('Something went wrong', `${e.message}\n${e.filename?.split('/').pop() ?? ''}:${e.lineno}:${e.colno}`);
 });
 window.addEventListener('unhandledrejection', (e) => showProblem('Something went wrong', String((e.reason as Error)?.stack ?? e.reason)));

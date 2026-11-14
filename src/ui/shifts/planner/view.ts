@@ -581,12 +581,19 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   // once the view is on the page).
   let lastWidth = -1;
   if (typeof ResizeObserver !== 'undefined') {
+    // Drawing again changes sizes, so it waits for the next frame: redrawing inside the observer's
+    // own callback makes the browser report a "ResizeObserver loop" error.
+    let pending = 0;
     new ResizeObserver(() => {
-      const w = scroll.clientWidth + root.clientWidth * 10000;
-      if (w !== lastWidth) {
-        lastWidth = w;
-        render();
-      }
+      if (pending) return;
+      pending = requestAnimationFrame(() => {
+        pending = 0;
+        const w = scroll.clientWidth + root.clientWidth * 10000;
+        if (w !== lastWidth) {
+          lastWidth = w;
+          render();
+        }
+      });
     }).observe(root);
   }
   render();
