@@ -140,7 +140,13 @@ function badgeGoal(level: Level, plan: Plan, statuses: TruckStatus[], bufferPeak
  * Plays the shift. The plan must be startable (see checkPlan); a plan whose blocks do not fit the
  * docks cannot be played and throws.
  */
-export function simulate(level: Level, plan: Plan): ShiftOutcome {
+export function simulate(level: Level, given: Plan): ShiftOutcome {
+  // The same plan must score the same however its blocks are listed: put them in one fixed order.
+  const plan: Plan = {
+    blocks: [...given.blocks].sort((a, b) => a.city - b.city || a.start - b.start || a.end - b.end || a.people - b.people || a.docks - b.docks),
+    robotCities: [...new Set(given.robotCities)].sort((a, b) => a - b),
+    robots: given.robots,
+  };
   const { placed, unplaced } = assignDoors(level, plan);
   if (unplaced.length > 0) throw new Error('This plan needs more docks than the level has.');
 
