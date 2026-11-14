@@ -3254,6 +3254,8 @@ export class Sorter implements Scene3D {
 
   /** Take a dock chute down now (a random running one without `chute`); false when none could. */
   fault(chute?: number): boolean {
+    // (No faults during a shift of the planning game.)
+    if (this.shift) return false;
     const f = this.faults.trigger(this.bt, chute);
     if (f) this.crew?.report(f);
     if (f) this.kpi.fault();

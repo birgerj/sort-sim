@@ -554,7 +554,8 @@ export class Trucks {
   cleardown(idx: number[], bt: number): void {
     for (const i of idx) {
       const d = this.docks[i];
-      if (d && d.state === 'open') {
+      // (Not a door the shift director runs: the plan says when its truck goes.)
+      if (d && d.state === 'open' && !d.run) {
         d.state = 'cleardown';
         d.t0 = Math.ceil(bt);
       }
