@@ -4,10 +4,10 @@
 // a rough buffer guess. No profit, no real buffer figures, no word on trucks being on time: those
 // come with the result. This file never touches the score service.
 import { CURRENCY, PRICES, RATES, type Level, type Plan, type PlanProblem } from '../../../shifts/contract';
-import { arrivedBy, dockRate, firstParcel, nominalFlow, robotLines, roughBuffer } from '../../../shifts/estimate';
+import { arrivedBy, dockRate, firstParcel, nominalFlow, robotLines } from '../../../shifts/estimate';
 import { cityColour, cityName, clock, count, h, mark, money, plural } from './dom';
 import { addBlock, canStep, moveBlock, removeBlock, setDocks, setEnd, setPeople, setRobotCity, setRobots, setStart, stepEnd, stepStart } from './edit';
-import { assignDoors, blockCost, busyDockSteps, checkPlan, fixedCosts, goalStanding, mostToEarn, peak, peopleSteps, unservedCities, type Step } from './rules';
+import { assignDoors, blockCost, busyDockSteps, checkPlan, fixedCosts, goalStanding, mostToEarn, peak, peopleSteps, unservedCities, type Step, capacitySteps, influxSteps } from './rules';
 
 export interface PlannerOptions {
   level: Level;
@@ -25,7 +25,6 @@ interface Selection {
 }
 
 const clonePlan = (p: Plan): Plan => ({ blocks: p.blocks.map((b) => ({ ...b })), robotCities: [...p.robotCities], robots: p.robots });
-const BUFFER_WORDS = ['empty', 'some', 'a lot'] as const;
 
 export function plannerView(o: PlannerOptions): HTMLElement {
   const { level, cityNames } = o;
@@ -345,14 +344,28 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         strips.append(strip('People', phone ? `${peak(ppl)} of ${level.peopleCap}` : `peak ${peak(ppl)} of ${level.peopleCap}`, profile(ppl, level.peopleCap, 'People at work'), peak(ppl) > level.peopleCap ? 'is-bad' : ''));
       }
 
-      const guess = roughBuffer(level, plan);
-      const buf = h('div', { class: 'shp-track shp-buffer', style: `width:${trackW}px`, role: 'img', 'aria-label': `Buffer, rough guess per hour: ${guess.map((g, k) => `${clock(k * 60)} ${BUFFER_WORDS[g]}`).join(', ')}` });
-      guess.forEach((g, k) => {
-        const from = k * 60;
-        const to = Math.min(level.shiftMinutes, from + 60);
-        buf.append(h('div', { class: `shp-buf shp-buf-${g}`, style: `left:${x(from) + 1}px;width:${x(to) - x(from) - 3}px`, title: `${clock(from)}–${clock(to)}: ${BUFFER_WORDS[g]}` }));
-      });
-      strips.append(strip('Buffer', 'rough guess', buf));
+      // One diagram instead of a buffer forecast: what comes in against what the plan can load,
+      // both per hour. Where the grey rises above the line the buffer fills; the player does the sum.
+      const inflow = influxSteps(level);
+      const canLoad = capacitySteps(level, plan);
+      const top = Math.max(1, ...inflow.map((q) => q.value), ...canLoad.map((q) => q.value));
+      const H = 56;
+      const y = (v: number) => (H - 2 - (v / top) * (H - 6)).toFixed(1);
+      const area = inflow.map((q) => `M${x(q.from)},${H} V${y(q.value)} H${x(q.to)} V${H} Z`).join(' ');
+      let linePath = '';
+      let at = 0;
+      for (const q of canLoad) {
+        if (q.from > at) linePath += `${linePath ? ' L' : 'M'}${x(at)},${y(0)} L${x(q.from)},${y(0)}`;
+        linePath += `${linePath ? ' L' : 'M'}${x(q.from)},${y(q.value)} L${x(q.to)},${y(q.value)}`;
+        at = q.to;
+      }
+      if (at < level.shiftMinutes) linePath += `${linePath ? ' L' : 'M'}${x(at)},${y(0)} L${x(level.shiftMinutes)},${y(0)}`;
+      const flowEl = h('div', { class: 'shp-track shp-flow', style: `width:${trackW}px;height:${H}px`, role: 'img',
+        'aria-label': `Parcels coming in per hour against what the plan can load per hour. Most coming in: ${count(Math.max(0, ...inflow.map((q) => q.value)))}. Most the plan can load: ${count(Math.max(0, ...canLoad.map((q) => q.value)))}.` });
+      // (Our own numbers only; nothing from outside goes into this markup.)
+      flowEl.innerHTML = `<svg width="${trackW}" height="${H}" viewBox="0 0 ${trackW} ${H}" aria-hidden="true"><path class="shp-flow-in" d="${area}"/><path class="shp-flow-can" d="${linePath}" fill="none"/></svg>`;
+      flowEl.append(h('span', { class: 'shp-flow-top shp-num', text: `${count(top)} an hour` }));
+      strips.append(strip('Flow', phone ? 'in vs can' : 'in against can load', flowEl));
       rows.push(strips);
       grid.style.width = `${labelW + trackW + 6}px`;
       grid.replaceChildren(...rows);
@@ -362,7 +375,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
 
       legend.replaceChildren(
         h('span', {}, h('i', { class: 'shp-key-fill' }), 'how full a block is: the work that can reach it against what its crew can load'),
-        h('span', {}, h('i', { class: 'shp-key-buf shp-buf-0' }), h('i', { class: 'shp-key-buf shp-buf-1' }), h('i', { class: 'shp-key-buf shp-buf-2' }), 'buffer: empty, some or a lot per hour; the real figures come with the result'),
+        h('span', {}, h('i', { class: 'shp-key-in' }), 'parcels coming in per hour'),
+        h('span', {}, h('i', { class: 'shp-key-can' }), 'what docks and robots can load per hour'),
         level.docks <= 6 ? h('span', {}, h('i', { class: 'shp-key-switch' }), 'a dock switching city, 15 min') : h('span', { text: '3×2 on a short block: 3 docks with 2 people each' }),
       );
     }

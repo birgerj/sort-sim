@@ -24,10 +24,11 @@ No drop shadows, no illustrations, no emoji.
    half an hour; a block may also start exactly on the city's first parcel and end exactly on its truck
    time; at least an hour long; at most 30 minutes past the truck time. Tapping an order makes a starter
    block (first parcel to truck time, 1 person). No clock runs here.
-   The planner shows: the fixed costs (docks, people, robots), how full each block is from public
-   numbers, docks in use, and a **rough** buffer guess per hour in three steps (empty, some, a lot)
-   from `src/shifts/estimate.ts`. It never shows profit, real buffer figures or whether trucks will be
-   on time. It never calls the score model.
+   The planner shows: the fixed costs (docks, people, robots; they open into a breakdown), how full
+   each block is from public numbers, docks in use, and one diagram of the parcels coming in per hour
+   against what the plan's crews and robots can load per hour. It shows nothing about the buffer, not
+   even a guess: the player works that out from the diagram. It never shows profit, a verdict on
+   whether a city fits, or whether trucks will be on time. It never calls the score model.
 6. **Shift.** The plan is locked. The hall plays the timeline. Clock, pause, 1×, 4×, 16×, skip to
    result. A card per city (loaded so far, truck time), money earned and spent so far.
 7. **Result.** Stars, profit against par, level score, profit and loss with the difference from the

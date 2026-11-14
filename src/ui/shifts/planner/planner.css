@@ -1609,3 +1609,42 @@
   border-top: 1px solid var(--line);
   font-weight: 600;
 }
+
+/* Flow: parcels coming in (grey) against what the plan can load (line), per hour. */
+.shp-flow {
+  position: relative;
+  overflow: hidden;
+}
+.shp-flow svg {
+  display: block;
+}
+.shp-flow-in {
+  fill: rgba(255, 255, 255, 0.3);
+}
+.shp-flow-can {
+  stroke: var(--sh-acc, #2fa58f);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.shp-flow-top {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  font-size: 11px;
+  color: var(--sh-grey, #a9adb5);
+}
+.shp-key-in,
+.shp-key-can {
+  display: inline-block;
+  width: 22px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.shp-key-in {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.shp-key-can {
+  height: 0;
+  border-top: 2.5px solid var(--sh-acc, #2fa58f);
+}

@@ -25,3 +25,4 @@
 - 2026-11-14 Shift HUD: clock and the badges of departed trucks at the top; money and the speed buttons at the bottom.
 - 2026-11-14 The hall's director is wired in (`createDirector(scene)`); the clock-only stand-in is gone.
 - 2026-11-14 Open: the camera does not yet go to the docks that are open during a shift; space still pauses the scene (and with it the shift clock).
+- 2026-11-14 The planner shows no buffer at all (no rough guess either). Instead one diagram: total inflow per hour against the total capacity of crews and robots per hour.

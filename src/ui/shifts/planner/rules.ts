@@ -5,7 +5,7 @@
 // model's own (tools/balance/fixture.py, to_solver) step by step, so "no dock free" means the
 // same thing here as there.
 import { PRICES, RATES, type Block, type Level, type Plan, type PlanProblem } from '../../../shifts/contract';
-import { firstParcel } from '../../../shifts/estimate';
+import { arrivalRate, dockRate, firstParcel, robotLines } from '../../../shifts/estimate';
 
 /** The latest moment a block of this city may end. */
 export function latestEnd(level: Level, city: number): number {
@@ -104,6 +104,48 @@ function steps(events: [number, number][]): Step[] {
     if (v !== 0) out.push({ from: times[i]!, to: times[i + 1]!, value: v });
   }
   return out;
+}
+
+/** A value through the shift, sampled between every pair of moments where it can change. */
+function sampled(times: number[], at: (minute: number) => number): Step[] {
+  const ts = [...new Set(times)].sort((x, y) => x - y);
+  const out: Step[] = [];
+  for (let i = 0; i < ts.length - 1; i++) {
+    const value = at((ts[i]! + ts[i + 1]!) / 2);
+    const last = out[out.length - 1];
+    if (last && Math.abs(last.value - value) < 1e-9) last.to = ts[i + 1]!;
+    else out.push({ from: ts[i]!, to: ts[i + 1]!, value });
+  }
+  return out;
+}
+
+/** Parcels coming in per hour, all cities together (straight from the briefing). */
+export function influxSteps(level: Level): Step[] {
+  const times = [0, level.shiftMinutes];
+  for (const c of level.cities) for (const a of c.arrivals) times.push(a.from, a.to);
+  return sampled(times, (m) => level.cities.reduce((s, c) => s + arrivalRate(c, m) * 60, 0));
+}
+
+/** What the plan can load per hour at its nominal rates: the crews on open docks plus the robots
+ *  (the fleet, or what the open robot lines can pass if that is less; nothing while they stand still). */
+export function capacitySteps(level: Level, plan: Plan): Step[] {
+  const times = [0, level.shiftMinutes];
+  for (const b of plan.blocks) times.push(b.start, b.end);
+  const robotCities = plan.robots > 0 ? plan.robotCities : [];
+  for (const c of robotCities) times.push(firstParcel(level.cities[c]!), level.cities[c]!.truck);
+  if (level.robotOutage) times.push(...level.robotOutage);
+  const end = Math.max(...times);
+  return sampled(times.filter((t) => t >= 0 && t <= end), (m) => {
+    let cap = 0;
+    for (const b of plan.blocks) if (b.start <= m && m < b.end) cap += b.docks * dockRate(b.people);
+    const down = level.robotOutage && level.robotOutage[0] <= m && m < level.robotOutage[1];
+    if (!down) {
+      let lines = 0;
+      for (const c of robotCities) if (firstParcel(level.cities[c]!) <= m && m < level.cities[c]!.truck) lines += robotLines(level.cities[c]!);
+      cap += Math.min(plan.robots * RATES.robot, lines * 60);
+    }
+    return cap;
+  });
 }
 
 /** People at work through the night: people per dock × docks of every open block. */
