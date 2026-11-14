@@ -59,7 +59,7 @@ export function shiftHud(o: HudOptions): ShiftHud {
   const name = (c: number) => cityName(cityNames, c);
   let timeline: Timeline | null = null;
   let minute = 0;
-  let speed = 8;
+  let speed = 1.6; // 4×, the speed a shift starts at
   let over = false;
 
   const sub = h('p', { text: 'Starting the shift' });

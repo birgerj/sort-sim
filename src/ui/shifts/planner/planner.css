@@ -181,12 +181,6 @@
   border: 1px solid var(--edge);
   border-left: 12px solid var(--c);
   border-radius: 8px;
-  display: block;
-  width: 100%;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 .shp-hud-card:focus-visible {
   outline: 2px solid var(--acc);
@@ -1259,6 +1253,13 @@
   flex: none;
   min-width: 0;
   padding: 8px 12px;
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   background: var(--panel);
   border: 1px solid var(--edge);
   border-left: 12px solid var(--c);
@@ -1449,6 +1450,10 @@
   .is-many .shp-hud-card-top b {
     font-size: 14px;
   }
+  .shp-hud-card-top {
+    flex-wrap: wrap;
+    gap: 0 6px;
+  }
   .shp-hud-line,
   .is-many .shp-hud-line {
     font-size: 12px;
@@ -1568,6 +1573,11 @@
     padding: 8px;
   }
   .shp-hud .shp-hud-bottom .shp-hud-money {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto auto;
+    grid-auto-flow: column;
+    gap: 0 8px;
     padding: 0 6px;
   }
   .shp-hud .shp-hud-bottom .shp-hud-speed .shp-pick {
@@ -1660,4 +1670,16 @@
 .shp-key-can {
   height: 0;
   border-top: 2.5px solid var(--sh-acc, #2fa58f);
+}
+
+/* A city card is a button, but it keeps its panel under a finger or the mouse
+   (the hall's own button rules would make it see-through). */
+.shp-hud .shp-hud-card,
+.shp-hud .shp-hud-card:hover {
+  background: var(--panel);
+  color: inherit;
+}
+.shp-hud .shp-hud-card:hover {
+  border-color: var(--acc);
+  border-left-color: var(--c);
 }
