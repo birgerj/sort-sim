@@ -51,6 +51,8 @@ const START_MINUTES = 22 * 60;
 const CAGE = 22;
 /** Parcels of the plan riding the loop with nowhere to go, above which the lanes hold theirs back. */
 const LOOP_STOCK = 150;
+/** Parcels of one city riding the loop with nowhere to go, above which no more of that city are let in. */
+const CITY_STOCK = 14;
 /** Parcels a robot station may have waiting on its table or on their way to it. */
 const TABLE_AHEAD = 3;
 /** Seconds between two camera cuts at least, seconds a cut is held, and the fastest pace that still cuts (hall beats per music beat). */
@@ -120,6 +122,7 @@ export function createDirector(scene: Sorter): Director {
   let lastCut = -1e9;
   let pendingCut: Shot | null = null;
   let overviewKey = '';
+  let wasOutside = false;
   let finaleTimer: ReturnType<typeof setTimeout> | null = null;
   const now = () => performance.now() / 1000;
   const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -207,6 +210,8 @@ export function createDirector(scene: Sorter): Director {
     let best = -1;
     let most = 0;
     for (let i = 0; i < lv.cities.length; i++) {
+      // (A city with enough riding the loop already waits upstream: its parcels must not keep the others' out.)
+      if ((waiting[i] ?? 0) >= CITY_STOCK) continue;
       const lead = scene.shiftLead(chuteFor(i)) * MIN_PER_BEAT;
       const n = inHall(arrivedAt(lv, i, minute + lead - late), factor) - (out[i] ?? 0);
       if (n > most) {
@@ -485,8 +490,12 @@ export function createDirector(scene: Sorter): Director {
   };
 
   function go(shot: Shot, cut: boolean): void {
+    // (Between a place above the roof or in the yard and one in the hall there is no flight: it would go through the roof or a wall.)
+    const outside = shot.free === true;
+    const through = shotName === '' ? outside : outside !== wasOutside;
+    wasOutside = outside;
     shotName = shot.name;
-    scene.shiftView(shot.eye, shot.look, shot.name, cut, shot.free === true);
+    scene.shiftView(shot.eye, shot.look, shot.name, cut || through, outside);
   }
 
   function setAuto(on: boolean): void {
