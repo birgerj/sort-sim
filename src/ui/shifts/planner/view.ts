@@ -65,7 +65,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   );
 
   const isPhone = () => root.clientWidth > 0 && root.clientWidth <= 760;
-  const labelWidth = () => (isPhone() ? 76 : 104);
+  const labelWidth = () => (isPhone() ? 86 : 104);
 
   /** Takes a changed plan: remember it, tell the owner, draw again. */
   function commit(next: Plan, select?: Selection | null): void {
@@ -273,7 +273,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           laneEnd[k] = b.end;
           lane.set(i, k);
         }
-        const blockH = dense ? 34 : phone ? 38 : 46;
+        const blockH = dense || phone ? 40 : 46; // a finger needs 40
         const onRobots = hasRobots && plan.robotCities.includes(c);
         const height = Math.max(1, laneEnd.length) * (blockH + 4) + 6 + (onRobots ? 12 : 0);
         const first = firstParcel(city);

@@ -1692,3 +1692,24 @@
   font-size: 20px;
   line-height: 1;
 }
+
+/* Long city names take two lines beside their lane instead of being cut off. */
+.shp-planner .shp-city-label b {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shp-planner .shp-fleet-info span {
+  white-space: normal;
+  overflow: visible;
+}
+@media (max-width: 640px) {
+  .shp-planner .shp-city-label b {
+    font-size: 12.5px;
+  }
+}
