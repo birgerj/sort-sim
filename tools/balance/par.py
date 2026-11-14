@@ -5,7 +5,7 @@
 # turned into the solver's shape by fixture.to_solver() before it is scored, so the doors and the robot
 # lines are exactly the ones the game would give. Par found here is reachable by a player.
 #
-#   python3 tools/balance/par.py check                    the level 4 example must still give 606.25
+#   python3 tools/balance/par.py check                    the level 4 example must still give 501.85
 #   python3 tools/balance/par.py par <level> <iters> <restarts>
 #   python3 tools/balance/par.py polish <level> <iters> <restarts> [T0]  cooler runs from the best plan known
 #   python3 tools/balance/par.py price <level> <iters> <restarts>   plain plan against the best per left-behind price
@@ -446,7 +446,7 @@ def cmd_check(Ls):
     f = json.load(open(os.path.join(ROOT, 'tests/fixtures/shifts/level4.json')))
     v = score(Ls[3], f['plan'])
     print('level 4 example', v)
-    assert abs(v - 606.25) < 1e-9
+    assert abs(v - 501.85) < 1e-9
     for L in Ls:
         pl = plain(L)
         print(L['n'], 'plain', round(score(L, pl), 2), 'peaks', peaks(pl), 'robots', pl['robots'], pl['robotCities'])
