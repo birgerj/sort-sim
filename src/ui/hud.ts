@@ -585,9 +585,7 @@ export class Hud {
       if (id === COUNTRY.id) return;
       this.settings.country = id;
       saveSettings(this.settings);
-      // A night-shift game is played for one country's hall: start again. Otherwise switch live.
-      if (new URLSearchParams(location.search).get('game')) location.reload();
-      else setCountry(id);
+      setCountry(id);
     };
     const cb = this.row(sec, 'Country', 'Its 40 largest towns get the 40 dock doors; names, streets and postcodes follow it at once. The doors are shared out over the towns again on the next start.');
     cb.classList.add('stack');
@@ -602,9 +600,9 @@ export class Hud {
       this.root.classList.add('off');
     };
     this.appGroup.append(hide);
-    // The night-shift minigame (its briefing opens at the top of the screen).
-    const game = el('button', '', 'Night shift');
-    game.title = 'Minigame: plan a night and fine-tune it for a score';
+    // Ten Shifts, the planning game (a full-screen layer over the hall).
+    const game = el('button', '', 'Ten Shifts');
+    game.title = 'The planning game: plan the night shift in ten levels';
     game.onclick = () => {
       this.openTab(null);
       this.opts.onGame?.();

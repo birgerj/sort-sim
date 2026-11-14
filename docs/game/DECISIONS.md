@@ -16,3 +16,6 @@
 - 2026-11-14 An invalid plan makes `ScoreService.run` reject with a plain `PlanProblem[]` (not an Error).
 - 2026-11-14 Badge counting: people and docks per minute a block is open; the buffer badge looks at every minute.
 - 2026-11-14 For agent B: write arrivals and volumes unrounded in `levels.json`; golden plans must be startable (half-hour grid, no robot cities where robots are off); `fixture.run` should compute the badge.
+- 2026-11-14 The game is wired into the app: after the start card the player chooses free simulation or game (`?start=free|game` skips the choice; a department or the demo tour in the address goes to the free simulation). The old night game is removed.
+- 2026-11-14 Until the hall's director is merged, a clock-only stand-in (`src/shifts/clockDirector.ts`) plays the shift: the game is fully playable, the hall just keeps running as in the free simulation.
+- 2026-11-14 While the game's screens cover the hall, the hall is not drawn (saves the device; it only draws during a shift).

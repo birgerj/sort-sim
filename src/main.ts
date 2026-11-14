@@ -10,11 +10,11 @@
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
  *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
  *   night=party|calm|dark  what the night shows (Night effects panel; remembered otherwise)
- *   game=NL-7KQ2M0         play that night (with plan=…&reserve=…: the player's door plan)
+ *   start=free|game        skip the choice at launch: the free simulation, or the planning game
  *   quality=low|normal|high  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
-import { setCountry } from './sim/countries';
+import { COUNTRY, setCountry } from './sim/countries';
 import { setXmas } from './sim/season';
 import './ui/style.css';
 
@@ -27,7 +27,10 @@ import { Hud, loadSettings, saveSettings, type Settings, type TimeMode } from '.
 import { startCard } from './ui/startCard';
 import { Pwa, checkForUpdates } from './ui/pwa';
 import { WalkControls } from './ui/walk';
-import { GameUi } from './ui/game';
+import { mountShifts } from './ui/shifts/index';
+import { plannerView, shiftHud } from './ui/shifts/planner/index';
+import { LEVELS, LocalScoreService } from './shifts/model/index';
+import { clockDirector } from './shifts/clockDirector';
 import { ANTICS } from './scene/antics';
 
 const q = new URLSearchParams(location.search);
@@ -72,6 +75,12 @@ const mute = q.get('mute') === '1' || !showUi;
 // pressed (and only shows if the hall is not ready by then).
 /** The settings the HUD works with, once they are loaded (Start may come before or after). */
 let liveSettings: Settings | null = null;
+// After Start the player chooses between the free simulation and the planning game, unless the
+// address already says where to go (a department, the demo tour, or start=free|game).
+const startParam = q.get('start');
+const skipChoice = startParam === 'free' || (startParam !== 'game' && (q.has('dept') || q.has('pv')));
+let started = !(showUi && !mute); // (no start card: nothing to wait for)
+let offerChoice = () => {};
 if (showUi && !mute) {
   loading?.classList.add('quiet');
   startCard((sound) => {
@@ -82,6 +91,8 @@ if (showUi && !mute) {
     music.setMuted(!sound);
     if (sound) void music.start();
     loading?.classList.remove('quiet');
+    started = true;
+    offerChoice();
   });
 }
 await nextPaint();
@@ -120,11 +131,32 @@ music.setVolume(settings.volume);
 music.setMuted(settings.muted);
 
 let hudQuality = () => {};
-const hud = new Hud(scene, music, settings, { showStart: false, showUi, onQuality: () => hudQuality(), onGame: () => game?.openBriefing() });
+const hud = new Hud(scene, music, settings, { showStart: false, showUi, onQuality: () => hudQuality(), onGame: () => openShifts() });
 document.body.append(hud.root);
-// The night-shift game: its own dock at the top of the screen (see ui/game.ts).
-const game = showUi ? new GameUi(music, scene) : null;
-if (game) document.body.append(game.root);
+// Ten Shifts, the planning game: a full-screen layer over the hall (see ui/shifts). While it is open
+// the free simulation's own controls are out of the way.
+const shifts = showUi
+  ? mountShifts({
+      score: new LocalScoreService(),
+      director: clockDirector(),
+      levels: LEVELS,
+      // City i of a level is the i-th largest town of the chosen country.
+      cityNames: () => [...COUNTRY.cities].sort((a, b) => b.pop - a.pop).map((c) => c.name),
+      onFree: () => (hud.root.style.display = ''),
+      views: { planner: plannerView, shiftHud },
+    })
+  : null;
+if (shifts) document.body.append(shifts.root);
+function openShifts(): void {
+  if (!shifts) return;
+  hud.root.style.display = 'none';
+  shifts.open();
+}
+// The choice at launch: as soon as both Start has been pressed and the hall exists.
+offerChoice = () => {
+  if (started && !skipChoice) openShifts();
+};
+offerChoice();
 // Walk and fly controls sit under the menu (an open panel may cover them).
 hud.root.prepend(walk.root);
 const pwa = new Pwa(hud.root, music);
@@ -167,12 +199,18 @@ function frame(now: number): void {
   last = now;
   walk.frame();
   const f = music.frame();
+  // The game's screens cover the hall except while a shift plays: nothing to draw until then
+  // (the scene re-phases by itself when the beats have moved on).
+  if (shifts && !shifts.root.hidden && !shifts.root.classList.contains('sh-root--live')) {
+    f.notes.length = 0;
+    requestAnimationFrame(frame);
+    return;
+  }
   if (music.paused) {
     f.notes.length = 0;
     // The hall stands still, but you can still walk, fly and look around.
     scene.renderPaused(dt);
     hud.update();
-    game?.frame(dt);
     requestAnimationFrame(frame);
     return;
   }
@@ -202,7 +240,6 @@ function frame(now: number): void {
   const r = Math.max(0, Math.min(1, (scene.rate - 20) / 780));
   music.setTempo(60 + 100 * Math.sqrt(r));
   hud.update();
-  game?.frame(dt);
   requestAnimationFrame(frame);
 }
 // Compile the shaders before the first frame (in parallel where the browser can), with the
