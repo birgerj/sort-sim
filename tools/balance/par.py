@@ -52,6 +52,48 @@ def score(L, plan, detail=False):
 peaks = fixture.peaks
 
 
+def cuts(L, plan):
+    """Every way to cut one block of the plan in two that the planner allows and that leaves no doubt which piece
+    goes on with which door: no other block of that city with the same crew starts or ends at the cut, and the
+    block has no twin (same city, crew, docks and start)."""
+    out = []
+    for j, b in enumerate(plan['blocks']):
+        for t in solve.allowed(L, b['city']):
+            if b['start'] + 60 <= t <= b['end'] - 60:
+                if any(k != j and o['city'] == b['city'] and o['people'] == b['people'] and (t in (o['start'], o['end']) or (o['start'], o['docks']) == (b['start'], b['docks']))
+                       for k, o in enumerate(plan['blocks'])):
+                    continue
+                q = [dict(x) for x in plan['blocks']]
+                q[j]['end'] = t
+                q.append(dict(b, start=t))
+                out.append({'blocks': q, 'robotCities': plan['robotCities'], 'robots': plan['robots']})
+    return out
+
+
+def merged(plan):
+    """The same plan with as few blocks as it can be written in: blocks of one city with the same crew and number
+    of docks that follow each other without a gap become one, where there is no doubt which follows which."""
+    B = [dict(b) for b in canon(plan)['blocks']]
+    again = True
+    while again:
+        again = False
+        for a in B:
+            nxt = [b for b in B if b is not a and b['city'] == a['city'] and b['people'] == a['people'] and b['start'] == a['end']]
+            prv = [b for b in B if b['city'] == a['city'] and b['people'] == a['people'] and b['end'] == a['end']]
+            twin = [b for b in B if b is not a and (b['city'], b['people'], b['docks'], b['start']) == (a['city'], a['people'], a['docks'], a['start'])]
+            if len(nxt) == 1 and len(prv) == 1 and nxt[0]['docks'] == a['docks'] and not twin:
+                a['end'] = nxt[0]['end']
+                B.remove(nxt[0])
+                again = True
+                break
+    return canon({'blocks': B, 'robotCities': plan['robotCities'], 'robots': plan['robots']})
+
+
+def obvious(L):
+    """The first plan anyone makes: every city one dock with two people from its first parcel to its truck."""
+    return canon({'blocks': [{'city': i, 'start': L['first'][i], 'end': d['d'], 'people': 2, 'docks': 1} for i, d in enumerate(L['dests'])], 'robotCities': [], 'robots': 0})
+
+
 # ---- the plain plan of the left-behind study ----------------------------------------------------------
 
 def need_rate(L, i):
@@ -351,6 +393,31 @@ def badge_value(L, bid):
 
 # ---- commands ----------------------------------------------------------------------------------------
 
+def cmd_invariance(Ls):
+    """Cutting a block in two, or writing two that follow each other as one, must not change the profit."""
+    golden = json.load(open(os.path.join(ROOT, 'tests/fixtures/shifts/golden.json')))
+    plans = [(g['level'], g['name'], g['plan']) for g in golden]
+    for n in range(1, 11):
+        f = os.path.join(BEST, f'level{n}.json')
+        if os.path.exists(f):
+            plans.append((n, 'best', json.load(open(f))))
+        plans.append((n, 'plain', plain(Ls[n - 1])))
+    worst = 0.0
+    count = 0
+    for n, name, plan in plans:
+        L = Ls[n - 1]
+        v = score(L, plan)
+        if v is None:
+            continue
+        for q in cuts(L, plan) + [merged(plan)]:
+            w = score(L, q)
+            count += 1
+            if w is None or abs(w - v) > 1e-9:
+                print('DIFFERENT', n, name, v, w)
+            worst = max(worst, abs((w if w is not None else 1e9) - v))
+    print('cut or merged', count, 'plans; largest difference', worst)
+
+
 def cmd_check(Ls):
     f = json.load(open(os.path.join(ROOT, 'tests/fixtures/shifts/level4.json')))
     v = score(Ls[3], f['plan'])
@@ -469,6 +536,8 @@ if __name__ == '__main__':
     a = [int(x) if x.lstrip('-').isdigit() else x for x in sys.argv[2:]]
     if cmd == 'check':
         cmd_check(Ls)
+    elif cmd == 'invariance':
+        cmd_invariance(Ls)
     elif cmd == 'par':
         cmd_par(Ls, *a)
     elif cmd == 'polish':

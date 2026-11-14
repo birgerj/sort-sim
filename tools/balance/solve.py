@@ -28,7 +28,10 @@ def step_time(L, d, t, k):
 
 
 @nb.njit(cache=True)
-def sim(arr, bd, bk, b0, b1, bs, ld, l0, l1, N, store_cap, maint, out0, out1):
+def sim(arr, bd, bk, b0, b1, bs, br, bh, ld, l0, l1, N, store_cap, maint, out0, out1):
+    # br[b]: the run a block belongs to (one door serving one city, block after block); the belt, the trailer and
+    # its swap belong to the run, not to the block. bh[b]: the block hands back its belt when it ends (false when
+    # the next block of the run starts that same minute).
     TT = arr.shape[0]
     n = arr.shape[1]
     nbk = len(bd)
@@ -38,7 +41,8 @@ def sim(arr, bd, bk, b0, b1, bs, ld, l0, l1, N, store_cap, maint, out0, out1):
     loaded = np.zeros(n)
     bbuf = np.zeros(nbk)
     btr = np.zeros(nbk)
-    bpause = np.zeros(nbk)
+    swap_until = np.zeros(nbk)
+    refused = 0.0
     lbuf = np.zeros(nl)
     lx = np.zeros(nl)
     fee = 0.0
@@ -50,9 +54,10 @@ def sim(arr, bd, bk, b0, b1, bs, ld, l0, l1, N, store_cap, maint, out0, out1):
         for b in range(nbk):
             if b0[b] <= t < b1[b]:
                 i = bd[b]
-                x = min(40.0 - bbuf[b], up[i])
+                r = br[b]
+                x = min(40.0 - bbuf[r], up[i])
                 if x > 0:
-                    bbuf[b] += x
+                    bbuf[r] += x
                     up[i] -= x
         for l in range(nl):
             if l0[l] <= t < l1[l]:
@@ -69,15 +74,19 @@ def sim(arr, bd, bk, b0, b1, bs, ld, l0, l1, N, store_cap, maint, out0, out1):
                     stot += x
                     up[i] -= x
                     fee += x
+                # Full is full: what still has no place is refused, missed for the night.
+                refused += up[i]
+                up[i] = 0.0
         bud = 2.5
         for b in range(nbk):
             if bud <= 0:
                 break
             if b0[b] <= t < b1[b]:
                 i = bd[b]
-                x = min(40.0 - bbuf[b], store[i], bud)
+                r = br[b]
+                x = min(40.0 - bbuf[r], store[i], bud)
                 if x > 0:
-                    bbuf[b] += x
+                    bbuf[r] += x
                     store[i] -= x
                     stot -= x
                     bud -= x
@@ -96,17 +105,17 @@ def sim(arr, bd, bk, b0, b1, bs, ld, l0, l1, N, store_cap, maint, out0, out1):
             if b0[b] <= t < b1[b]:
                 if maint[bk[b], t]:
                     continue
-                if bpause[b] > 0:
-                    bpause[b] -= 1
+                r = br[b]
+                if t < swap_until[r]:
                     continue
-                r = 1.5 if bs[b] == 1 else 170.0 / 60.0
-                x = min(bbuf[b], r)
-                bbuf[b] -= x
+                rate = 1.5 if bs[b] == 1 else 170.0 / 60.0
+                x = min(bbuf[r], rate)
+                bbuf[r] -= x
                 loaded[bd[b]] += x
-                btr[b] += x
-                if btr[b] >= 220.0:
-                    btr[b] -= 220.0
-                    bpause[b] = 10
+                btr[r] += x
+                if btr[r] >= 220.0:
+                    btr[r] -= 220.0
+                    swap_until[r] = t + 11  # the next ten minutes
         if not (out0 <= t < out1) and N > 0:
             fc = N / (60.0 / 17.0)  # 17 an hour per robot; the same division as the app's model, to the last bit
             tot = 0.0
@@ -132,16 +141,16 @@ def sim(arr, bd, bk, b0, b1, bs, ld, l0, l1, N, store_cap, maint, out0, out1):
                                 loaded[ld[l]] += x
                                 rem -= x
         for b in range(nbk):
-            if t == b1[b] - 1:
-                up[bd[b]] += bbuf[b]
-                bbuf[b] = 0.0
+            if t == b1[b] - 1 and bh[b]:
+                up[bd[b]] += bbuf[br[b]]
+                bbuf[br[b]] = 0.0
         for l in range(nl):
             if t == l1[l] - 1:
                 up[ld[l]] += lbuf[l]
                 lbuf[l] = 0.0
         if stot > peak:
             peak = stot
-    return loaded, fee, peak, stot
+    return loaded, fee, peak, stot, refused
 
 
 def dest(v, a0, a1, d, prof='flat'):
@@ -296,10 +305,39 @@ def valid(L, p):
     return True
 
 
+def runs(B):
+    """Per block of B: its run (a door serving one city, block after block, gaps allowed) and whether it hands
+    back its belt when it ends (not when the run's next block starts that very minute)."""
+    run = [0] * len(B)
+    hand = [True] * len(B)
+    by = {}
+    for j, b in enumerate(B):
+        by.setdefault(b[1], []).append(j)
+    n = 0
+    for k in sorted(by):
+        js = sorted(by[k], key=lambda j: B[j][2])
+        for a, j in enumerate(js):
+            if a > 0 and B[js[a - 1]][0] == B[j][0]:
+                run[j] = run[js[a - 1]]
+                if B[js[a - 1]][3] == B[j][2]:
+                    hand[js[a - 1]] = False
+            else:
+                run[j] = n
+                n += 1
+    return run, hand
+
+
+def block_order(L, B):
+    """Blocks in the order the model serves them: earliest truck first, then city, door, start. Nothing in it
+    changes when a block is cut in two."""
+    ds = L['dests']
+    return sorted(B, key=lambda b: (ds[b[0]]['d'], b[0], b[1], b[2]))
+
+
 def evaluate(L, p, detail=False):
     ds = L['dests']
-    order = sorted(range(len(p['b'])), key=lambda j: ds[p['b'][j][0]]['d'])
-    B = [p['b'][j] for j in order]
+    B = block_order(L, p['b'])
+    run, hand = runs(B)
     lo = sorted(range(len(p['l'])), key=lambda j: ds[p['l'][j][0]]['d'])
     Lr = [p['l'][j] for j in lo]
     i64 = np.int64
@@ -308,10 +346,12 @@ def evaluate(L, p, detail=False):
     b0 = np.array([b[2] for b in B], dtype=i64)
     b1 = np.array([b[3] for b in B], dtype=i64)
     bs = np.array([b[4] for b in B], dtype=i64)
+    br = np.array(run, dtype=i64)
+    bh = np.array(hand, dtype=np.bool_)
     ld = np.array([l[0] for l in Lr], dtype=i64)
     l0 = np.array([l[1] for l in Lr], dtype=i64)
     l1 = np.array([l[2] for l in Lr], dtype=i64)
-    loaded, fee, peak, _stot = sim(L['arr'], bd, bk, b0, b1, bs, ld, l0, l1, p['N'], float(L['store']), L['mt'], L['outage'][0], L['outage'][1])
+    loaded, fee, peak, _stot, refused = sim(L['arr'], bd, bk, b0, b1, bs, br, bh, ld, l0, l1, p['N'], float(L['store']), L['mt'], L['outage'][0], L['outage'][1])
     end = [0] * len(ds)
     for b in p['b']:
         end[b[0]] = max(end[b[0]], b[3])
@@ -338,7 +378,7 @@ def evaluate(L, p, detail=False):
     cf = fee * PR['store']
     prof = rev + bon - late - left - cd - cs - cr - cf
     if detail:
-        return dict(profit=prof, rev=rev, bonus=bon, late=late, left=left, dock=cd, staff=cs, robots=cr, store=cf, peak=peak, ontime=ontime)
+        return dict(profit=prof, rev=rev, bonus=bon, late=late, left=left, dock=cd, staff=cs, robots=cr, store=cf, peak=peak, ontime=ontime, refused=refused)
     return prof
 
 

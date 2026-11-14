@@ -64,21 +64,43 @@ def to_solver(L, plan):
     """Contract plan -> solver plan, or None when it is not valid. Doors: a block's docks take, in block order by
     start, the door that last served the same city if free, else the door free longest (15 min after another city).
     The order in which a plan lists its blocks and robot cities must not change the score, so both are put in a
-    fixed order first: blocks by start, city, end, people; robot cities by number. (Blocks of one city that start
+    fixed order first: blocks by start, city, people, docks, end; robot cities by number. (Blocks of one city that start
     together are served in that order: the belt of the first fills first.)"""
     L['lines'] = 999
-    blocks = sorted(plan['blocks'], key=lambda b: (b['start'], b['city'], b['end'], b['people'], b['docks']))
-    doors = [(-999, -1)] * L['docks']  # (free from, last city)
+    blocks = sorted(plan['blocks'], key=lambda b: (b['start'], b['city'], b['people'], b['docks'], b['end']))  # the end last: cutting a block must not change its turn
+    doors = [(-999, -1, 0)] * L['docks']  # (free from, last city, people of its last block)
     out = []
-    for b in blocks:
-        for _ in range(b['docks']):
-            ok = [k for k, (t, c) in enumerate(doors) if (t if c in (b['city'], -1) else t + 15) <= b['start']]
-            if not ok:
-                return None
-            same = [k for k in ok if doors[k][1] == b['city']]
-            k = same[0] if same else min(ok, key=lambda k: doors[k][0])
-            doors[k] = (b['end'], b['city'])
-            out.append([b['city'], k, b['start'], b['end'], b['people']])
+    # Blocks that start together for the same city are placed in two rounds. First every dock that can goes on
+    # with a door where a block of this city with the same crew ends this very minute: that is the same work
+    # carried on (same trailer, same belt), so a block cut in two is the same plan as the block left whole.
+    # Then the docks still without a door take, in this order of preference: a door where this city ends this
+    # minute, a free door that last served this city, the door free longest (15 minutes after another city).
+    i = 0
+    while i < len(blocks):
+        j = i
+        while j < len(blocks) and (blocks[j]['start'], blocks[j]['city']) == (blocks[i]['start'], blocks[i]['city']):
+            j += 1
+        group = blocks[i:j]
+        i = j
+        todo = []
+        for b in group:
+            need = b['docks']
+            for k, (t, c, ppl) in enumerate(doors):
+                if need and c == b['city'] and t == b['start'] and ppl == b['people']:
+                    doors[k] = (b['end'], b['city'], b['people'])
+                    out.append([b['city'], k, b['start'], b['end'], b['people']])
+                    need -= 1
+            todo.append(need)
+        for b, need in zip(group, todo):
+            for _ in range(need):
+                ok = [k for k, (t, c, _p) in enumerate(doors) if (t if c in (b['city'], -1) else t + 15) <= b['start']]
+                if not ok:
+                    return None
+                on = [k for k in ok if doors[k][1] == b['city'] and doors[k][0] == b['start']]
+                same = [k for k in ok if doors[k][1] == b['city']]
+                k = on[0] if on else same[0] if same else min(ok, key=lambda k: doors[k][0])
+                doors[k] = (b['end'], b['city'], b['people'])
+                out.append([b['city'], k, b['start'], b['end'], b['people']])
     lines = []
     for c in sorted(plan['robotCities']):
         lines += [[c, L['first'][c], L['dests'][c]['d']]] * lines_for(L, c)
@@ -170,13 +192,14 @@ def badge_condition(L, bid, plan, r):
 def trace(L, p, step=5):
     ds = L['dests']
     i64 = np.int64
-    B = sorted(p['b'], key=lambda b: ds[b[0]]['d'])
+    B = solve.block_order(L, p['b'])
+    run, hand = solve.runs(B)
     Ln = sorted(p['l'], key=lambda l: ds[l[0]]['d'])
     col = lambda rows, k: np.array([r[k] for r in rows], dtype=i64)
     loaded, buf = [], []
     TT = L['arr'].shape[0]
     for t in range(0, TT + 1, step):
-        ld, fee, peak, stot = solve.sim(L['arr'][:max(t, 1)] if t else L['arr'][:1] * 0, col(B, 0), col(B, 1), col(B, 2), col(B, 3), col(B, 4), col(Ln, 0), col(Ln, 1), col(Ln, 2), p['N'], float(L['store']), L['mt'], L['outage'][0], L['outage'][1])
+        ld, fee, peak, stot, refused = solve.sim(L['arr'][:max(t, 1)] if t else L['arr'][:1] * 0, col(B, 0), col(B, 1), col(B, 2), col(B, 3), col(B, 4), np.array(run, dtype=i64), np.array(hand, dtype=np.bool_), col(Ln, 0), col(Ln, 1), col(Ln, 2), p['N'], float(L['store']), L['mt'], L['outage'][0], L['outage'][1])
         loaded.append([round(float(x), 1) for x in ld])
         buf.append(round(float(stot), 1))
     return loaded, buf
@@ -219,7 +242,7 @@ def run(L, plan, par):
     result = {'profit': profit, 'score': score, 'stars': 3 if score >= 900 else 2 if score >= 750 else 1 if score >= 500 else 0, 'badge': bool(badge),
               'lines': {'revenue': round(float(r['rev'])), 'bonus': round(float(r['bonus'])), 'late': round(float(r['late'])), 'left': round(float(r['left'])),
                         'docks': round(float(r['dock'])), 'people': round(float(r['staff'])), 'robots': round(float(r['robots'])), 'buffer': round(float(r['store']))},
-              'trucks': trucks, 'buffer': {'series': buf, 'cap': cap, 'fullRanges': full}}
+              'trucks': trucks, 'buffer': {'series': buf, 'cap': cap, 'fullRanges': full, 'refused': round(float(r['refused']))}}
     timeline = {'stepMinutes': 5, 'cityLoaded': loaded, 'buffer': buf,
                 'blocks': [{'city': b[0], 'door': b[1], 'start': b[2], 'end': b[3], 'people': b[4]} for b in p['b']],
                 'robotsActive': [0 if L['outage'][0] <= t < L['outage'][1] else p['N'] for t in range(0, L['arr'].shape[0] + 1, 5)], 'departures': deps}
