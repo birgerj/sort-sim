@@ -7283,6 +7283,45 @@ export class Sorter implements Scene3D {
     this.visit('spot', cut);
   }
 
+  /**
+   * Looking around by hand during a shift, from the place `shiftView` last set: `orbit` turns
+   * the camera round what it looks at (radians: sideways, up), `pan` moves both over the floor
+   * (metres to the right and away), `zoom` scales the distance. The camera stays in the hall
+   * (or, from a place above the roof, over it).
+   */
+  shiftLook(o: { orbit?: [number, number]; pan?: [number, number]; zoom?: number }): void {
+    const spot = this.pois.find((p) => p.name === 'spot');
+    const free = spot?.free === true;
+    const eye = this.spotEye;
+    const look = this.spotLook;
+    const off = this.t.subVectors(eye, look);
+    let r = Math.max(0.5, off.length());
+    let yaw = Math.atan2(off.x, off.z);
+    let pitch = Math.asin(clamp(off.y / r, -1, 1));
+    if (o.orbit) {
+      yaw -= o.orbit[0];
+      pitch = clamp(pitch + o.orbit[1], 0.06, 1.5);
+    }
+    if (o.zoom) r = clamp(r * o.zoom, 3, free ? 140 : 70);
+    if (o.pan) {
+      // (To the right of the picture, and away from the camera over the floor.)
+      const fx = -Math.sin(yaw);
+      const fz = -Math.cos(yaw);
+      look.x += -fz * o.pan[0] + fx * o.pan[1];
+      look.z += fx * o.pan[0] + fz * o.pan[1];
+    }
+    look.x = clamp(look.x, WX + 2, EX - 2);
+    look.z = clamp(look.z, NZ + 1, HZ - 1);
+    eye.set(look.x + r * Math.sin(yaw) * Math.cos(pitch), look.y + r * Math.sin(pitch), look.z + r * Math.cos(yaw) * Math.cos(pitch));
+    if (!free) {
+      eye.x = clamp(eye.x, WX + 1, EX - 1);
+      eye.z = clamp(eye.z, NZ + 1, HZ - 1);
+      eye.y = clamp(eye.y, 1.2, HH - 0.8);
+    }
+    this.tour = null;
+    this.visit('spot', true);
+  }
+
   /** Width over height of the picture (a phone held upright is well under 1). */
   shiftAspect(): number {
     return this.camera.aspect;

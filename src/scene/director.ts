@@ -55,14 +55,21 @@ const LOOP_STOCK = 150;
 const CITY_STOCK = 14;
 /** Parcels a robot station may have waiting on its table or on their way to it. */
 const TABLE_AHEAD = 3;
+/** Minutes ahead of the timeline that the rack starts giving parcels back. */
+const RACK_AHEAD = 6;
 /** Minutes of margin on top of the ride from the infeeds, in how far ahead of the timeline's loading a parcel is sent down a dock's chute. */
 const SEND_AHEAD = 4;
 /** Seconds between two camera cuts at least, seconds a cut is held, and the fastest pace that still cuts (hall beats per music beat). */
 const CUT_GAP = 9;
 const CUT_HOLD = 4.5;
 const CUT_WARP = 4;
-/** Seconds the closing shot lasts. */
-const FINALE_SECONDS = 4.6;
+/** The closing shot in hall beats (the hall is at its own pace then, 1.6 beats a second): its length, when the night starts to fall and how long that takes, and when the camera goes to the party. */
+const FINALE_BEATS = 8;
+/** Hall beats the doors of the last trucks wait for the closing shot before they come down by themselves. */
+const LAST_DOOR_BEATS = 10;
+const NIGHT_FROM = 2;
+const NIGHT_BEATS = 3;
+const PARTY_AT = 4;
 
 const hhmm = (minute: number) => {
   const m = Math.round(START_MINUTES + minute);
@@ -127,9 +134,12 @@ export function createDirector(scene: Sorter): Director {
   let pendingCut: Shot | null = null;
   let overviewKey = '';
   let wasOutside = false;
+  /** Doors of the last trucks, still up for the closing shot, and the beat by which they come down anyway. */
+  let lastDoors: { d: number; until: number }[] = [];
   /** The closing shot has been played. */
   let closed = false;
-  let finaleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The closing shot being played: the hall beat it began on, whether the party follows, where, and whom to tell when it is over. */
+  let closing: { from: number; party: boolean; cx: number; done: () => void } | null = null;
   const now = () => performance.now() / 1000;
   const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -180,6 +190,23 @@ export function createDirector(scene: Sorter): Director {
       const before = bt;
       bt = beat;
       watchCamera();
+      if (lastDoors.length && (closing ? beat - closing.from >= 1 : lastDoors.some((x) => beat >= x.until))) {
+        // The last doors come down: a beat into the closing shot, or without one after a while.
+        const { trucks } = scene.shiftParts();
+        for (const x of lastDoors) trucks.want(x.d, false);
+        lastDoors = [];
+      }
+      if (closing) {
+        const t = beat - closing.from;
+        if (closing.party) hooks.night = Math.min(1, Math.max(0, (t - NIGHT_FROM) / NIGHT_BEATS));
+        if (closing.party && t >= PARTY_AT && shotName !== 'Party') go({ eye: v(closing.cx - 9, 3.4, 5.5), look: v(closing.cx + 6, 1.3, -3.5), name: 'Party' }, true);
+        if (t >= FINALE_BEATS) {
+          const { done } = closing;
+          closing = null;
+          closed = true;
+          done();
+        }
+      }
       // (Paused, no beat comes: a cut still ends, back to the overview.)
       if (hooks.warp === 0 && cutUntil && now() >= cutUntil) direct();
       if (!playing || !schedule) return;
@@ -280,7 +307,9 @@ export function createDirector(scene: Sorter): Director {
         // (More taken off the chute and belt than were loaded: they come round again.)
         out[was.city] = Math.max(0, (out[was.city] ?? 0) - cleared - extra + missing);
         r.open = false;
-        trucks.want(d, false);
+        // (The doors of the very last trucks stay up a moment longer: the closing shot shows them come down.)
+        if (!jump && minute >= s.end) lastDoors.push({ d, until: bt + LAST_DOOR_BEATS });
+        else trucks.want(d, false);
       }
       const fresh = st.open && !r.open;
       if (fresh) {
@@ -403,7 +432,9 @@ export function createDirector(scene: Sorter): Director {
     });
     stationTurn++;
     // The buffer rack: as many parcels as the timeline's buffer holds now.
-    const want = inHall(sample(tl.buffer, minute, s.stepMinutes), factor);
+    // (Out a little early: a parcel from the rack rides most of the loop to a dock at the west end.)
+    const held = sample(tl.buffer, minute, s.stepMinutes);
+    const want = inHall(Math.min(held, sample(tl.buffer, minute + RACK_AHEAD, s.stepMinutes)), factor);
     for (let n = 0; n < 3 && racked < want; n++) {
       const c = scene.shiftStore((city) => !hasEnd(city, minute));
       if (c < 0) break;
@@ -484,8 +515,8 @@ export function createDirector(scene: Sorter): Director {
     hooks.warp = 1;
     hooks.night = 0;
     closed = false;
-    if (finaleTimer) clearTimeout(finaleTimer);
-    finaleTimer = null;
+    lastDoors = [];
+    closing = null;
   }
 
   // ---------- camera ----------
@@ -566,7 +597,7 @@ export function createDirector(scene: Sorter): Director {
   /** Every beat: the automatic direction. The overview follows the open docks; cuts come and go on the beat. */
   function direct(): void {
     // (After the closing shot the camera stays where it is, on the party or the last dock, until the next attempt.)
-    if (!active || !auto || finaleTimer || closed) return;
+    if (!active || !auto || closing || closed) return;
     const t = now();
     if (pendingCut) {
       go(pendingCut, true);
@@ -613,6 +644,75 @@ export function createDirector(scene: Sorter): Director {
     robotsWere = robots;
   }
 
+  // ---------- looking around by hand ----------
+
+  /**
+   * A drag on the hall turns the camera round what it is looking at, a drag with two fingers
+   * (or the right button, or Shift) moves it over the floor, a pinch or the wheel zooms. The
+   * first move ends the automatic direction (until Auto is asked for again).
+   */
+  const touches = new Map<number, { x: number; y: number }>();
+  let pinch = 0;
+  let moved = 0;
+  const byHand = (): boolean => {
+    if (!active || closing) return false;
+    if (auto || shotName !== 'Free look') {
+      // (From wherever the camera is now: the director's shot, or a place the player went to.)
+      if (scene.cameraMode() !== 'visit' || scene.visiting() !== 'spot') return false;
+      shotName = 'Free look';
+      closed = false;
+      setAuto(false);
+    }
+    return true;
+  };
+  const onDown = (e: PointerEvent) => {
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    moved = 0;
+    pinch = 0;
+  };
+  const onMove = (e: PointerEvent) => {
+    const was = touches.get(e.pointerId);
+    if (!was) return;
+    const dx = e.clientX - was.x;
+    const dy = e.clientY - was.y;
+    was.x = e.clientX;
+    was.y = e.clientY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    // (A tap is not a drag.)
+    if (moved < 6 || !byHand()) return;
+    const h = Math.max(200, scene.canvas.clientHeight);
+    if (touches.size >= 2) {
+      const [a, b] = [...touches.values()];
+      const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+      if (pinch > 0 && d > 0) scene.shiftLook({ zoom: pinch / d, pan: [(-dx * 20) / h, (dy * 20) / h] });
+      pinch = d;
+    } else if (e.buttons === 2 || e.shiftKey) scene.shiftLook({ pan: [(-dx * 40) / h, (dy * 40) / h] });
+    else scene.shiftLook({ orbit: [(dx * 3) / h, (dy * 2) / h] });
+  };
+  const onUp = (e: PointerEvent) => {
+    touches.delete(e.pointerId);
+    pinch = 0;
+  };
+  const onWheel = (e: WheelEvent) => {
+    if (!byHand()) return;
+    e.preventDefault();
+    scene.shiftLook({ zoom: Math.exp(Math.max(-1, Math.min(1, e.deltaY / 300))) });
+  };
+  const noMenu = (e: Event) => e.preventDefault();
+  function listen(on: boolean): void {
+    const c = scene.canvas;
+    touches.clear();
+    const f = on ? c.addEventListener.bind(c) : c.removeEventListener.bind(c);
+    f('pointerdown', onDown as EventListener);
+    f('pointermove', onMove as EventListener);
+    f('pointerup', onUp as EventListener);
+    f('pointercancel', onUp as EventListener);
+    f('pointerleave', onUp as EventListener);
+    f('contextmenu', noMenu);
+    if (on) c.addEventListener('wheel', onWheel, { passive: false });
+    else c.removeEventListener('wheel', onWheel);
+  }
+
   /** The south doors' own names back on their screens. */
   function restoreSouth(): void {
     const { trucks } = scene.shiftParts();
@@ -636,6 +736,7 @@ export function createDirector(scene: Sorter): Director {
         const use = scene.storeUse();
         saved = { rate: scene.rate, belt: scene.beltSpeed(), faults: scene.faults.enabled, buffer: use.storeUsed / Math.max(1, use.storeSlots), south: new Map(), camera: scene.shiftCamera() };
         scene.shift = hooks;
+        listen(true);
         scene.setFaults(false);
         for (let d = 0; d < p.northDoors; d++) p.trucks.direct(d, true, bt);
         p.trucks.freeze(true);
@@ -722,11 +823,11 @@ export function createDirector(scene: Sorter): Director {
       timeline = null;
       onDone = () => {};
       onClock = () => {};
-      if (finaleTimer) clearTimeout(finaleTimer);
-      finaleTimer = null;
+      closing = null;
       const p = scene.shiftParts();
       bt = p.beat;
       restoreSouth();
+      listen(false);
       scene.shiftReset(false);
       scene.shift = null;
       p.docks.setDirected(false);
@@ -780,30 +881,17 @@ export function createDirector(scene: Sorter): Director {
 
     finale(stars, done) {
       // (Not after a skip, and never twice.)
-      if (!active || !schedule || skipped || playing || finaleTimer) return done();
+      if (!active || !schedule || skipped || playing || closing) return done();
       // All inside the hall: the last dock, its last cages in the trailer and the door coming
       // down; after a perfect night the lights go and the camera stands on the floor inside
-      // the loop, among the people, looking at the party.
+      // the loop, among the people, looking at the party. Timed on the hall's beats (see `frame`).
       const last = [...schedule.events].reverse().find((e) => e.kind === 'depart' && e.doors.length > 0);
       const d = last && last.kind === 'depart' ? last.doors[last.doors.length - 1]! : -1;
       const dock = d >= 0 ? scene.shiftParts().trucks.docks[d] : undefined;
       const cx = dock ? dock.x : overview().look.x;
-      if (dock) go({ eye: v(dock.x + 3.5, 2.6, -27), look: v(dock.x, 1.9, -40), name: `${cityName(last!.city)}: the last truck` }, true);
+      if (dock) go({ eye: v(dock.x + 2.5, 2.4, -25.5), look: v(dock.x, 2.1, -41), name: `${cityName(last!.city)}: the last truck` }, true);
       else go({ eye: v(cx + 6, 4.6, -19.5), look: v(cx + 1, 1.3, -34), name: 'Docks' }, true);
-      const t0 = now();
-      const party = stars >= 3;
-      const step = () => {
-        const t = now() - t0;
-        if (party) hooks.night = Math.min(1, Math.max(0, (t - 1.2) / 1.6));
-        if (party && t > 2.2 && shotName !== 'Party') go({ eye: v(cx - 9, 1.75, 5), look: v(cx + 5, 1.9, -3), name: 'Party' }, true);
-        if (t < FINALE_SECONDS && active) finaleTimer = setTimeout(step, 100);
-        else {
-          finaleTimer = null;
-          closed = true;
-          done();
-        }
-      };
-      finaleTimer = setTimeout(step, 100);
+      closing = { from: bt, party: stars >= 3, cx, done };
     },
   };
 }
