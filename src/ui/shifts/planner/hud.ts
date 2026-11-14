@@ -89,23 +89,28 @@ export function shiftHud(o: HudOptions): ShiftHud {
       h('div', { class: 'shp-hud-card-top' }, h('b', { text: name(c) }), tag),
       h('div', { class: 'shp-hud-bar' }, bar),
       line);
-    return { c, city, el, tag, bar, line, shown: '' };
+    return { c, city, el, tag, bar, line, shown: '', badged: false };
   });
   const earned = h('b', { class: 'shp-num', text: money(0) });
   const spent = h('b', { class: 'shp-num', text: money(0) });
   const balance = h('b', { class: 'shp-num shp-hud-balance', text: money(0) });
-  const last = h('div', { class: 'shp-hud-last', 'aria-live': 'polite', text: 'Money arrives when a truck leaves.' });
+  const last = h('div', { class: 'shp-hud-last', 'aria-live': 'polite' });
   const moneyCard = h('div', { class: 'shp-hud-money' },
     h('span', { text: 'Earned so far' }), earned,
     h('span', { text: 'Costs so far' }), spent,
     h('span', { class: 'shp-hud-sum', text: 'Balance' }), balance);
   const list = h('div', { class: `shp-hud-cards${cards.length > 8 ? ' is-many' : ''}`, tabindex: '0', role: 'group', 'aria-label': 'Cities' }, ...cards.map((k) => k.el));
 
+  // Top: the clock, and a badge for every truck that has left. Bottom: the money and the buttons,
+  // where a thumb reaches them. The cities still loading sit at the side.
+  const gone = h('div', { class: 'shp-hud-gone', 'aria-live': 'polite', 'aria-label': 'Trucks that have left' });
   const root = h('div', { class: `shp-hud${compact ? ' is-many' : ''}` },
     h('header', { class: 'shp-hud-top' },
       h('div', { class: 'shp-title' }, mark(), h('div', {}, h('h1', {}, h('span', { class: 'shp-wide', text: 'Level ' }), `${level.id} · ${level.name}`), sub)),
-      h('div', { class: 'shp-hud-right' }, time, progress, controls)),
-    h('aside', { class: 'shp-hud-side', 'aria-label': 'Trucks and money' }, list, h('div', { class: 'shp-hud-foot' }, moneyCard, last)),
+      h('div', { class: 'shp-hud-right' }, time, progress)),
+    gone,
+    h('aside', { class: 'shp-hud-side', 'aria-label': 'Cities still loading' }, list),
+    h('footer', { class: 'shp-hud-bottom' }, moneyCard, controls),
   );
 
   function draw(): void {
@@ -132,6 +137,12 @@ export function shiftHud(o: HudOptions): ShiftHud {
         k.tag.className = `shp-hud-tag shp-num${left ? ` is-${left.status}` : ''}`;
         k.el.classList.toggle('is-gone', !!left);
       }
+      // A truck that has left moves from the cards to a badge at the top.
+      if (left && !k.badged) {
+        k.badged = true;
+        k.el.hidden = true;
+        gone.append(h('span', { class: 'shp-hud-badge', style: `--c:${cityColour(k.c)}` }, h('b', { text: name(k.c) }), h('span', { class: `shp-hud-tag shp-num is-${left.status}`, text: STATUS[left.status] })));
+      }
       if (left && (!lastLeft || left.at >= lastLeft.at)) {
         const got = loaded * (PRICES.parcel + (left.status === 'onTime' ? PRICES.onTime : 0));
         lastLeft = { at: left.at, text: `${clock(left.at)} ${name(k.c)} left${left.status === 'onTime' ? ' on time' : left.status === 'late' ? ' late' : ', not complete'} + ${money(got)}` };
@@ -140,7 +151,8 @@ export function shiftHud(o: HudOptions): ShiftHud {
     const got = earnedBy(timeline, m);
     earned.textContent = money(got);
     balance.textContent = money(got - costs);
-    const note = lastLeft ? lastLeft.text : 'Money arrives when a truck leaves.';
+    // (Kept for screen readers; the badges at the top show the same to the eye.)
+    const note = lastLeft ? lastLeft.text : '';
     if (last.textContent !== note) last.textContent = note;
   }
 

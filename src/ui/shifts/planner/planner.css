@@ -1471,3 +1471,89 @@
     font-size: 12px;
   }
 }
+
+/* The running shift: badges of departed trucks under the top bar, money and buttons at the bottom. */
+.shp-hud {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+.shp-hud-gone {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+.shp-hud-gone:empty {
+  display: none;
+}
+.shp-hud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 99px;
+  background: var(--sh-deep, rgba(14, 15, 19, 0.84));
+  border: 1px solid var(--line);
+  border-left: 8px solid var(--c);
+  font-size: 13px;
+}
+.shp-hud-side {
+  grid-row: 3;
+}
+.shp-hud-card[hidden] {
+  display: none;
+}
+.shp-hud-bottom {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+  padding: 8px 10px 8px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  pointer-events: auto;
+}
+.shp-hud-bottom .shp-hud-money {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+.shp-hud-bottom .shp-hud-money b {
+  margin-right: 10px;
+  border-top: 0;
+  padding-top: 0;
+  font-size: 15px;
+}
+.shp-hud-bottom .shp-hud-money .shp-hud-sum {
+  border-top: 0;
+  padding-top: 0;
+}
+@media (max-width: 760px) {
+  .shp-hud-side {
+    grid-column: 1;
+    grid-row: 3;
+    align-self: end;
+  }
+  .shp-hud-bottom {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px;
+  }
+  .shp-hud-bottom .shp-hud-money {
+    justify-content: space-between;
+    padding: 0 6px;
+  }
+  .shp-hud-bottom .shp-hud-speed .shp-pick {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
