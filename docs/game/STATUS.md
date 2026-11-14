@@ -217,4 +217,17 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
 - B · A (model): blocks and robot cities must be put in the fixed order of `fixture.to_solver` (blocks by
   start, city, end, people, docks; robot cities by number) before scoring, or the same plan can score
   differently by list order. The golden plans do not show this.
-
+- Done: `tests/shiftsBestPlans.test.ts` (every level: the best plan of `tools/balance/best` can start and scores
+  900 to 1010; an empty and a poor plan score 0 or more), `scripts/shiftsPlay.mjs` with `shiftsPlay.lib.mjs`
+  (plays levels in a headless browser with the best plans, at phone or desktop size, and lists small buttons,
+  clipped text, things off screen, a clock or cards that stand still, the robot switch, the time from Skip or
+  the end of the shift to the result, and the stored stars). Screenshots go to `shots/test/` (not committed).
+- Played, software graphics (about 1 frame a second on the phone size, 0.3 on the desktop size): phone 390 × 780
+  level 1 by hand and level 2 to the end at 16×, levels 3 to 10 started, watched briefly and skipped, then the end
+  screen; desktop 1440 × 900 level 1 to the end, levels 5 and 10 briefing and planner only.
+- Found (product code, not changed here): the shift overlay starts with no speed button lit (`hud.ts` starts at
+  `speed = 8`, the game plays at 4×); on the phone the money row wraps so "Balance" and its amount are on two
+  lines; long city names are cut ("Amsterd…", "Haarlemmermeer") in planner labels and city cards; planner
+  blocks are 34 to 38 px high on the phone.
+- Not done: no shift played on the desktop size for levels 5 and 10; departed-truck badges seen only in levels 1
+  and 2; frame rate on a real graphics chip.
