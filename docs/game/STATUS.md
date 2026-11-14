@@ -102,6 +102,16 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
   stopping or starting; a cut is held 4.5 s, at most one every 9 s, none at 8× and 16×. `finale`: the last
   truck from the yard, at three stars the night comes on; `done` after 4.6 s; after `skip` it ends at once.
   `exit` puts the camera back where and how it was.
+- Checked at phone size (390 × 780, upright; software GL): level 1's overview is its one dock from inside the
+  loop; level 10's looks down from above the roof on the open docks (11 of the 14 open at minute 20 fit; the
+  rest are off the sides). `focusCity` reports the automatic direction off and `setAutoCamera(true)` on again; a
+  change to walking by hand reports off; `finale` calls `done` once and turns the night on at three stars;
+  after `skip` it ends at once with no night. A cut now also ends while the shift is paused.
+- Robots and the model's pace: a round trip on the grid is 14 beats at one cell a beat (17 an hour); letting
+  robots tip on every beat does not help (measured). Reaching 20 an hour needs the robot floor to run at double
+  time during a shift (two cells a beat, with the parcels' ride and tip timing moved to that clock), about half
+  a day's careful work; or the model's robot rate set to 17. Until then the hall's robots run behind and the
+  timeline's counts are the truth.
 - Rough: robots are about 15 % under the model's pace, and full boxes wait for the three forklifts, so robot
   cities fall behind in the hall (the counts on screen are the timeline's); people still appear at their
   place; the nested stacks of empty cages stay at every door; a belt's parcels are taken away (and come round

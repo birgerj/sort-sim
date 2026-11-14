@@ -174,6 +174,8 @@ export function createDirector(scene: Sorter): Director {
       const before = bt;
       bt = beat;
       watchCamera();
+      // (Paused, no beat comes: a cut still ends, back to the overview.)
+      if (hooks.warp === 0 && cutUntil && now() >= cutUntil) direct();
       if (!playing || !schedule) return;
       minute = Math.min(schedule.end, minute + Math.max(0, beat - before) * MIN_PER_BEAT);
       onClock(minute);
@@ -465,11 +467,12 @@ export function createDirector(scene: Sorter): Director {
     // Far enough back to have them all in the picture (a phone held upright sees a narrow strip).
     const half = (x1 - x0) / 2 + 7;
     const tan = Math.tan((30 * Math.PI) / 180) * Math.max(0.4, scene.shiftAspect());
-    const dist = Math.max(17, Math.min(70, half / tan));
+    const dist = Math.max(17, Math.min(120, half / tan));
     // A few docks: from inside the loop, under the roof. Many: from high above (the roof is left out up there),
     // so the loop does not stand in front of them.
     if (dist <= 30) return { eye: v(cx, 5 + dist * 0.42, -31 + dist * 0.9), look: v(cx, 1.2, -33), name: 'Docks' };
-    return { eye: v(cx, dist * 0.8, -29 + dist * 0.6), look: v(cx, 0, -29), name: 'Docks', free: true };
+    // (Steeper the further up: on a narrow screen the docks stay in the middle of the picture.)
+    return { eye: v(cx, dist * 0.88, -30 + dist * 0.38), look: v(cx, 0, -30), name: 'Docks', free: true };
   }
 
   const doorShot = (d: number, name: string): Shot => {
