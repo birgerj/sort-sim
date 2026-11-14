@@ -24,7 +24,8 @@ SET = [['Unloading', 'Robots are off', 'Doors'], ['Unloading', 'Robots are off',
 BADGE = [('lean', 'One person is enough'), ('oneDock', 'Never more than 2 docks open'), ('noDockSmall', 'Only the biggest city on a dock'), ('lean3', 'Never more than 3 people at work'),
          ('smallFleet', 'At most 6 robots'), ('halfBuffer', 'Buffer never over half full'), ('allOnTime', 'Every truck on time'), ('allOnTime', 'Every truck on time'),
          ('lean12', 'Never more than 12 people at work'), ('allOnTime', 'Every truck on time')]
-PAR = [178, 612, 833, 669, 1687, 2549, 7659, 13560, 11746, 23762]  # provisional, see docs/game/DECISIONS.md
+# Best profit found per level with plans in the game's shape (par.py; see REPORT.md).
+PAR = [178, 628, 836, 669, 1689, 2537, 7659, 13560, 11746, 23762]
 
 
 def level_json(L):
@@ -39,11 +40,11 @@ def level_json(L):
                 u = t
                 while u < len(col) and abs(col[u] - col[t]) < 1e-12:
                     u += 1
-                segs.append({'from': t, 'to': u, 'perMinute': round(float(col[t]), 6)})
+                segs.append({'from': t, 'to': u, 'perMinute': float(col[t])})  # unrounded: the app must count the same parcels
                 t = u
             else:
                 t += 1
-        cities.append({'volume': round(float(col.sum()), 3), 'truck': d['d'], 'arrivals': segs})
+        cities.append({'volume': float(col.sum()), 'truck': d['d'], 'arrivals': segs})
     n = L['n']
     out = {'id': n, 'name': NAMES[n - 1], 'shiftMinutes': L['T'], 'cities': cities, 'docks': L['docks'], 'robotsMax': L['robots'], 'bufferCap': L['store'],
            'wageFactor': L['wage'], 'notes': {'fresh': FRESH[n - 1], 'setForYou': SET[n - 1]}, 'par': PAR[n - 1], 'badge': {'id': BADGE[n - 1][0], 'text': BADGE[n - 1][1]}}
@@ -88,6 +89,75 @@ def to_contract(L, p):
         seen[(c, t0, t1, s)] = seen.get((c, t0, t1, s), 0) + 1
     return {'blocks': [{'city': c, 'start': t0, 'end': t1, 'people': s, 'docks': n} for (c, t0, t1, s), n in sorted(seen.items())],
             'robotCities': sorted(set(l[0] for l in p['l'])), 'robots': p['N']}
+
+
+def startable(L, plan):
+    """The planner's own rules (the rest is checked by to_solver): times on the half hour or exactly on the city's
+    first parcel or truck time, at least an hour, robots only in a level that has them."""
+    for b in plan['blocks']:
+        al = solve.allowed(L, b['city'])
+        if b['start'] not in al or b['end'] not in al or b['end'] - b['start'] < 60 or b['docks'] < 1 or b['people'] not in (1, 2):
+            return False
+    if (plan['robotCities'] or plan['robots']) and L['robots'] == 0:
+        return False
+    return 0 <= plan['robots'] <= L['robots'] and len(set(plan['robotCities'])) == len(plan['robotCities'])
+
+
+def make_startable(L, plan):
+    """A first-guess plan from solve.py made startable in the game: starts moved up and ends moved down to a time
+    the planner offers, blocks shorter than an hour dropped, no robots where the level has none."""
+    blocks = []
+    for b in plan['blocks']:
+        al = solve.allowed(L, b['city'])
+        start = min(t for t in al if t >= b['start'])
+        end = max(t for t in al if t <= b['end'])
+        if end - start >= 60:
+            blocks.append(dict(b, start=start, end=end))
+    out = {'blocks': blocks, 'robotCities': list(plan['robotCities']), 'robots': plan['robots']}
+    if L['robots'] == 0:
+        out['robotCities'], out['robots'] = [], 0
+    return out
+
+
+def peaks(plan):
+    """Most people at work and most docks open in the same minute. A block is open from its start up to, not
+    including, its end; the 15 minutes a dock needs to switch city do not count."""
+    ev = []
+    for b in plan['blocks']:
+        ev.append((b['start'], 1, b['people'] * b['docks'], b['docks']))
+        ev.append((b['end'], 0, -b['people'] * b['docks'], -b['docks']))
+    ev.sort()  # ends before starts in the same minute
+    c = k = pc = pk = 0
+    for _, _, dp, dk in ev:
+        c += dp
+        k += dk
+        pc = max(pc, c)
+        pk = max(pk, k)
+    return pc, pk
+
+
+def badge_condition(L, bid, plan, r):
+    """The level's extra goal, without the score. `r` is evaluate(..., detail=True) of the same plan."""
+    ds = L['dests']
+    people, docks = peaks(plan)
+    if bid == 'lean':
+        return people <= 1
+    if bid == 'lean3':
+        return people <= 3
+    if bid == 'lean12':
+        return people <= 12
+    if bid == 'oneDock':
+        return docks <= 2
+    if bid == 'noDockSmall':  # the largest city by volume, the first one on a tie
+        biggest = max(range(len(ds)), key=lambda i: (ds[i]['v'], -i))
+        return all(b['city'] == biggest for b in plan['blocks'])
+    if bid == 'smallFleet':
+        return plan['robots'] <= 6
+    if bid == 'halfBuffer':  # every minute of the shift, not only the 5-minute curve the result shows
+        return r['peak'] <= L['store'] / 2 + 1e-9
+    if bid == 'allOnTime':  # complete and not late, for every city
+        return r['ontime'] == len(ds)
+    raise ValueError(bid)
 
 
 def trace(L, p, step=5):
@@ -138,7 +208,8 @@ def run(L, plan, par):
         full.append([start, (len(buf) - 1) * 5])
     profit = round(float(r['profit']))
     score = max(0, round(1000 * profit / par))
-    result = {'profit': profit, 'score': score, 'stars': 3 if score >= 900 else 2 if score >= 750 else 1 if score >= 500 else 0, 'badge': False,
+    badge = score >= 500 and badge_condition(L, BADGE[L['n'] - 1][0], plan, r)
+    result = {'profit': profit, 'score': score, 'stars': 3 if score >= 900 else 2 if score >= 750 else 1 if score >= 500 else 0, 'badge': bool(badge),
               'lines': {'revenue': round(float(r['rev'])), 'bonus': round(float(r['bonus'])), 'late': round(float(r['late'])), 'left': round(float(r['left'])),
                         'docks': round(float(r['dock'])), 'people': round(float(r['staff'])), 'robots': round(float(r['robots'])), 'buffer': round(float(r['store']))},
               'trucks': trucks, 'buffer': {'series': buf, 'cap': cap, 'fullRanges': full}}
@@ -158,10 +229,13 @@ if __name__ == '__main__':
     res, tl, _ = run(L, plan, PAR[3])
     json.dump({'level': js[3], 'plan': plan, 'result': res, 'timeline': tl}, open('tests/fixtures/shifts/level4.json', 'w'), indent=1)
     golden = []
-    for L in Ls:
+    fresh = solve.levels()  # to_solver opens every robot line in the levels above; the first guesses need the levels as designed
+    for L, L0 in zip(Ls, fresh):
         for name, h in (('safe', solve.h_safe), ('sensible', solve.h_sensible)):
-            pl = to_contract(L, h(L))
+            pl = make_startable(L, to_contract(L0, h(L0)))
+            assert startable(L, pl), (L['n'], name)
             out = run(L, pl, PAR[L['n'] - 1])
+            assert out, (L['n'], name)
             if out:
                 golden.append({'level': L['n'], 'name': name, 'plan': pl, 'profit': round(out[2], 2), 'lines': out[0]['lines'], 'trucks': out[0]['trucks']})
     golden.append({'level': 4, 'name': 'example', 'plan': plan, 'profit': round(run(Ls[3], plan, PAR[3])[2], 2), 'lines': res['lines'], 'trucks': res['trucks']})

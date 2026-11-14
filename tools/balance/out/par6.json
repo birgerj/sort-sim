@@ -1,0 +1,103 @@
+{
+ "level": 6,
+ "profit": 2537.117022865512,
+ "plan": {
+  "blocks": [
+   {
+    "city": 0,
+    "start": 90,
+    "end": 150,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 150,
+    "end": 210,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 210,
+    "end": 270,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 270,
+    "end": 330,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 1,
+    "start": 60,
+    "end": 120,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 90,
+    "end": 150,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 150,
+    "end": 210,
+    "people": 2,
+    "docks": 1
+   }
+  ],
+  "robotCities": [
+   1,
+   2,
+   4,
+   5,
+   6,
+   7
+  ],
+  "robots": 11
+ },
+ "runs": [
+  {
+   "iters": 100000,
+   "restarts": [
+    2524.9,
+    2507.0,
+    2497.01,
+    2445.97
+   ]
+  },
+  {
+   "iters": 300000,
+   "restarts": [
+    2537.12,
+    2534.54,
+    2526.0,
+    2524.57
+   ]
+  }
+ ],
+ "detail": {
+  "profit": 2537.117022865512,
+  "rev": 3150.0,
+  "bonus": 630.0,
+  "late": 0.0,
+  "left": 0.0,
+  "dock": 175.0,
+  "staff": 300.0,
+  "robots": 726.0,
+  "store": 41.88297713448816,
+  "peak": 250.0,
+  "ontime": 8
+ },
+ "peaks": [
+  4,
+  3
+ ]
+}
