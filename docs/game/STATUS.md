@@ -122,6 +122,24 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
   time during a shift (two cells a beat, with the parcels' ride and tip timing moved to that clock), about half
   a day's careful work; or the model's robot rate set to 17. Until then the hall's robots run behind and the
   timeline's counts are the truth.
+- Round 3 (from the owner's play):
+  - Cages by the door: the free simulation's staging ran whenever a full cage found no place in the trailer:
+    during the trailer swap, and when the hall had ten cages in before the plan's swap (leftover part cages,
+    and the cage size rounded in levels 7 to 10). Now no cage is staged in a shift: during a swap a full cage
+    waits in its place and parcels go into the emptiest other cage; a directed trailer takes twenty cages.
+  - People idle beside parcels: the pickers were held to the timeline. Now nobody is: the director sends down
+    a dock's chute only what the timeline has loaded (as far ahead as a parcel comes in before it is due, plus
+    four minutes), at once when the parcel comes onto the loop, so what lies on a belt is the crew's to take
+    and what must wait rides the loop or goes to the rack. The loop always runs at twice its slowest speed in
+    a shift. `Docks.idleAt` / `stagedAt` count beats stood beside a parcel and cages by the door; both stayed 0
+    in the headless runs (levels 1 and 4). No unit test: the docks cannot be built without the WebGL scene.
+  - Cage boards in a shift: the planned city's name on its colour, `cage n` small below; they follow the dock
+    to its next city; the free simulation's postcode cards come back on `exit`. The projector over a dock belt
+    shows the cage's number (not a postcode) and is left as it is.
+  - Closing shot inside the hall: the last dock from the floor, then at three stars the night and a place on
+    the floor inside the loop among the dancers; the camera stays there until the next attempt. The night is
+    only laid over the player's look and goes at the next `enter` or `exit`; a change of look or quality during
+    a shift was tried (Minimal to Day, low to normal) without errors.
 - Rough: robots are about 15 % under the model's pace, and full boxes wait for the three forklifts, so robot
   cities fall behind in the hall (the counts on screen are the timeline's); people still appear at their
   place; the nested stacks of empty cages stay at every door; a belt's parcels are taken away (and come round

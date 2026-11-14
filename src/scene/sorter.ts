@@ -1042,6 +1042,9 @@ export interface ShiftHooks {
   /** The city whose next parcel is due on the loop now (−1: none is), and: one for that city has just been let onto it. */
   next(): number;
   took(city: number): void;
+  /** A parcel of this city has just come onto the loop: the chute of a dock that may take it now, and its postcode (null: none); and: it was sent there. */
+  route(city: number): { chute: number; pc: number } | null;
+  sent(chute: number): void;
   /** 0…1: how far the night look is on whatever the time of day (the closing party). */
   night: number;
   /** Parcels per beat to bring in from the inbound docks. */
@@ -2909,6 +2912,17 @@ export class Sorter implements Scene3D {
       p.spare = true;
       p.noread = false;
       p.reason = undefined;
+      // Straight to its dock when that may take it now (else the director sends it later, as it rides by).
+      const to = p.city === undefined ? null : this.shift.route(p.city);
+      const ch = to ? this.chutes[to.chute] : undefined;
+      if (to && ch && this.shiftRoom(to.chute) > 0) {
+        p.spare = false;
+        p.dest = to.chute;
+        p.pc = to.pc;
+        p.glow.copy(ch.col);
+        if (p.labelCell) this.drawLabel(p.labelCell, p);
+        this.shift.sent(to.chute);
+      }
     }
     this.retarget(p);
   }
