@@ -1,11 +1,18 @@
 {
  "level": 3,
- "profit": 791.5,
+ "profit": 779.0,
  "plan": {
   "blocks": [
    {
     "city": 0,
-    "start": 30,
+    "start": 0,
+    "end": 60,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 60,
     "end": 180,
     "people": 2,
     "docks": 1
@@ -43,15 +50,24 @@
    "restarts": [
     791.5
    ]
+  },
+  {
+   "iters": 30000,
+   "restarts": [
+    779.0,
+    779.0,
+    771.85,
+    766.49
+   ]
   }
  ],
  "detail": {
-  "profit": 791.5,
+  "profit": 779.0,
   "rev": 1020.0,
   "bonus": 204.0,
   "late": 0.0,
   "left": 0.0,
-  "dock": 62.5,
+  "dock": 75.0,
   "staff": 150.0,
   "robots": 220.0,
   "store": 0.0,
