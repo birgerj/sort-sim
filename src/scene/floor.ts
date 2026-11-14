@@ -819,6 +819,21 @@ export class RobotFloor {
     });
   }
 
+  /**
+   * A shift of the planning game: the boards on the boxes show only their number, no city (the
+   * plan's robot cities are not the free simulation's); afterwards their own again.
+   */
+  shiftBoards(on: boolean): void {
+    if (!on) return this.setCountry();
+    this.bins.forEach((_, n) => {
+      const m = this.boardMats[n];
+      if (!m) return;
+      m.map?.dispose();
+      m.map = codeTex(`box ${n + 1}`, '');
+      m.needsUpdate = true;
+    });
+  }
+
   private buildRobots(): void {
     const k = this.kit;
     const black = k.std(0x141519, 0.5, 0.3, 0x1b1c20);

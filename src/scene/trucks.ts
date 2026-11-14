@@ -541,18 +541,23 @@ export class Trucks {
   freeze(on: boolean): void {
     this.frozen = on;
     this.warned.clear();
+    this.labelled.clear();
     if (!on) this.scheduled = false;
     for (const d of this.docks) d.shown = '';
   }
 
   /** Another name on a door's screen (a robot city of the shift at a south door), or its own back. */
-  label(i: number, city: string, pc: string): void {
+  label(i: number, city: string, pc: string, on = true): void {
     const d = this.docks[i];
     if (!d) return;
     d.city = city;
     d.pc = pc;
     d.shown = '';
+    if (on) this.labelled.add(i);
+    else this.labelled.delete(i);
   }
+  /** Doors the director has put a shift's city on (`label`): the only ones of the free cycle that show a city while a shift plays. */
+  private readonly labelled = new Set<number>();
 
   /** Doors for the cleardown panel: number, city, postcodes and state. */
   list(): { number: number; city: string; pc: string; state: State; load: number; cap: number; cutoff: number; fill: number }[] {
@@ -603,6 +608,13 @@ export class Trucks {
             : d.state === 'opening'
               ? `Opening · dep ${hhmm}`
               : 'Truck on its way';
+      if (this.frozen && !this.labelled.has(i)) {
+        // A shift is played and this door is not in its plan: no city, a dark screen.
+        if (d.shown === 'dark') return;
+        d.shown = 'dark';
+        this.screens.set(i, String(d.number), 'closed', TONES.off);
+        return;
+      }
       const key = `${d.city}|${status}`;
       if (d.shown === key) return;
       d.shown = key;
