@@ -4,12 +4,13 @@
 import numpy as np, numba as nb, math, random, json, sys, time, copy
 
 import os as _os
-PR = dict(rev=1.5, bonus=0.30, late=0.03, left=2.5, dock=25.0, person=30.0, robot=float(_os.environ.get('ROBOT', '11')), line=float(_os.environ.get('LINE', '0')), store=0.15)
+PR = dict(rev=1.5, bonus=0.30, late=0.03, left=1.5, dock=25.0, person=30.0, robot=float(_os.environ.get('ROBOT', '11')), line=float(_os.environ.get('LINE', '0')), store=0.15)
 SNAP = 15
 import os
 MINBLK = int(os.environ.get('MINBLK', '60'))
 TAG = os.environ.get('TAG', '')
 GRID = int(os.environ.get('GRID', '30'))
+ROBOT_RATE = 17  # parcels a robot loads in an hour (what the hall's robots do)
 
 
 def allowed(L, d):
@@ -107,7 +108,7 @@ def sim(arr, bd, bk, b0, b1, bs, ld, l0, l1, N, store_cap, maint, out0, out1):
                     btr[b] -= 220.0
                     bpause[b] = 10
         if not (out0 <= t < out1) and N > 0:
-            fc = N / 3.0
+            fc = N / (60.0 / 17.0)  # 17 an hour per robot; the same division as the app's model, to the last bit
             tot = 0.0
             for l in range(nl):
                 lx[l] = 0.0
@@ -215,13 +216,13 @@ def levels0():
     Ls.append(level(4, 240, [D(240, 0, 90, 105), D(200, 0, 200, 240), D(150, 0, 150, 180)], 2))
     Ls.append(level(5, 300, [D(420, 0, 240, 270), D(300, 0, 180, 210, 'early'), D(260, 60, 270, 300, 'late'), D(180, 0, 150, 180), D(140, 30, 240, 270), D(100, 90, 280, 300, 'late')], 6, 6, 10))
     Ls.append(level(6, 360, [D(520, 0, 300, 330), D(380, 0, 200, 240, 'early'), D(320, 90, 330, 360, 'late'), D(260, 0, 180, 210), D(220, 60, 300, 330), D(160, 0, 150, 180, 'early'), D(140, 120, 330, 360), D(100, 100, 300, 330, 'late')], 8, 8, 14, store=250))
-    Ls.append(level(7, 360, [D(600, 0, 310, 340), D(480, 0, 220, 250, 'early'), D(400, 60, 330, 360, 'late'), D(340, 0, 130, 150), D(300, 30, 300, 330), D(240, 120, 340, 360, 'late'), D(180, 0, 240, 270), D(140, 0, 180, 210, 'early'), D(120, 100, 320, 350)], 8, 10, 12, outage=(180, 240)))
+    Ls.append(level(7, 360, [D(600, 0, 310, 340), D(480, 0, 220, 250, 'early'), D(400, 60, 330, 360, 'late'), D(340, 0, 130, 150), D(300, 30, 300, 330), D(240, 120, 340, 360, 'late'), D(180, 0, 240, 270), D(140, 0, 180, 210, 'early'), D(120, 100, 320, 350)], 10, 10, 12, outage=(180, 240)))
     Ls.append(level(8, 480, [D(800, 0, 420, 450), D(620, 0, 300, 330, 'early'), D(900, 0, 400, 450), D(480, 120, 450, 480, 'late'), D(380, 0, 240, 270), D(320, 60, 420, 450), D(260, 0, 200, 240, 'early'), D(200, 200, 460, 480, 'late'), D(140, 0, 360, 390), D(100, 150, 450, 480)], 12, 12, 20, batch=((2, 600, 180, 210),)))
     v9 = [820, 680, 560, 500, 440, 400, 360, 320, 280, 260, 220, 160]
     a9 = [0, 0, 30, 0, 60, 0, 90, 30, 120, 0, 150, 60]
     d9 = [450, 300, 480, 240, 420, 360, 480, 330, 450, 210, 480, 390]
     p9 = ['flat', 'early', 'late', 'flat', 'flat', 'early', 'late', 'flat', 'flat', 'early', 'late', 'flat']
-    Ls.append(level(9, 480, [D(v9[i], a9[i], d9[i] - 30, d9[i], p9[i]) for i in range(12)], 12, 16, 24, cap=12, wage=1.5))
+    Ls.append(level(9, 480, [D(v9[i], a9[i], d9[i] - 30, d9[i], p9[i]) for i in range(12)], 16, 16, 24, cap=12, wage=1.5))
     v10 = [900, 780, 680, 600, 540, 480, 440, 400, 360, 320, 300, 260, 220, 180, 140, 100]
     a10 = [0, 0, 30, 0, 60, 0, 90, 30, 120, 0, 150, 60, 0, 180, 30, 210]
     d10 = [450, 420, 480, 270, 450, 330, 480, 390, 480, 240, 450, 360, 300, 480, 420, 480]
@@ -243,7 +244,7 @@ def levels0():
                 for i, d in enumerate(L['dests']):
                     d['v'] = float(L['arr'][:, i].sum())
                 if L['n'] == 9:
-                    L['cap'] = 16
+                    L['cap'] = 28
                 if L['n'] == 10:
                     L['cap'] = 40
     return Ls
@@ -367,7 +368,7 @@ def h_safe(L):
                 placed = True
                 break
         if not placed and L['lines']:
-            q = dict(b=p['b'], l=p['l'] + [[i, L['first'][i], d['d']]], N=min(L['robots'], p['N'] + math.ceil(rate_of(d) / 20)))
+            q = dict(b=p['b'], l=p['l'] + [[i, L['first'][i], d['d']]], N=min(L['robots'], p['N'] + math.ceil(rate_of(d) / ROBOT_RATE)))
             if valid(L, q):
                 p = q
     return p
@@ -382,7 +383,7 @@ def h_sensible(L):
     for i in sorted(range(len(ds)), key=lambda i: ds[i]['v']):
         d = ds[i]
         r = rate_of(d)
-        need = math.ceil(r / 20)
+        need = math.ceil(r / ROBOT_RATE)
         if L['lines'] and r <= 55 and p['N'] + need <= L['robots']:
             q = dict(b=p['b'], l=p['l'] + [[i, L['first'][i], d['d']]], N=p['N'] + need)
             if valid(L, q):
@@ -423,7 +424,7 @@ def h_sensible(L):
                 if placed:
                     break
         if not placed and L['lines']:
-            q = dict(b=p['b'], l=p['l'] + [[i, t0, t1]], N=min(L['robots'], p['N'] + math.ceil(rate_of(d) / 20)))
+            q = dict(b=p['b'], l=p['l'] + [[i, t0, t1]], N=min(L['robots'], p['N'] + math.ceil(rate_of(d) / ROBOT_RATE)))
             if valid(L, q):
                 p = q
     return p
