@@ -1021,6 +1021,9 @@ export interface Parcel {
   laps?: number;
 }
 
+/** During a shift: metres before its chute within which a parcel riding the loop is sent down it (and counts as on its way). */
+const SHIFT_NEAR = 36;
+
 /**
  * What a shift of the planning game being played asks of the hall (see director.ts). The
  * scene calls these; with no shift (`Sorter.shift` null) it is the free simulation.
@@ -7439,9 +7442,9 @@ export class Sorter implements Scene3D {
   }
 
   /** Where the parcels riding the loop stand, how the loop looks from one of its trays: `s` of the chutes and the store. */
-  private shiftPick(city: number | null, target: number, avoid?: (city: number) => boolean): Parcel | null {
+  private shiftPick(city: number | null, target: number, avoid?: (city: number) => boolean, within = LOOP_LEN): Parcel | null {
     let best: Parcel | null = null;
-    let bd = LOOP_LEN;
+    let bd = within;
     let fallback: Parcel | null = null;
     let fd = LOOP_LEN;
     for (const p of this.parcels) {
@@ -7467,7 +7470,7 @@ export class Sorter implements Scene3D {
   /** Room at a chute's end for another parcel, in parcels (a dock belt by length, a robot table by places), less what is on its way there. */
   shiftRoom(chute: number): number {
     let coming = 0;
-    for (const p of this.parcels) if (p.mode === 'loop' && !p.spare && p.dest === chute && !p.toRack) coming++;
+    for (const p of this.parcels) if (p.mode === 'loop' && !p.spare && p.dest === chute && !p.toRack && p.divertAt - this.ct <= SHIFT_NEAR / BEAT_M) coming++;
     return this.room(chute) - coming;
   }
 
@@ -7479,7 +7482,9 @@ export class Sorter implements Scene3D {
   shiftSend(chute: number, city: number, pc: number): boolean {
     const ch = this.chutes[chute];
     if (!ch || this.shiftRoom(chute) <= 0) return false;
-    const p = this.shiftPick(city, ch.s);
+    // (Only one that is nearly there: a parcel half a loop away would hold a place on the belt
+    // that one just coming in could take.)
+    const p = this.shiftPick(city, ch.s, undefined, SHIFT_NEAR);
     if (!p) return false;
     p.spare = false;
     p.dest = chute;
