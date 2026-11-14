@@ -103,6 +103,7 @@ export function briefingScreen(ctx: Ctx, id: number): HTMLElement {
   ];
   if (level.robotsMax > 0) prices.push([`Robot, whole shift (${hours(level.shiftMinutes)})`, `${price(robotForShift(level))} each`, '']);
   prices.push(['Buffer', `${price(PRICES.bufferPerParcel)} a parcel`, '']);
+  prices.push(['Buffer full', 'parcels are refused', 'sh-bad']);
   const priceList = h(
     'section',
     { class: 'sh-panel sh-panel--soft' },

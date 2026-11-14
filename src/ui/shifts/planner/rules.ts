@@ -250,11 +250,13 @@ export function mostToEarn(level: Level): number {
 
 /** How the plan stands against the level's extra goal, where the plan alone decides it. */
 export function goalStanding(level: Level, plan: Plan): { ok: boolean; text: string } | null {
-  const people: Record<string, number> = { lean: 1, lean3: 3, lean12: 12 };
   const id = level.badge.id;
-  if (id in people) {
+  // lean = one person; lean<N> = never more than N people at work.
+  const lean = /^lean(\d*)$/.exec(id);
+  if (lean) {
+    const most = lean[1] ? Number(lean[1]) : 1;
     const p = peak(peopleSteps(plan));
-    return { ok: p <= people[id]!, text: `Your plan peaks at ${p} ${p === 1 ? 'person' : 'people'}.` };
+    return { ok: p <= most, text: `Your plan peaks at ${p} ${p === 1 ? 'person' : 'people'}.` };
   }
   if (id === 'oneDock') {
     const p = peak(openDockSteps(plan));

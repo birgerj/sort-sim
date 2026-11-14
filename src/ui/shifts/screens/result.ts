@@ -24,6 +24,7 @@ function change(gain: number): [string, string] {
 /** The buffer every five minutes as bars; the stretches it was full in red. */
 function bufferChart(result: Result, shiftMinutes: number): HTMLElement {
   const { series, cap, fullRanges } = result.buffer;
+  const refused = Math.round(result.buffer.refused ?? 0);
   let peak = 0;
   let peakAt = 0;
   series.forEach((v, k) => {
@@ -41,7 +42,7 @@ function bufferChart(result: Result, shiftMinutes: number): HTMLElement {
   const mid = Math.round(shiftMinutes / 2 / 30) * 30;
   const full = fullRanges.map(([a, b]) => `${clock(a)}–${clock(b)}`);
   const text = full.length
-    ? `Full ${full.length === 1 ? 'from' : 'in the stretches'} ${full.join(', ')} (red). Parcels that found no place then had to wait before the sorter.`
+    ? `Full ${full.length === 1 ? 'from' : 'in the stretches'} ${full.join(', ')} (red). ${refused > 0 ? `${plural(refused, 'parcel')} found no place and ${refused === 1 ? 'was' : 'were'} refused: left behind for the night.` : 'No parcel was refused.'}`
     : peak === 0
       ? 'Nothing went to the buffer tonight.'
       : toCap
