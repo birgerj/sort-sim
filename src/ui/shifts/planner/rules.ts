@@ -260,6 +260,8 @@ export function goalStanding(level: Level, plan: Plan): { ok: boolean; text: str
     const p = peak(openDockSteps(plan));
     return { ok: p <= 2, text: `Your plan peaks at ${p} ${p === 1 ? 'dock' : 'docks'}.` };
   }
+  const fleet = /^fleet(\d+)$/.exec(id);
+  if (fleet) return { ok: plan.robots <= Number(fleet[1]), text: `Your fleet is ${plan.robots} ${plan.robots === 1 ? 'robot' : 'robots'}.` };
   if (id === 'smallFleet') return { ok: plan.robots <= 6, text: `Your fleet is ${plan.robots} ${plan.robots === 1 ? 'robot' : 'robots'}.` };
   if (id === 'noDockSmall') {
     let big = 0;

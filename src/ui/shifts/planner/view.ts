@@ -448,7 +448,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           h('button', { class: 'shp-switch-btn', type: 'button', role: 'switch', 'aria-checked': String(on), 'data-key': 'robots', onclick: () => {
             let next = setRobotCity(level, plan, c, !on);
             // A switched-on city with no robots would do nothing: give the fleet enough for its lines.
-            if (!on && next.robots === 0) next = setRobots(level, next, lines * 3);
+            if (!on && next.robots === 0) next = setRobots(level, next, lines * Math.ceil(60 / RATES.robot));
             commit(next);
           } },
             h('span', { class: 'shp-switch-knob', 'aria-hidden': 'true' }),
