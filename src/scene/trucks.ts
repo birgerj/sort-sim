@@ -46,8 +46,11 @@ export interface TruckDoor {
   number: number;
   city: string;
   pc: string;
-  /** During cleardown: still loading (the dock workers push the last cages in), so wait. */
-  hold?: () => boolean;
+  /**
+   * During cleardown: still loading, so wait. 2: someone is pushing a cage in or is in the
+   * trailer (always waited for); 1: cages that should still go in (waited for a long while); 0: done.
+   */
+  hold?: () => number;
   /** How full the roll cages at this door are (0–1): shown on its screen instead of the trailer. */
   cages?: () => number;
 }
@@ -93,6 +96,9 @@ const EVERY: Record<Cargo, number> = { cage: 240, box: 120 };
 /** Minutes of hub time before the departure that the cleardown starts. */
 const CLEARDOWN_LEAD = 6;
 const DUR: Record<Exclude<State, 'open'>, number> = { cleardown: 4, closing: 2, leaving: 4, away: 6, arriving: 4, opening: 2 };
+/** Beats a cleardown waits for cages still to go in, and at most for anything. */
+const WAIT_CAGES = 480;
+const WAIT_MAX = 2000;
 const NEXT: Record<Exclude<State, 'open'>, State> = { cleardown: 'closing', closing: 'leaving', leaving: 'away', away: 'arriving', arriving: 'opening', opening: 'open' };
 
 /** Trailer and cab colours (plain, no liveries). */
@@ -232,6 +238,24 @@ export class Trucks {
     return Math.max(d.vol / TRAILER_M3[d.cargo], d.kg / TRAILER_KG[d.cargo], d.load / SLOTS[d.cargo]);
   }
 
+  /**
+   * A truck in cleardown still waits: for anyone in the trailer or pushing a cage in (the door
+   * never comes down on them), and for the cages still to go in (up to WAIT_CAGES beats). A
+   * safety net after WAIT_MAX beats, should a job never finish.
+   */
+  private waiting(d: Dock, bt: number): boolean {
+    const late = bt - (d.t0 + DUR.cleardown);
+    if (late >= WAIT_MAX) return false;
+    const h = d.hold?.() ?? 0;
+    return d.reserved > 0 || h >= 2 || (h >= 1 && late < WAIT_CAGES);
+  }
+
+  /** A trailer at this door with its door up (open, in cleardown, or the door coming down). */
+  atDoor(i: number): boolean {
+    const s = this.docks[i]?.state;
+    return s === 'open' || s === 'cleardown' || s === 'closing';
+  }
+
   /** In cleardown (warning, still loading the last things). */
   clearing(i: number): boolean {
     return this.docks[i]?.state === 'cleardown';
@@ -267,7 +291,8 @@ export class Trucks {
     d.load = Math.min(SLOTS[d.cargo], d.load + 1);
     d.vol += vol;
     d.kg += kg;
-    d.slots.forEach((s, n) => (s.visible = n < d.load));
+    // (Roll cages are drawn by the docks, with their parcels: the slots only show boxes.)
+    d.slots.forEach((s, n) => (s.visible = n < d.load && d.cargo !== 'cage'));
   }
 
   update(bt: number): void {
@@ -304,9 +329,8 @@ export class Trucks {
           d.t0 = Math.ceil(bt);
           d.full = !due;
         }
-      } else if (d.state === 'cleardown' && bt >= d.t0 + DUR.cleardown && (d.reserved > 0 || d.hold?.()) && bt < d.t0 + DUR.cleardown + 120) {
-        // (A safety net: after 120 beats of waiting the truck leaves anyway.)
-        // Still something on its way out of the trailer: keep warning.
+      } else if (d.state === 'cleardown' && bt >= d.t0 + DUR.cleardown && this.waiting(d, bt)) {
+        // Still something on its way into the trailer, or someone in it: keep warning.
       } else if (bt >= d.t0 + DUR[d.state]) {
         // (After a held cleardown, the next state starts now, not when it would have.)
         d.t0 = bt - (d.t0 + DUR[d.state]) > 1 ? Math.floor(bt) : d.t0 + DUR[d.state];

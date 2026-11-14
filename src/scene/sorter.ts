@@ -1582,6 +1582,7 @@ export class Sorter implements Scene3D {
           load: (x, vol, kg) => this.trucks.load(NORTH_DOORS.indexOf(x), vol, kg),
           clearing: (x) => this.trucks.clearing(NORTH_DOORS.indexOf(x)),
           slot: (x) => this.trucks.nextSlot(NORTH_DOORS.indexOf(x)),
+          atDoor: (x) => this.trucks.atDoor(NORTH_DOORS.indexOf(x)),
         },
       },
     );
@@ -7210,6 +7211,11 @@ export class Sorter implements Scene3D {
       const place = `Door ${i + 1} · ${NORTH_CITIES[d.city]!.name}`;
       hire('picker', place, d.worker, d.worker.root, i * 2 + 11, () => this.docks.busy(i, 0));
       hire('loader', place, d.loader, d.loader.root, i * 2 + 12, () => this.docks.busy(i, 1));
+    });
+    // One more loader for every two doors.
+    this.docks.helpers.forEach((h, k) => {
+      const place = `Doors ${this.docks.docks.indexOf(h.pair[0]!) + 1}–${this.docks.docks.indexOf(h.pair[h.pair.length - 1]!) + 1} · helper`;
+      hire('loader', place, h.w, h.w.root, 251 + k, () => this.docks.helperBusy(k));
     });
     for (const { d, n, h } of this.wing.people()) {
       hire('unloader', `Door ${41 + d} · inbound`, h, h.root, 211 + d * 2 + n, () => this.wing.busy(d, n));

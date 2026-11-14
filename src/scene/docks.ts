@@ -5,7 +5,9 @@
 // the parcels off (the flow projector shows the postcodes of the first three) and
 // walks each to the cage that takes it. A loader pushes full cages into the truck
 // (up to ten go in a trailer) and brings an empty one from the stack of empties
-// by the door, so the picker never has to stop.
+// by the door, so the picker never has to stop. One more loader for every two
+// doors helps wherever there is a cage to push; at a cleardown the picker helps
+// too. Cages in the trailer stay in sight, parcels and all, until the door is down.
 //
 // By day the workers work, one move per beat. By night they dance when idle.
 import * as THREE from 'three';
@@ -72,6 +74,8 @@ export interface TruckLink {
   clearing?(x: number): boolean;
   /** Where the next load goes in the trailer (null: full, or no truck). */
   slot?(x: number): V3 | null;
+  /** A trailer stands at the door with the door up (open, in cleardown, or the door coming down). */
+  atDoor?(x: number): boolean;
 }
 
 /**
@@ -98,8 +102,8 @@ interface Step {
   idle?: boolean;
   /** On tiptoe, arms out, eyes on the parcel (a fragile one). */
   careful?: boolean;
-  /** A cage that moves along with the worker, to this spot. */
-  cage?: { c: Cage; to: V3 };
+  /** A cage that moves along with the worker, to this spot (and turned to `ry` on the way). */
+  cage?: { c: Cage; to: V3; ry?: number };
   done?: () => void;
 }
 
@@ -111,6 +115,9 @@ interface Worker extends Human {
   t0: number;
   from: V3;
   cageFrom: V3;
+  cageRyFrom: number;
+  /** The dock it works for now (a helper serves two). */
+  job?: Dock;
   parcel: DockParcel | null;
   /** Where the parcel lay on the belt when picked. */
   pickFrom: V3;
@@ -148,6 +155,17 @@ interface Dock {
   /** Its truck was in cleardown on the last beat; the loader stretches once it is over. */
   wasClearing: boolean;
   stretchDue: boolean;
+  /**
+   * Cages pushed into the trailer, with their parcels: they stay in sight (the trailer's door end
+   * is open) until the door has come down, then leave with the truck.
+   */
+  inTrailer: { g: THREE.Group; items: DockParcel[] }[];
+}
+
+/** A loader shared by two neighbouring doors: helps wherever there is a cage to push. */
+interface Helper {
+  w: Worker;
+  pair: Dock[];
 }
 
 interface Staged {
@@ -185,6 +203,10 @@ const STOCK_DX = -2.3;
 const STOCK_Z = -36.6;
 /** Places by the door where full cages wait when there is no truck (x offset, z). */
 const STAGE_AT: [number, number][] = [[1.6, -36.2], [1.6, -37.6], [3.0, -36.2], [3.0, -37.6]];
+/** Places for cages in a trailer (as the trucks have them): each in there keeps its own frame in sight. */
+const TRAILER_CAGES = 10;
+/** Where a helper waits between the two doors it serves (z). */
+const HELPER_Z = -32.8;
 /** The front parcel stops this far before the end of the belt. */
 const QUEUE_FRONT = 0.1;
 /** The dock whose picker does not walk: he throws the parcels into the cages (all but the fragile ones). */
@@ -219,6 +241,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 export class Docks {
   readonly docks: Dock[] = [];
+  /** One extra loader per two doors. */
+  readonly helpers: Helper[] = [];
   private boardsDay: boolean | null = null;
   private readonly t = new THREE.Vector3();
   private readonly hands = new THREE.Vector3();
@@ -249,29 +273,42 @@ export class Docks {
     litPaper(this.boards.mat);
     kit.put(this.boards.mesh);
     for (const [n, l] of lines.entries()) this.buildDock(l.x, l.chute, n + 1, DOCK_CITY[n] ?? n);
-    // Loaders of neighbouring docks chat in groups of two or three when there is nothing to load.
-    const groups: Dock[][] = [];
-    for (let i = 0; i < this.docks.length; ) {
-      const left = this.docks.length - i;
-      const size = left === 4 ? 2 : Math.min(3, left);
-      groups.push(this.docks.slice(i, i + size));
+    // One more loader for every two doors, waiting between them (neighbouring docks share the
+    // way between their cages: `walkX` of an even dock and the next is the same).
+    for (let i = 0; i < this.docks.length; i += 2) {
+      const pair = this.docks.slice(i, i + 2);
+      const x = this.walkX(pair[0]!);
+      const w = this.buildWorker(v(x, 0, HELPER_Z), 2 + i);
+      w.job = pair[0];
+      this.helpers.push({ w, pair });
+    }
+    // Loaders (and the helpers) of neighbouring docks chat in groups of two to four when there is nothing to load.
+    const chatters: { w: Worker; x: number }[] = [
+      ...this.docks.map((d) => ({ w: d.loader, x: this.walkX(d) })),
+      ...this.helpers.map((h) => ({ w: h.w, x: this.walkX(h.pair[0]!) })),
+    ].sort((a, b) => a.x - b.x);
+    const groups: { w: Worker; x: number }[][] = [];
+    for (let i = 0; i < chatters.length; ) {
+      const left = chatters.length - i;
+      const size = left === 5 ? 3 : left <= 4 ? left : left === 6 ? 3 : 4;
+      groups.push(chatters.slice(i, i + size));
       i += size;
     }
     // (The chat is inside the loop, off the floor where cages are pushed: they walk there and
     // back between the belts, under the loop: see `walkX`.)
     groups.forEach((g, gi) => {
-      const mid = v(g.reduce((a, d) => a + this.walkX(d), 0) / g.length, 0, CHAT_Z);
+      const mid = v(g.reduce((a, c) => a + c.x, 0) / g.length, 0, CHAT_Z);
       const spots = g.map((_, k) => {
         const a = (k / g.length) * Math.PI * 2 + 0.6 + gi;
         // (Not quite a ring: people stand at their own distance.)
-        const r = 0.6 + ((gi * 7 + k * 3) % 4) * 0.06;
+        const r = 0.6 + g.length * 0.08 + ((gi * 7 + k * 3) % 4) * 0.06;
         return mid.clone().add(v(Math.cos(a) * r, 0, Math.sin(a) * r));
       });
-      g.forEach((d, k) => {
-        d.loader.chat = spots[k]!;
-        d.loader.chatMid = mid;
-        d.loader.group = gi;
-        d.loader.mates = spots;
+      g.forEach(({ w }, k) => {
+        w.chat = spots[k]!;
+        w.chatMid = mid;
+        w.group = gi;
+        w.mates = spots;
       });
     });
   }
@@ -314,18 +351,30 @@ export class Docks {
     return QUEUE_FRONT + (d ? d.queue.reduce((a, p) => a + p.d + 0.06, 0) : 0);
   }
 
-  /** Cages still to go into the trailer at this dock's cleardown (the truck waits for them). */
-  pending(x: number): boolean {
+  /** Everyone who can push cages at a dock: its picker, its loader, and the helper of its pair. */
+  private crewOf(d: Dock): Worker[] {
+    const h = this.helpers.find((x) => x.pair.includes(d));
+    return h ? [d.worker, d.loader, h.w] : [d.worker, d.loader];
+  }
+
+  /**
+   * What the truck at this door still waits for at its cleardown: 2, someone pushing a cage or
+   * still in the trailer (the door never comes down on them); 1, cages that should still go in;
+   * 0, nothing.
+   */
+  pending(x: number): number {
     const d = this.docks.find((k) => k.x === x);
-    // (Also while the loader is still in the trailer, or on the way in or out of it.)
+    if (!d) return 0;
+    // (In the trailer, or on the way in or out of it.)
     const inTruck = (w: Worker) => w.root.position.z < WALL_Z + 0.6 || (!!w.step && w.step.to.z < WALL_Z + 0.6);
-    if (!d) return false;
-    // Cages still on their way in, or the loader in the trailer: wait.
-    if (d.cages.some((c) => c.state === 'moving') || d.staged.some((st) => st.moving) || d.loader.step?.pose === 'push' || inTruck(d.loader)) return true;
+    const near = (w: Worker) => Math.abs(w.root.position.x - d.x) < 2.2;
+    if (this.crewOf(d).some((w) => w.job === d && (w.step?.pose === 'push' || w.steps.some((s) => s.pose === 'push' && s.to.z < WALL_Z)) || (near(w) && inTruck(w)))) return 2;
+    // Cages still on their way.
+    if (d.cages.some((c) => c.state === 'moving') || d.staged.some((st) => st.moving)) return 1;
     // Cages that should still go in: only while the trailer has room for them (a full
     // trailer leaves; what is left waits for the next truck).
     const room = !!this.handlers.truck.slot?.(x);
-    return room && (d.staged.length > 0 || d.cages.some((c) => c.state === 'home' && c.n > 0));
+    return room && (d.staged.length > 0 || d.cages.some((c) => c.state === 'home' && c.n > 0)) ? 1 : 0;
   }
 
   arrive(chute: number, p: DockParcel): void {
@@ -378,41 +427,73 @@ export class Docks {
         // (Standing still while it lasts.)
         d.loader.steps.push({ beats: 4, to: d.loader.root.position.clone().setY(0), pose: 'walk' });
       }
-      for (const w of [d.worker, d.loader]) {
-        if (w.step && b >= w.t0 + w.step.beats) {
-          const st = w.step;
-          w.step = null;
-          if (st.cage) st.cage.c.g.position.copy(st.cage.to);
-          w.root.position.copy(st.to).setY(0);
-          st.done?.();
+      // Cages in the trailer leave with it once the door is down.
+      if (d.inTrailer.length && this.handlers.truck.atDoor?.(d.x) === false) {
+        for (const c of d.inTrailer) {
+          for (const p of c.items) p.dead = true;
+          c.g.visible = false;
+          d.spares.push(c.g);
         }
-        if (!w.step && !w.steps.length) {
-          if (w === d.loader) this.planLoad(d);
-          else this.plan(d);
-          // Back from a chat inside the loop to work: first out between the belts to the cages.
-          if (w.steps.length && w.root.position.z > INSIDE_Z) {
-            const x = this.walkX(d);
-            const out = this.wayOut(d).reverse();
-            w.steps.unshift({ beats: 1, to: v(x, 0, CHAT_Z - 1.4), pose: 'walk' }, ...out.map((to) => ({ beats: 1, to, pose: 'walk' as const })));
-          }
-          // Nothing to load (by day): over to the others for a chat, inside the loop.
-          if (w === d.loader && day && !w.steps.length && w.chat && w.root.position.distanceTo(w.chat) > 0.3) {
-            const x = this.walkX(d);
-            if (w.root.position.z < INSIDE_Z) w.steps.push(...this.wayOut(d).map((to) => ({ beats: 1, to, pose: 'walk' as const, idle: true })), { beats: 1, to: v(x, 0, CHAT_Z - 1.4), pose: 'walk', idle: true });
-            w.steps.push({ beats: 1, to: w.chat, face: w.chatMid, pose: 'walk', idle: true });
-          }
-        }
-        if (!w.step && w.steps.length) {
-          w.step = w.steps.shift()!;
-          // Walking takes as long as the distance needs (about 1.6 m a beat).
-          if (w.step.pose === 'walk') w.step.beats = Math.max(w.step.beats, Math.ceil(w.root.position.distanceTo(w.step.to) / 1.6));
-          w.t0 = b;
-          w.from.copy(w.root.position).setY(0);
-          if (w.step.cage) w.cageFrom.copy(w.step.cage.c.g.position);
-          // Once in a while a loader nearly trips over something on a longer walk.
-          if (day && w === d.loader && w.step.pose === 'walk' && w.step.beats >= 3 && Math.random() < 0.015) ANTICS.play(w, 'windmill', b + 1);
-        }
+        d.inTrailer.length = 0;
       }
+      this.tick(d.worker, d, b, day, () => this.plan(d));
+      this.tick(d.loader, d, b, day, () => this.planLoad(d, d.loader));
+    }
+    for (const h of this.helpers) {
+      this.tick(h.w, h.w.job ?? h.pair[0]!, b, day, () => {
+        // A door in cleardown first, then whichever has work.
+        const order = [...h.pair].sort((a, c) => Number(this.handlers.truck.clearing?.(c.x) === true) - Number(this.handlers.truck.clearing?.(a.x) === true));
+        for (const d of order) {
+          if (this.planLoad(d, h.w)) {
+            h.w.job = d;
+            return;
+          }
+        }
+      });
+    }
+  }
+
+  /** One beat of one worker: finish the step, plan the next job (or go for a chat), start the next step. */
+  private tick(w: Worker, d: Dock, b: number, day: boolean, plan: () => void): void {
+    if (w.step && b >= w.t0 + w.step.beats) {
+      const st = w.step;
+      w.step = null;
+      if (st.cage) {
+        st.cage.c.g.position.copy(st.cage.to);
+        if (st.cage.ry !== undefined) st.cage.c.g.rotation.y = st.cage.ry;
+      }
+      w.root.position.copy(st.to).setY(0);
+      st.done?.();
+    }
+    if (!w.step && !w.steps.length) {
+      plan();
+      // (The job may be at the other door of a helper's pair.)
+      const jd = w.job ?? d;
+      // Back from a chat inside the loop to work: first out between the belts to the cages.
+      if (w.steps.length && w.root.position.z > INSIDE_Z) {
+        const x = this.walkX(jd);
+        const out = this.wayOut(jd).reverse();
+        w.steps.unshift({ beats: 1, to: v(x, 0, CHAT_Z - 1.4), pose: 'walk' }, ...out.map((to) => ({ beats: 1, to, pose: 'walk' as const })));
+      }
+      // Nothing to load (by day): over to the others for a chat, inside the loop.
+      if (day && !w.steps.length && w.chat && w.root.position.distanceTo(w.chat) > 0.3) {
+        const x = this.walkX(jd);
+        if (w.root.position.z < INSIDE_Z) w.steps.push(...this.wayOut(jd).map((to) => ({ beats: 1, to, pose: 'walk' as const, idle: true })), { beats: 1, to: v(x, 0, CHAT_Z - 1.4), pose: 'walk', idle: true });
+        w.steps.push({ beats: 1, to: w.chat, face: w.chatMid, pose: 'walk', idle: true });
+      }
+    }
+    if (!w.step && w.steps.length) {
+      w.step = w.steps.shift()!;
+      // Walking takes as long as the distance needs (about 1.6 m a beat).
+      if (w.step.pose === 'walk') w.step.beats = Math.max(w.step.beats, Math.ceil(w.root.position.distanceTo(w.step.to) / 1.6));
+      w.t0 = b;
+      w.from.copy(w.root.position).setY(0);
+      if (w.step.cage) {
+        w.cageFrom.copy(w.step.cage.c.g.position);
+        w.cageRyFrom = w.step.cage.c.g.rotation.y;
+      }
+      // Once in a while a loader nearly trips over something on a longer walk.
+      if (day && w !== d.worker && w.step.pose === 'walk' && w.step.beats >= 3 && Math.random() < 0.015) ANTICS.play(w, 'windmill', b + 1);
     }
   }
 
@@ -420,44 +501,54 @@ export class Docks {
    * The loader's next job: at cleardown, every cage with parcels goes into the truck;
    * otherwise full ones do. Each is replaced at once by an empty one from the stack.
    */
-  private planLoad(d: Dock): void {
+  private planLoad(d: Dock, w: Worker, onlyClear = false): boolean {
     const T = this.handlers.truck;
+    const clearing = T.clearing?.(d.x) === true;
+    if (onlyClear && !clearing) return false;
     // A truck at the door with room for another cage.
-    const truck = (T.open(d.x) || T.clearing?.(d.x) === true) && !!T.slot?.(d.x);
+    const truck = (T.open(d.x) || clearing) && !!T.slot?.(d.x);
     const door = v(d.x, 0, WALL_Z - 1.4);
     // A truck at the door: first the cages that waited for it.
     const st = d.staged.find((x) => !x.moving);
     if (truck && st) {
-      this.loadStaged(d, st, door);
-      return;
+      this.loadStaged(d, st, door, w);
+      return true;
+    }
+    const home = d.cages.filter((c) => c.state === 'home');
+    if (onlyClear) {
+      const c = truck ? home.find((x) => x.n > 0) : undefined;
+      if (c) this.pushJob(d, c, door, v(d.x, 0, c.at.z), w);
+      return !!c;
     }
     // After a cleardown: empty cages from the stack into every free place first.
     const gone = d.cages.find((c) => c.state === 'gone');
-    if (gone && !T.clearing?.(d.x)) {
+    if (gone && !clearing) {
       gone.state = 'moving';
       gone.g.position.set(d.x + STOCK_DX, 0, STOCK_Z);
       gone.g.rotation.y = 0;
       gone.g.visible = true;
-      this.fetchEmpty(d, gone, v(d.x, 0, gone.at.z));
-      return;
+      this.fetchEmpty(d, gone, v(d.x, 0, gone.at.z), w);
+      return true;
     }
-    const home = d.cages.filter((c) => c.state === 'home');
     const full = home.find((x) => this.isFull(x));
     if (truck) {
       // At cleardown every cage with parcels goes; otherwise full ones.
-      const c = T.clearing?.(d.x) ? home.find((x) => x.n > 0) : full;
-      if (c) this.pushJob(d, c, door, v(d.x, 0, c.at.z));
-      return;
+      const c = clearing ? home.find((x) => x.n > 0) : full;
+      if (c) this.pushJob(d, c, door, v(d.x, 0, c.at.z), w);
+      return !!c;
     }
-    if (T.clearing?.(d.x)) return;
+    if (clearing) return false;
     // No truck: a full cage is still taken away at once, to wait by the door, and replaced.
     const spot = STAGE_AT.findIndex((_, i) => !d.staged.some((x) => x.spot === i));
-    if (full && spot >= 0 && d.spares.length) this.stageJob(d, full, spot);
+    if (full && spot >= 0 && d.spares.length) {
+      this.stageJob(d, full, spot, w);
+      return true;
+    }
+    return false;
   }
 
   /** Push a full cage to a waiting place by the door, and an empty one (from the stack) into its place. */
-  private stageJob(d: Dock, c: Cage, spot: number): void {
-    const w = d.loader;
+  private stageJob(d: Dock, c: Cage, spot: number, w: Worker): void {
     const [sx, sz] = STAGE_AT[spot]!;
     const to = v(d.x + sx, 0, sz);
     const aisle = v(d.x, 0, c.at.z);
@@ -487,12 +578,11 @@ export class Docks {
         c.kg = 0;
       },
     });
-    this.fetchEmpty(d, c, aisle);
+    this.fetchEmpty(d, c, aisle, w);
   }
 
   /** A truck is back: push a cage that waited by the door into it. */
-  private loadStaged(d: Dock, st: Staged, door: V3): void {
-    const w = d.loader;
+  private loadStaged(d: Dock, st: Staged, door: V3, w: Worker): void {
     const T = this.handlers.truck;
     st.moving = true;
     const slot = T.slot?.(d.x) ?? door;
@@ -503,7 +593,7 @@ export class Docks {
     w.steps.push({ beats: 2, to: back(tmp.at, mid), face: tmp.at, pose: 'walk' });
     w.steps.push({ beats: 2, to: back(mid, tmp.at), face: mid, pose: 'push', cage: { c: tmp, to: mid } });
     const row = v(d.x, 0, slot.z);
-    w.steps.push({ beats: 2, to: back(door, mid), face: door, pose: 'push', cage: { c: tmp, to: door } });
+    w.steps.push({ beats: 2, to: back(door, mid), face: door, pose: 'push', cage: { c: tmp, to: door, ry: 0 } });
     w.steps.push({ beats: Math.max(2, Math.round(door.distanceTo(row) / 2.5)), to: back(row, door), face: row, pose: 'push', cage: { c: tmp, to: row } });
     w.steps.push({
       beats: 1,
@@ -513,20 +603,18 @@ export class Docks {
       cage: { c: tmp, to: slot },
       done: () => {
         T.load(d.x, st.vol, st.kg);
-        for (const p of st.items) p.dead = true;
-        st.g.visible = false;
-        d.spares.push(st.g);
+        // It stays in sight in the trailer, with its parcels, until the door comes down.
+        d.inTrailer.push({ g: st.g, items: st.items });
         d.staged.splice(d.staged.indexOf(st), 1);
         T.reserve(d.x, -1);
       },
     });
     w.steps.push({ beats: 3, to: door.clone().setZ(WALL_Z + 0.8), face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
-    w.steps.push({ beats: 2, to: d.loader.home, face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
+    w.steps.push({ beats: 2, to: w.home, face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
   }
 
   /** From the stack of empties: pull one out and push it along the aisle into the cage's place. */
-  private fetchEmpty(d: Dock, c: Cage, aisle: V3): void {
-    const w = d.loader;
+  private fetchEmpty(d: Dock, c: Cage, aisle: V3, w: Worker): void {
     const stock = v(d.x + STOCK_DX, 0, STOCK_Z);
     const out = v(d.x, 0, STOCK_Z + 0.2);
     const back = (a: V3, from: V3) => a.clone().addScaledVector(this.t.subVectors(a, from).setY(0).normalize(), -0.9);
@@ -538,18 +626,25 @@ export class Docks {
       to: back(c.at, aisle),
       face: c.at,
       pose: 'push',
-      cage: { c, to: c.at },
+      cage: { c, to: c.at, ry: c.ry },
       done: () => {
         c.state = 'home';
         c.g.rotation.y = c.ry;
       },
     });
-    w.steps.push({ beats: 2, to: d.loader.home, face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
+    w.steps.push({ beats: 2, to: w.home, face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
   }
 
   /** The picker's next job: a parcel off the belt into its cage (one of the first three it can place). */
   private plan(d: Dock): void {
     const w = d.worker;
+    // At cleardown the picker helps to push the cages into the trailer (with nothing in hand).
+    if (this.planLoad(d, w, true)) return;
+    // Back to the belt end first (after helping at a cleardown).
+    if (w.root.position.distanceTo(w.home) > 0.6) {
+      w.steps.push({ beats: 2, to: w.home, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'walk' });
+      return;
+    }
     const first = d.queue[0];
     // Not for any cage here (sent to the wrong dock): into the return tote beside the belt.
     if (first && rangeOf(d.cages.map((c) => c.range), first.pc) < 0) {
@@ -657,8 +752,7 @@ export class Docks {
    * The loader: walk to the cage, pull it into the aisle, push it through the door into the
    * trailer, then take an empty cage from the stack by the door and push it into its place.
    */
-  private pushJob(d: Dock, c: Cage, door: V3, aisle: V3): void {
-    const w = d.loader;
+  private pushJob(d: Dock, c: Cage, door: V3, aisle: V3, w: Worker): void {
     const T = this.handlers.truck;
     c.state = 'moving';
     // (Its place in the trailer is taken before it is reserved: the next one gets the next place.)
@@ -670,7 +764,8 @@ export class Docks {
     if (turn) w.steps.push({ beats: 2, to: back(aisle, c.at), face: aisle, pose: 'push', cage: { c, to: aisle } });
     // Into the trailer: straight in to the row of its place, then across into the place.
     const row = v(d.x, 0, slot.z);
-    w.steps.push({ beats: Math.max(2, Math.round(door.distanceTo(aisle) / 2.5)), to: back(door, aisle), face: door, pose: 'push', cage: { c, to: door } });
+    // (Turned square on the way to the door: in the trailer the open side faces the hall.)
+    w.steps.push({ beats: Math.max(2, Math.round(door.distanceTo(aisle) / 2.5)), to: back(door, aisle), face: door, pose: 'push', cage: { c, to: door, ry: 0 } });
     w.steps.push({ beats: Math.max(2, Math.round(door.distanceTo(row) / 2.5)), to: back(row, door), face: row, pose: 'push', cage: { c, to: row } });
     w.steps.push({
       beats: 1,
@@ -680,8 +775,15 @@ export class Docks {
       cage: { c, to: slot },
       done: () => {
         T.load(d.x, c.vol, c.kg);
-        // Its parcels leave with the truck; the cage stays in the trailer.
-        for (const p of c.items) p.dead = true;
+        // The cage stays in the trailer with its parcels, in sight until the door comes down
+        // (then they leave with the truck); a spare frame from the stack takes its place here.
+        const g = d.spares.pop();
+        if (g) {
+          d.inTrailer.push({ g: c.g, items: c.items });
+          g.position.set(d.x + STOCK_DX, 0, STOCK_Z);
+          g.rotation.y = 0;
+          c.g = g;
+        } else for (const p of c.items) p.dead = true;
         c.items = [];
         c.n = 0;
         c.vol = 0;
@@ -709,7 +811,7 @@ export class Docks {
         c.g.visible = true;
       },
     });
-    this.fetchEmpty(d, c, aisle);
+    this.fetchEmpty(d, c, aisle, w);
   }
 
   update(dt: number, bt: number, s: { kick: number; snare: number; dayShown: boolean; dance?: boolean; bpm?: number }): void {
@@ -723,7 +825,7 @@ export class Docks {
     // When the music turns to acid techno, someone plays air guitar (and again every 32 bars while it lasts).
     const bpm = s.bpm ?? 0;
     if (bpm > 136 && (this.lastBpm <= 136 || bt >= this.nextGuitar)) {
-      const idle = this.docks.flatMap((d) => [d.worker, d.loader]).filter((w) => !w.parcel && !w.step?.cage && !ANTICS.busy(w));
+      const idle = [...this.docks.flatMap((d) => [d.worker, d.loader]), ...this.helpers.map((h) => h.w)].filter((w) => !w.parcel && !w.step?.cage && !ANTICS.busy(w));
       const w = idle[Math.floor(Math.random() * idle.length)];
       if (w) ANTICS.play(w, 'airguitar', Math.ceil(bt));
       this.nextGuitar = bt + 128;
@@ -747,6 +849,7 @@ export class Docks {
       this.animateWorker(d, d.worker, dt, bt, ph, s);
       this.animateWorker(d, d.loader, dt, bt, ph, s);
     }
+    for (const h of this.helpers) this.animateWorker(h.w.job ?? h.pair[0]!, h.w, dt, bt, ph, s);
     // Cage cards hang on the outside of the mesh, on the side facing the worker and on the back.
     this.docks.forEach((d, n) =>
       d.cages.forEach((c, i) => {
@@ -840,6 +943,12 @@ export class Docks {
       if (moving && f < 1) speed = w.from.distanceTo(st.to) / st.beats;
       if (st.cage) {
         st.cage.c.g.position.lerpVectors(w.cageFrom, st.cage.to, e);
+        if (st.cage.ry !== undefined) {
+          let dr = st.cage.ry - w.cageRyFrom;
+          while (dr > Math.PI) dr -= 2 * Math.PI;
+          while (dr < -Math.PI) dr += 2 * Math.PI;
+          st.cage.c.g.rotation.y = w.cageRyFrom + dr * e;
+        }
         // Push from behind: face the way the cage goes.
         this.t.subVectors(st.cage.to, w.cageFrom);
         if (this.t.lengthSq() > 0.01) face = Math.atan2(this.t.x, this.t.z);
@@ -1073,13 +1182,17 @@ export class Docks {
     const loader = this.buildWorker(v(x + 0.9, 0, -33.6), 1);
     // The stack of empty cages by the door, nested into each other.
     this.buildStock(v(x + STOCK_DX, 0, STOCK_Z));
-    const spares = STAGE_AT.map(() => {
+    // Spare frames: for cages waiting by the door, and for those standing in the trailer.
+    const spares = Array.from({ length: STAGE_AT.length + TRAILER_CAGES }, () => {
       const g = this.cageFrame(v(x + STOCK_DX, 0, STOCK_Z), 0);
       g.visible = false;
       return g;
     });
     if (this.docks.length === DANCE_DOCK) worker.dancer = true;
-    this.docks.push({ x, chute, city, queue: [], cages, worker, loader, staged: [], spares, wasClearing: false, stretchDue: false });
+    const dock: Dock = { x, chute, city, queue: [], cages, worker, loader, staged: [], spares, wasClearing: false, stretchDue: false, inTrailer: [] };
+    worker.job = dock;
+    loader.job = dock;
+    this.docks.push(dock);
   }
 
   private readonly cageMeshGeo = (() => {
@@ -1237,6 +1350,12 @@ export class Docks {
     return o;
   }
 
+  /** Is this helper at work (a job planned, not just a chat)? */
+  helperBusy(k: number): boolean {
+    const w = this.helpers[k]!.w;
+    return (!!w.step && !w.step.idle) || w.steps.some((s) => !s.idle);
+  }
+
   busy(dock: number, role: 0 | 1): boolean {
     const d = this.docks[dock]!;
     const w = role ? d.loader : d.worker;
@@ -1258,7 +1377,7 @@ export class Docks {
     this.kit.put(h.root);
     const seed = (n * 2654435761) >>> 0;
     const rnd = (k: number) => ((seed >>> k) & 1023) / 1023;
-    return { ...h, home, steps: [], step: null, t0: 0, from: home.clone(), cageFrom: new THREE.Vector3(), parcel: null, pickFrom: new THREE.Vector3(), cage: 0, yaw: Math.PI, rate: 0.7 + rnd(3) * 0.7, phase: rnd(13) * Math.PI * 2, style: Math.floor(rnd(7) * 3) };
+    return { ...h, home, steps: [], step: null, t0: 0, from: home.clone(), cageFrom: new THREE.Vector3(), cageRyFrom: 0, parcel: null, pickFrom: new THREE.Vector3(), cage: 0, yaw: Math.PI, rate: 0.7 + rnd(3) * 0.7, phase: rnd(13) * Math.PI * 2, style: Math.floor(rnd(7) * 3) };
   }
 
 }
