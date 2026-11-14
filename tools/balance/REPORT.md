@@ -1,79 +1,93 @@
 # Balance report
 
-Rules these figures were computed with: a parcel left behind costs § 1.50, a robot loads 17 parcels an
-hour. Everything comes from `par.py`, which searches plans in the game's shape and scores each one through
-`fixture.to_solver`. Results per level are in `out/`, the best plan per level in `best/level<N>.json`.
-Par is rounded down, so the best known plan scores at least 1000.
+Rules these figures were computed with: a parcel left behind costs § 1.50, a robot loads 17 an hour, the
+trailer and belt belong to the door and city, a full buffer refuses parcels. Everything comes from
+`par.py`, which searches plans in the game's shape and scores each through `fixture.to_solver`. Results
+per level are in `out/`, the best plan per level in `best/level<N>.json`. Par is rounded down.
 
-## Levels changed
+## What changed in the model (both models, same to the last bit)
+
+1. **Trailer and belt belong to the door and the city.** A run is one door serving one city, block after
+   block. Its trailer fill, its swap (ten minutes from the minute the trailer is full, whoever stands at
+   the door, also across a gap) and its belt are kept per run. A block that starts the minute another
+   block of the same city ends goes on at that door; nothing is handed back at that minute, also when the
+   crew size changes. Doors are handed out so that this happens: blocks that start together for one city
+   first go on where the same crew stops, then where the city stops, then a free door of the city, then
+   the door free longest. Docks are served by truck time, city, door (was: by start), so the order no
+   longer depends on how a plan is cut.
+   Checked (`par.py invariance`, `tests/shiftsCuts.test.ts`): every allowed cut of every block of every
+   golden, plain and best plan, and every plan written with its blocks merged, gives the same profit
+   (1,487 plans, largest difference 0.0). One case is left out because it has no single answer: a cut
+   exactly where another block of the same city and crew starts or ends, or a block with a twin (same
+   city, crew, docks and start); there the model picks by door number and the two readings can differ
+   by a few Sorty.
+2. **Full is full.** A parcel that finds no room on a belt or table goes to the buffer; when that is
+   full it is refused: missed for the night, left behind for its city (no revenue, § 1.50), no buffer
+   fee. Nothing waits outside any more. `Result.buffer.refused` is the total.
+   What a belt still holds when its block ends (and the door does not go on for that city) is handed
+   back and looks for a place the next minute like a new parcel: another dock or line of the city, else
+   the buffer, else refused. Parcels of a city nobody serves (or whose truck has gone) stay in the
+   buffer until the end and keep it full for the others; that is now the main way a careless plan
+   loses a night.
+
+## Levels changed in this round
 
 | Level | Was | Now | Why |
 |---|---|---|---|
-| 7 | 8 docks | 10 docks | the plain plan left a fifth of the night behind |
-| 8 | volume × 3, 20 robots | volume × 2.8 (11,760 parcels), 24 robots | slower robots took the plain plan under one star |
-| 9 | 12 docks, 16 people at most | 16 docks, 32 people at most | 16 people opened only 8 docks with two each |
-| 10 | volume × 3 | volume × 2.8 (21,000 parcels) | slower robots took the plain plan to about 410 |
+| 3 | small cities' trucks at 01:30, 01:30, 02:00 | 00:30, 00:30, 01:00 (arrivals end 30 minutes before) | obvious plan scored 0 |
+| 4 | third city 150 parcels | 90 parcels | the plan that fills both docks scored 84 |
+| 8 | 12 docks | 14 docks | plain plan fell to 463 once refused parcels were lost |
+| 10 | volume × 2.8 (21,000) | × 2.2 (16,500) | plain plan fell to 292: unserved cities filled the small buffer |
 
-Level 9's limit of 32 people is two on every dock, so it no longer binds; what makes people scarce there
-is the pay (× 1.5) and the extra goal (12 people). The level note says so. Levels 8 and 10 were not in the
-first proposal: with robots at 17 an hour nothing else brought the plain plan back to one star (level 10
-already has every dock of the hall).
+Level 10 is sensitive: at × 2.3 the plain plan scores about 390, at × 2.2 about 540.
 
-## Par
+## Par, first plans, blocks
 
-| Level | Par | Search (profit per restart) | Plain plan | Best plan uses |
-|---|---|---|---|---|
-| 1 | 177 | 177.5 × 4 | 565 | 1 of 2 docks |
-| 2 | 628 | 628.5, 628.5, 623.6, 598.5 | 814 | 2 of 4 docks, 3 people |
-| 3 | 809 | 809 × 4 | 821 | 1 dock, 5 of 6 robots |
-| 4 | 669 | 669.25 × 4 | 84 | 2 of 2 docks |
-| 5 | 1622 | 1617, 1614, 1610, 1602; 1622.9 found in the badge search | 504 | 6 of 10 robots |
-| 6 | 2443 | 2439, 2409, 2407, 2386; polished to 2443.6 | 525 | 4 of 8 docks, 7 of 14 robots |
-| 7 | 7780 | 7723, 7675, 7661, 7657; polished to 7780.8 | 560 | 10 of 10 docks, 6 of 12 robots |
-| 8 | 12726 | one polishing run of 200,000 plans from the best plan of the larger level, twice | 514 | 12 of 12 docks, 19 of 24 robots |
-| 9 | 13429 | 13430, 13394, 13279, 13238 (with 28 people; no gain from 32) | 557 | 15 of 16 docks, 24 of 24 robots |
-| 10 | 24214 | one polishing run of 200,000 plans from the best plan of the larger level | 528 | 20 of 20 docks, 29 of 30 robots |
+| Level | Par | Search (profit) | Obvious plan | Plain plan | Blocks in best plan (cities) |
+|---|---|---|---|---|---|
+| 1 | 177 | 177.5 × 4 | 565 | 565 | 1 (1) |
+| 2 | 621 | 621.4, 619.6, 612.0, 598.5 | 823 | 823 | 4 (2) |
+| 3 | 779 | 779, 779, 772, 766 | 316 | 796 | 2 (4) |
+| 4 | 596 | 596.65 × 4 | cannot start; 260 with the two largest | 260 | 3 (3) |
+| 5 | 1601 | 1594, 1589, 1583, 1582; 1601.5 in the badge search | 380 | 511 | 7 (6) |
+| 6 | 2398 | 2399, 2397, 2378, 2350 | 412 | 535 | 6 (8) |
+| 7 | 7577 | 7565, 7520; polished 7577 | 213 | 575 | 27 (9) |
+| 8 | 12570 | 12494, 11958; polished 12571 | 0 | 525 | 25 (10) |
+| 9 | 13029 | polished 13020, 13020, 13029 | 0 | 574 | 40 (12) |
+| 10 | 19342 | polished 16651, then 19343 | 63 | 543 | 50 (16) |
 
-"Plain plan" is its level score: steady cities to the robots while the fleet covers them (17 an hour
-each), every other city ceil(needed rate ÷ 150) docks with two people from first parcel to truck time,
-largest first, while docks and people last (`par.plain`).
+Obvious plan: every city one dock with two people from first parcel to truck, no robots. Plain plan:
+`par.plain` (steady cities to robots, the others ceil(needed rate ÷ 150) docks with two people, largest
+first, while docks and people last).
 
-How sure: levels 1–7 are settled within about 1%. **Levels 8 and 10 had a short search** after their
-volume changed (5 minutes each, started from the best plan of the larger level): expect the true best 1–3%
-higher, which would put the plain plan of level 8 at about 500. Level 9's four restarts lie within 1.5%.
-A longer run before par is frozen: `par.py par <level> 400000 4`, then `par.py polish <level> 300000 2 40`.
+How sure: levels 1–6 are settled. Levels 7–9 had about six minutes of search each and moved under 1% in
+the last round. **Level 10 is not settled**: its last short run still gained 16%; expect more, which
+would pull its plain plan towards 500 or below. Run `par.py polish 10 300000 2 40` before par is frozen.
 
-The search no longer needs every robot in levels 5–7: at 17 an hour a robot costs § 11 an hour for
-§ 25.50 to § 30.60 of parcels only when it is busy all night. Level 7's note was changed to match
-("you need every dock").
+Blocks: the search prefers short plans (one Sorty per block as a tie-break) and writes blocks that follow
+each other as one. Levels 1–6 need 1 to 7 blocks. Levels 7–10 still take 25 to 50: the best plans change
+crew size and dock count through the night, about three blocks a city. On a phone that is a lot; a
+plan with one or two blocks a city (the plain plan) earns one star, and what 2 blocks a city can reach
+has not been searched.
 
-## Badges (checked with 1.50 and 17)
+Leaving late: no best plan does it. A late truck pays § 0.30 per parcel per 10 minutes on everything it
+carries and loses its bonus, against § 3.00 for each parcel saved, so 30 minutes late only pays when
+about a third of the truck would otherwise stay behind (15 minutes late: about a sixth).
+
+## Badges
 
 | Level | Badge | Best with badge | Score | Best plan earns it | Plain plan earns it |
 |---|---|---|---|---|---|
 | 1 | lean: one person is enough | 160 | 904 | no | no |
-| 2 | **lean3**: never more than 3 people at work (was oneDock, trivial) | 628.5 | 1000 | yes | no |
-| 3 | **fleet3**: at most 3 robots (was noDockSmall, trivial) | 778 | 962 | no | no |
-| 4 | lean3 | 663.75 | 992 | no | no |
-| 5 | smallFleet: at most 6 robots | 1622.9 | 1000 | yes | no |
-| 6 | halfBuffer | 2413 | 987 | no | **yes** (easy) |
-| 7 | allOnTime | 7780 | 1000 | yes | no |
-| 8 | **onTime9**: at least 9 trucks on time (was allOnTime, not reachable) | 12726 | 1000 | yes | no (6 on time) |
-| 9 | lean12 | 7529 | 560 | no | no |
-| 10 | **onTime15**: at least 15 trucks on time (was allOnTime, none found) | 24214 | 1000 | yes | no (9 on time) |
+| 2 | lean3: never more than 3 people | 621 | 1000 | yes | no |
+| 3 | fleet3: at most 3 robots | 765 | 982 | no | no |
+| 4 | lean3 | 597 | 1000 | yes | no |
+| 5 | smallFleet: at most 6 robots | 1601 | 1000 | yes | no |
+| 6 | **lean6**: never more than 6 people (was halfBuffer: the plain plan never uses the buffer) | 2398 | 1000 | yes | no |
+| 7 | allOnTime | 7577 | 1000 | yes | no |
+| 8 | onTime9: at least 9 trucks on time | 12571 | 1000 | yes | no (7) |
+| 9 | **lean16**: never more than 16 people (was lean12: 445 at best, no star) | 9649 | 741 | no | no |
+| 10 | **allOnTime** again (was onTime15; the best plan now has all 16 on time) | 19343 | 1000 | yes | no (10) |
 
-New ids `fleet<N>` and `onTime<N>` are known to both models (`fixture.badge_condition`, `badgeGoal` in
-`src/shifts/model/simulate.ts`). Level 6 stays easy; "Buffer never over a quarter full" is the proposal,
-not searched. Level 9's badge is hard: one star only just.
-
-## Robots at 17 an hour
-
-A robot line passes 60 an hour, so it now takes 60 ÷ 17 = 3.5 robots to fill one: 3 robots give 51 an hour
-(85% of a line), 4 give 68. The planner's default of `lines × 3` robots when a city is switched to robots
-leaves each line 15% short; `Math.ceil(lines × 60 ÷ RATES.robot)` (4 a line, within the level's fleet)
-fills it.
-
-## History
-
-The study at § 2.50, § 2.00, § 1.50 and § 1.00 with 20-an-hour robots (plain plan 213 / 403 / 0 / 391 at
-§ 2.50 in levels 7–10) led to the price of § 1.50; its tables are in this file's history in git.
+Ids the models know: `lean`, `lean<N>`, `oneDock`, `noDockSmall`, `smallFleet`, `fleet<N>`, `halfBuffer`,
+`allOnTime`, `onTime<N>`.

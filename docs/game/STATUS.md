@@ -28,17 +28,18 @@ Each agent keeps its own section up to date in its own branch: done, doing, bloc
 
 
 ## B · balance
-- Done: left-behind price § 1.50 and robots at 17 an hour in both models, the contract and DESIGN.md.
-- Done: level 7 has 10 docks; level 8 volume × 2.8 and 24 robots; level 9 has 16 docks and 32 people at
-  most; level 10 volume × 2.8. Plain plan scores 560 / 514 / 557 / 528 in levels 7–10.
-- Done: par for all ten levels under these rules (177, 628, 809, 669, 1622, 2443, 7780, 12726, 13429,
-  24214, rounded down); best plans in `tools/balance/best/`; tables in `tools/balance/REPORT.md`.
-- Done: badges of levels 2, 3, 8, 10 replaced (lean3, fleet3, onTime9, onTime15); the model knows
-  `fleet<N>` and `onTime<N>`.
-- Fixture files regenerated: `src/shifts/levels.json`, `tests/fixtures/shifts/golden.json`,
-  `tests/fixtures/shifts/level4.json` (unchanged in content: profit 606, score 906, badge true).
-- Tests changed to follow: `tests/shiftsModel.test.ts`, `tests/shiftsPlanEdit.test.ts`, `tests/shiftsFlow.test.ts`.
-- Not done: levels 8 and 10 had a short search after their volume changed; a longer run may lift par 1–3%.
+- Done (round 5): both models fixed. The trailer, its swap and the belt belong to the door and city (a
+  block cut in two is the same plan; `tests/shiftsCuts.test.ts`, `par.py invariance`). A full buffer
+  refuses parcels (`Result.buffer.refused`). DESIGN.md says both in words.
+- Done: level 3 small cities' trucks earlier, level 4 third city 90 parcels, level 8 14 docks, level 10
+  volume × 2.2. Par 177, 621, 779, 596, 1601, 2398, 7577, 12570, 13029, 19342.
+- Done: badges lean, lean3, fleet3, lean3, smallFleet, lean6, allOnTime, onTime9, lean16, allOnTime.
+- Fixtures regenerated: `src/shifts/levels.json`, `tests/fixtures/shifts/golden.json`,
+  `tests/fixtures/shifts/level4.json` (example now profit 502, score 842, two stars, badge true).
+- Tests changed to follow the numbers: shiftsModel, shiftsPlanEdit, shiftsProgress, shiftsEstimate,
+  shiftsDirector (level 4's third city, level 3's truck times, level 10's volume). New: shiftsCuts.
+- Not done: level 10's par was still rising when its six minutes were up. Best plans of levels 7–10
+  have 25 to 50 blocks; what a plan of two blocks a city can reach has not been searched.
 
 ## C1 · screens
 - Done: `mountShifts` in `src/ui/shifts/index.ts` (overlay + router), Start, How to play (4 steps), Levels, Briefing,
@@ -185,6 +186,17 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
 
 ## Requests
 (agent · what you need from whom)
+- B · C1 (screens): show `result.buffer.refused` in the result (for example "Refused at a full buffer, N
+  parcels" under Left behind; they are part of the left-behind amount, not extra) and say "full is full"
+  in How to play and where the briefing explains the buffer.
+- B · C2 (planner): `assignDoors` in `src/ui/shifts/planner/rules.ts` is its own copy; the model's now
+  prefers the door where the same city (and crew) stops that minute. Copy the model's or import it, or
+  the planner can show another door than the hall, and in rare plans report `noDock` where the model starts.
+  `goalStanding` knows `lean`, `lean3`, `lean12` only: make it `lean<N>` (levels 6 and 9 use lean6, lean16).
+  `src/ui/shifts/estimate` style guesses that let parcels wait outside a full buffer are now too kind.
+- B · D (hall): nothing must change; if wanted, refused parcels could leave by the reject chute. The
+  timeline has no refused series yet: ask if the hall needs one.
+
 
 - A · model → B · balance: `levels.json` holds arrival rates to six decimals, the reference computes with the
   unrounded ones. Profit still matches within 0.01, but an amount that lies on a half can round the other way:
