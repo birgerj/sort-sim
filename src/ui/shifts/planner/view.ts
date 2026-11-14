@@ -211,7 +211,9 @@ export function plannerView(o: PlannerOptions): HTMLElement {
       const orders = h('div', { class: 'shp-orders' });
       for (const c of order) {
         const city = level.cities[c]!;
-        const short = (left[c] ?? 0) >= 0.5 && cityState(c) !== 'not planned';
+        // (No warning colour when a city does not fit: the fill bar is the only hint.)
+        const short = false;
+        void left;
         orders.append(
           h('button', { class: `shp-order${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `--c:${cityColour(c)}`, 'data-key': `order-${c}`, 'aria-pressed': String(sel?.city === c), onclick: () => tapCity(c) },
             h('span', { class: 'shp-order-top' }, h('b', { text: name(c) }), h('span', { class: 'shp-num', text: count(city.volume) })),
