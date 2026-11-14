@@ -95,6 +95,8 @@ interface Run {
   tone: ScreenTone;
 }
 
+/** Cages a directed door's trailer takes (two across, ten rows). */
+const RUN_CAGES = 20;
 /** How a directed door's screen looks: dark (not in use), in use, warning, or bad news. */
 export type ScreenTone = 'off' | 'ok' | 'warn' | 'bad';
 const TONES: Record<ScreenTone, { bg: string; fg: string; sub: string }> = {
@@ -310,7 +312,12 @@ export class Trucks {
     if (!d || (d.state !== 'open' && d.state !== 'cleardown')) return null;
     const n = d.load + d.reserved;
     const s = d.slots[n];
-    if (!s) return null;
+    if (!s) {
+      // A directed door (a played shift): the trailer takes cages right up to its doors, twenty
+      // in all. What the hall puts in before the plan's trailer is swapped never has to wait outside.
+      if (!d.run || d.cargo !== 'cage' || n >= RUN_CAGES) return null;
+      return new THREE.Vector3(d.x + (n % 2 ? 0.72 : -0.72), 0, d.wallZ - d.dir * (L / 2 + 0.02) - d.dir * (L / 2 - 0.75 - Math.floor(n / 2) * 1.12));
+    }
     d.trailer.updateMatrixWorld();
     return s.getWorldPosition(new THREE.Vector3()).setY(0);
   }
@@ -319,7 +326,7 @@ export class Trucks {
   load(i: number, vol = 0, kg = 0): void {
     const d = this.docks[i];
     if (!d) return;
-    d.load = Math.min(SLOTS[d.cargo], d.load + 1);
+    d.load = Math.min(d.run && d.cargo === 'cage' ? RUN_CAGES : SLOTS[d.cargo], d.load + 1);
     d.vol += vol;
     d.kg += kg;
     // (Roll cages are drawn by the docks, with their parcels: the slots only show boxes.)

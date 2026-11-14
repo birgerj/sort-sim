@@ -55,6 +55,8 @@ const LOOP_STOCK = 150;
 const CITY_STOCK = 14;
 /** Parcels a robot station may have waiting on its table or on their way to it. */
 const TABLE_AHEAD = 3;
+/** Minutes ahead of the timeline's loading that a parcel is sent down a dock's chute. */
+const SEND_AHEAD = 2;
 /** Seconds between two camera cuts at least, seconds a cut is held, and the fastest pace that still cuts (hall beats per music beat). */
 const CUT_GAP = 9;
 const CUT_HOLD = 4.5;
@@ -75,6 +77,8 @@ interface DoorRun {
   state: DoorState | null;
   /** The belt was seen backed up in this block already (one camera cut per block). */
   seenFull: boolean;
+  /** Parcels sent down this door's chute in this block. */
+  sent: number;
 }
 
 type Shot = { eye: THREE.Vector3; look: THREE.Vector3; name: string; free?: boolean };
@@ -250,12 +254,15 @@ export function createDirector(scene: Sorter): Director {
         const was = r.stint!;
         const again = s.stints.some((x) => x.door === d && x.start >= was.end && x !== was);
         const { short, cleared } = docks.closeOut(d, !again);
-        // (Loaded by the timeline but still on its way round: those are on board too.)
-        const dropped = short > 0 ? scene.shiftDrop(was.city, short) : 0;
-        out[was.city] = (out[was.city] ?? 0) + (short - dropped);
-        // (Taken off a belt that another city needs: they come round again.)
-        const back = chute !== undefined ? scene.shiftClear(chute, again) : 0;
-        out[was.city] = Math.max(0, (out[was.city] ?? 0) - cleared - back);
+        // Loaded by the timeline but not at the dock yet: those on the chute or the belt, then
+        // those still riding the loop, are on board too; any that never came in will not come.
+        let missing = short;
+        const back = chute !== undefined ? scene.shiftClear(chute, again || missing > 0) : 0;
+        const extra = Math.max(0, back - missing);
+        missing = Math.max(0, missing - back);
+        if (missing > 0) missing -= scene.shiftDrop(was.city, missing);
+        // (More taken off the chute and belt than were loaded: they come round again.)
+        out[was.city] = Math.max(0, (out[was.city] ?? 0) - cleared - extra + missing);
         r.open = false;
         trucks.want(d, false);
       }
@@ -264,6 +271,7 @@ export function createDirector(scene: Sorter): Director {
         r.open = true;
         r.swaps = st.swaps;
         r.seenFull = false;
+        r.sent = 0;
         trucks.want(d, true);
       }
       r.stint = st.open ? st.stint : null;
@@ -279,6 +287,7 @@ export function createDirector(scene: Sorter): Director {
         cages: st.city >= 0 && (st.open || !st.leftBehind),
         people: st.people,
         name,
+        colour: `#${(CITY_COLOURS[((st.city % CITY_COLOURS.length) + CITY_COLOURS.length) % CITY_COLOURS.length] ?? 0x5a6170).toString(16).padStart(6, '0')}`,
         // (The cards carry the city's own postcodes when the country has that town.)
         ranges: city && city.name === name ? split(city, 6) : null,
         allow: st.open && st.stint ? inHall(sample(st.stint.loaded, minute, s.stepMinutes), factor) : 0,
@@ -346,9 +355,14 @@ export function createDirector(scene: Sorter): Director {
     doors.forEach((r, d) => {
       const st = r.state;
       const chute = dockChutes[d];
-      if (!r.open || !st || chute === undefined) return;
-      for (let n = 0; n < 2 && (waiting[st.city] ?? 0) > 0; n++) {
+      if (!r.open || !st || !st.stint || chute === undefined) return;
+      // Only what the timeline has loaded here (a couple of minutes ahead: the way down the
+      // chute and along the belt). So the crew never has to stand beside a parcel it may not
+      // take yet; what must wait, waits on the loop or in the rack.
+      const may = inHall(sample(st.stint.loaded, minute + SEND_AHEAD, s.stepMinutes), factor);
+      for (let n = 0; n < 2 && r.sent < may && (waiting[st.city] ?? 0) > 0; n++) {
         if (!scene.shiftSend(chute, st.city, postcode(st.city))) break;
+        r.sent++;
         waiting[st.city]!--;
       }
     });
@@ -422,7 +436,7 @@ export function createDirector(scene: Sorter): Director {
   function bare(jump: boolean): void {
     const { docks, trucks, fleet, floor, northDoors } = scene.shiftParts();
     docks.setDirected(true, Math.max(2, Math.round(CAGE / factor)));
-    doors = Array.from({ length: northDoors }, () => ({ open: false, swaps: 0, stint: null, state: null, seenFull: false }));
+    doors = Array.from({ length: northDoors }, () => ({ open: false, swaps: 0, stint: null, state: null, seenFull: false, sent: 0 }));
     out = [];
     stored = [];
     racked = 0;
