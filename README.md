@@ -125,6 +125,25 @@ Everything moves on the beat of the music: belts move 2 m per beat, parcels
 are diverted on beats, robots move one cell per beat, forklifts and workers
 do one move per beat.
 
+## The planning game in the hall
+
+In Ten Shifts the hall plays the shift the player planned. The score comes from the model; the
+hall shows that same night (`src/scene/director.ts`, with `src/sim/shiftSchedule.ts`):
+
+- Only the doors of the plan open, each with the city of its block on the screen and on the
+  boards of its roll cages, in the city's colour; every other door is down and dark.
+- The parcels are the plan's: each wears a band in its city's colour, comes in as the level
+  says, and goes to an open dock of its city, to the robots, or into the buffer rack while
+  there is no room for it. In the big levels one parcel stands for a fixed few.
+- One person or two work at a dock, and you can see the difference; as many robots drive as
+  the plan has; trailers are swapped when full; trucks leave on time, late (amber lamp) or
+  without everything.
+- The shift's speed is the hall's speed: 1× is the hall's own pace, at 4×, 8× and 16× people,
+  belts, robots and trucks all move faster, still on the beat. Pause stands the hall still.
+- The camera shows the open docks and cuts to what happens; tap a city to go to its dock, drag
+  (or pinch, or scroll) to look around yourself, Auto to hand it back. After the last truck a
+  closing shot at the last dock, and after a three-star night the party.
+
 ## Easter eggs
 
 Little jokes for those who look closely, or tap things:
