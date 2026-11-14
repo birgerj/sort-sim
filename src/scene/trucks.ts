@@ -88,8 +88,8 @@ interface Dock extends TruckDoor {
 interface Run {
   want: 'open' | 'shut';
   lamp: boolean;
-  /** Beat a full trailer started to pull away for an empty one (−1: none). */
-  swapT0: number;
+  /** A full trailer is being swapped for an empty one: door down, away, back, door up; then loading goes on. */
+  cycling: boolean;
   main: string;
   sub: string;
   tone: ScreenTone;
@@ -103,8 +103,6 @@ const TONES: Record<ScreenTone, { bg: string; fg: string; sub: string }> = {
   warn: { bg: '#3a1f00', fg: '#ffffff', sub: '#ffb020' },
   bad: { bg: '#4a0d0d', fg: '#ffffff', sub: '#ff5a4f' },
 };
-/** Beats a trailer swap takes during a shift (out and back in, the door stays up). */
-const SWAP_BEATS = 2;
 
 const L = 12; // trailer length
 const W = 3.1;
@@ -387,13 +385,7 @@ export class Trucks {
       const down = d.state === 'closing' ? ease(f) : d.state === 'opening' ? 1 - ease(f) : d.state === 'open' || d.state === 'cleardown' ? 0 : 1;
       d.door.scale.y = 0.6 + (DOOR_H - 0.6) * down;
       // Trailer: pulls away from the wall and comes back.
-      let out = d.state === 'leaving' ? ease(f) : d.state === 'away' ? 1 : d.state === 'arriving' ? 1 - ease(f) : 0;
-      if (d.run && d.run.swapT0 >= 0) {
-        // A full trailer pulls away and an empty one backs in, a beat each.
-        const u = (bt - d.run.swapT0) / SWAP_BEATS;
-        if (u >= 1) d.run.swapT0 = -1;
-        else if (u > 0) out = Math.max(out, u < 0.5 ? ease(u * 2) : ease(2 - u * 2));
-      }
+      const out = d.state === 'leaving' ? ease(f) : d.state === 'away' ? 1 : d.state === 'arriving' ? 1 - ease(f) : 0;
       d.trailer.position.z = d.wallZ - d.dir * (L / 2 + 0.02 + out * 16);
       d.trailer.visible = d.state !== 'away';
       d.doorsShut(d.state === 'leaving');
@@ -429,7 +421,7 @@ export class Trucks {
     d.slots.forEach((s) => (s.visible = false));
     d.shown = '';
     if (on) {
-      d.run = { want: 'shut', lamp: false, swapT0: -1, main: String(d.number), sub: '', tone: 'off' };
+      d.run = { want: 'shut', lamp: false, cycling: false, main: String(d.number), sub: '', tone: 'off' };
       if (d.state === 'arriving' || d.state === 'away') d.state = 'away';
       else if (d.state !== 'closing' && d.state !== 'leaving') {
         d.state = 'closing';
@@ -444,27 +436,46 @@ export class Trucks {
     }
   }
 
-  /** One step of a directed door: towards up with a trailer behind it, or down and the truck gone. */
+  /**
+   * One step of a directed door: towards up with a trailer behind it, or down and the truck
+   * gone. A swap is the same way round once: down, away, a new trailer in, up. The door never
+   * comes down on someone in the trailer or pushing a cage in (`hold`).
+   */
   private stepDirected(d: Dock, r: Run, bt: number): void {
-    if (r.want === 'open') {
-      if (d.state !== 'open' && d.state !== 'opening') {
+    const next = (st: State, from = d.t0 + DUR[d.state as Exclude<State, 'open'>]) => {
+      d.state = st;
+      // (After a wait the next move starts on the coming beat, not in the past.)
+      d.t0 = bt - from > 1 ? Math.floor(bt) : from;
+    };
+    const timeUp = d.state !== 'open' && bt >= d.t0 + DUR[d.state];
+    if (r.want === 'open' && !r.cycling) {
+      if (d.state === 'closing' || d.state === 'leaving' || d.state === 'away') {
         // (The trailer backed in behind the closed door, out of sight.)
         d.state = 'opening';
         d.t0 = Math.ceil(bt);
-      } else if (d.state === 'opening' && bt >= d.t0 + DUR.opening) d.state = 'open';
+        d.load = 0;
+      } else if ((d.state === 'opening' || d.state === 'arriving') && timeUp) next(d.state === 'arriving' ? 'opening' : 'open');
       return;
     }
-    if (d.state === 'open' || d.state === 'opening' || d.state === 'cleardown') {
+    if (d.state === 'open' || d.state === 'cleardown') {
+      if (d.reserved > 0 || (d.hold?.() ?? 0) >= 2) return;
       d.state = 'closing';
       d.t0 = Math.ceil(bt);
-    } else if (d.state === 'closing' && bt >= d.t0 + DUR.closing) {
-      d.state = 'leaving';
-      d.t0 += DUR.closing;
-    } else if (d.state === 'arriving' || (d.state === 'leaving' && bt >= d.t0 + DUR.leaving)) {
-      d.state = 'away';
+    } else if (d.state === 'opening' && !r.cycling) {
+      d.state = 'closing';
+      d.t0 = Math.ceil(bt);
+    } else if (d.state === 'closing' && timeUp) next('leaving');
+    else if (d.state === 'leaving' && timeUp) {
+      next('away');
       d.load = 0;
-      d.slots.forEach((s) => (s.visible = false));
-    }
+      d.vol = 0;
+      d.kg = 0;
+    } else if (d.state === 'away' && r.cycling && timeUp) next('arriving');
+    else if (d.state === 'arriving' && r.cycling && timeUp) next('opening');
+    else if (d.state === 'opening' && r.cycling && timeUp) {
+      d.state = 'open';
+      r.cycling = false;
+    } else if (d.state === 'arriving' && !r.cycling) d.state = 'away';
   }
 
   /** A directed door: up (with a trailer) or down. */
@@ -477,35 +488,26 @@ export class Trucks {
   settle(i: number, bt: number): void {
     const d = this.docks[i];
     if (!d?.run) return;
-    d.run.swapT0 = -1;
+    d.run.cycling = false;
+    d.reserved = 0;
     d.state = d.run.want === 'open' ? 'open' : 'away';
     d.t0 = Math.floor(bt);
     if (d.state === 'away') {
       d.load = 0;
-      d.slots.forEach((s) => (s.visible = false));
+      d.vol = 0;
+      d.kg = 0;
     }
   }
 
-  /** A directed door's trailer: this many roll cages' loads standing in it (drawn, 0–10). */
-  showLoad(i: number, cages: number): void {
-    const d = this.docks[i];
-    if (!d?.run) return;
-    d.load = Math.max(0, Math.min(d.slots.length, Math.round(cages)));
-    d.slots.forEach((s, n) => (s.visible = n < d.load));
-  }
-
-  /** Where load `n` stands in the trailer at door `i` (world, on the floor), from the far end. */
-  slotAt(i: number, n: number, out: THREE.Vector3): THREE.Vector3 {
-    const d = this.docks[i]!;
-    const s = d.slots[Math.min(n, d.slots.length - 1)]!;
-    // (From the trailer's place at the door, also while it is away for a swap.)
-    return out.set(d.x + s.position.x, 0, d.wallZ - d.dir * (L / 2 + 0.02) + s.position.z);
-  }
-
-  /** A directed door: the full trailer pulls away and an empty one backs in (the door stays up). */
-  swap(i: number, bt: number): void {
+  /** A directed door: the full trailer leaves and an empty one comes (door down, away, back, door up). */
+  swap(i: number): void {
     const r = this.docks[i]?.run;
-    if (r) r.swapT0 = Math.ceil(bt);
+    if (r && r.want === 'open') r.cycling = true;
+  }
+
+  /** Is a directed door in the middle of a trailer swap? */
+  swapping(i: number): boolean {
+    return this.docks[i]?.run?.cycling === true;
   }
 
   /** A directed door's screen. */

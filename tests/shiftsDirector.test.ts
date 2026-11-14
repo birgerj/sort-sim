@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Level, Timeline } from '../src/shifts/contract';
-import { CAGE_PARCELS, TRAILER_PARCELS, bufferAt, buildSchedule, doorAt, doorsUsed, robotRate, robotsAt, sample } from '../src/sim/shiftSchedule';
+import { CAGE_PARCELS, TRAILER_PARCELS, arrivedAt, bufferAt, buildSchedule, doorAt, doorsUsed, inHall, parcelFactor, peakPerMinute, robotRate, robotsAt, sample } from '../src/sim/shiftSchedule';
+import { LEVELS } from '../src/shifts/levels';
 import { Fleet, PARK_COLS, sorterFloor } from '../src/sim/robotFleet';
 import { Rng } from '../src/sim/rng';
 import fixture from './fixtures/shifts/level4.json';
@@ -253,5 +254,38 @@ describe('robot fleet during a shift', () => {
 
   it('changes nothing when no shift sets a limit', () => {
     expect(Math.max(...run(400, () => Infinity).most)).toBeGreaterThan(12);
+  });
+});
+
+describe('the plan\'s parcels in the hall', () => {
+  it('brings each city in as the level says', () => {
+    // Level 4, city 0: 240 parcels between 0 and 90.
+    expect(arrivedAt(level, 0, 0)).toBe(0);
+    expect(arrivedAt(level, 0, 45)).toBeCloseTo(120, 2);
+    expect(arrivedAt(level, 0, 500)).toBe(240);
+    expect(arrivedAt(level, 9, 60)).toBe(0);
+    expect(peakPerMinute(level)).toBeCloseTo(4.67, 1);
+  });
+
+  it('shows every parcel in levels 1 to 6 and one for a fixed few after that', () => {
+    const f = LEVELS.map(parcelFactor);
+    expect(f.slice(0, 6)).toEqual([1, 1, 1, 1, 1, 1]);
+    for (const [i, lv] of LEVELS.entries()) {
+      // What comes in per beat fits on the loop, and a smaller factor would not.
+      expect(peakPerMinute(lv) / 4 / f[i]!).toBeLessThanOrEqual(3.05);
+      if (f[i]! > 1) expect(peakPerMinute(lv) / 4).toBeGreaterThan(3.05);
+    }
+    expect(f.slice(6)).toEqual([3, 8, 4, 8]);
+  });
+
+  it('counts whole parcels that never go back', () => {
+    let last = 0;
+    for (let n = 0; n <= 100; n += 0.7) {
+      const v = inHall(n, 3);
+      expect(v).toBeGreaterThanOrEqual(last);
+      last = v;
+    }
+    expect(inHall(220, 1)).toBe(220);
+    expect(inHall(220, 8)).toBe(28);
   });
 });

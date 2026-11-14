@@ -206,6 +206,8 @@ export class RobotFloor {
   shippedBoxes = 0;
   readonly stations: { x: number; z: number; projector: number }[] = [];
   readonly robots: RobotView[] = [];
+  /** A played shift: a robot takes its parcel to the nearest open box, whatever its postcode. */
+  near = false;
   /** The fleet's "bin" for the drop to the manual sort table (not a box). */
   readonly tableBin: number;
   private projectors: Projector[] = [];
@@ -249,6 +251,12 @@ export class RobotFloor {
       const p = this.handlers.load(k);
       if (!p) return null;
       if (p.manual) return p.tableRoom ? this.tableBin : -1;
+      if (this.near) {
+        // A played shift: the nearest box that is open (the fuller of the nearest few, so boxes fill one after another).
+        const st = this.fleet.stations[this.fleet.bots[k]!.station];
+        const open = layout.bins.map((b, i) => ({ i, d: st ? Math.abs(b.i - st[0]) : 0 })).filter((b) => b.i !== this.tableBin && this.bins[b.i]?.open).sort((a, b) => a.d - b.d);
+        return open.length ? open.slice(0, 2).sort((a, b) => this.bins[b.i]!.n - this.bins[a.i]!.n)[0]!.i : -1;
+      }
       const want = this.bins.map((b, i) => (rangeOf([b.range], p.pc) === 0 ? i : -1)).filter((i) => i >= 0);
       if (!want.length) return null;
       const open = want.filter((i) => this.bins[i]!.open).sort((a, b) => this.bins[a]!.n - this.bins[b]!.n);

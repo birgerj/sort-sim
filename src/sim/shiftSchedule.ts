@@ -294,3 +294,47 @@ export function bufferAt(s: ShiftSchedule, minute: number): number {
 export function doorsUsed(s: ShiftSchedule): number {
   return s.stints.reduce((a, x) => Math.max(a, x.door + 1), 0);
 }
+
+// ---------- the plan's parcels in the hall ----------
+
+/** The cities' colours, as on the game's cards (sixteen, then they repeat). */
+export const CITY_COLOURS = [0x2b7f70, 0xa4623a, 0x5b4fa8, 0x8a6f14, 0x2f62a8, 0xa23d68, 0x4c7d2a, 0x7a6042, 0x1f7892, 0x8a3f97, 0xa04040, 0x6b7422, 0x3c53a6, 0x2a7a55, 0x5a6170, 0x9a5a1c];
+
+/** Parcels of city `city` that have come in by `minute` (all of them once its arrivals are over). */
+export function arrivedAt(level: Level, city: number, minute: number): number {
+  const c = level.cities[city];
+  if (!c) return 0;
+  let n = 0;
+  for (const a of c.arrivals) n += Math.max(0, Math.min(minute, a.to) - a.from) * a.perMinute;
+  return Math.min(c.volume, n);
+}
+
+/** The most parcels a minute the level brings in (all cities together). */
+export function peakPerMinute(level: Level): number {
+  let peak = 0;
+  for (let t = 0; t < level.shiftMinutes; t += 5) {
+    let n = 0;
+    for (const c of level.cities) for (const a of c.arrivals) if (a.from <= t && t < a.to) n += a.perMinute;
+    peak = Math.max(peak, n);
+  }
+  return peak;
+}
+
+/** Parcels a beat the loop can take in and still carry them all to their chutes (at twice its slowest speed). */
+export const LOOP_PER_BEAT = 3.05;
+const FACTORS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20];
+
+/**
+ * How many of the plan's parcels one parcel in the hall stands for: 1 where the hall can
+ * carry them all (a minute is four beats, and the loop takes about three parcels a beat),
+ * else the smallest of a fixed few that fits. The same for every city of the level.
+ */
+export function parcelFactor(level: Level): number {
+  const perBeat = peakPerMinute(level) / 4;
+  return FACTORS.find((f) => perBeat / f <= LOOP_PER_BEAT) ?? FACTORS[FACTORS.length - 1]!;
+}
+
+/** Parcels in the hall that stand for `n` of the plan's (whole parcels; counts that only grow stay in step). */
+export function inHall(n: number, factor: number): number {
+  return Math.round(n / factor + 1e-6);
+}

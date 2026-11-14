@@ -146,6 +146,11 @@ export class Fleet {
    * of the planning game says how many drive. Robots already out finish their trip.)
    */
   limit = Infinity;
+  /**
+   * A robot on its way back to its parking place may be called to a station again (a played
+   * shift: the plan's robots stay on the move). Otherwise only parked robots are sent.
+   */
+  retask = false;
 
   constructor(
     readonly grid: Grid,
@@ -212,11 +217,13 @@ export class Fleet {
     // Send the nearest idle robot to each station with a parcel waiting.
     let out = this.limit < this.bots.length ? this.bots.reduce((a, b) => a + (b.state === 'idle' ? 0 : 1), 0) : 0;
     this.stations.forEach((st, s) => {
-      if (this.stationBot[s] !== null || !waiting(s) || out >= this.limit) return;
+      if (this.stationBot[s] !== null || !waiting(s)) return;
       let best: Bot | undefined;
       let bd = Infinity;
       for (const b of this.bots) {
-        if (b.state !== 'idle') continue;
+        if (b.state !== 'idle' && !(this.retask && b.state === 'toPark')) continue;
+        // (One that is out already does not count against the limit again.)
+        if (b.state === 'idle' && out >= this.limit) continue;
         const d = Math.abs(b.i - st[0]) + Math.abs(b.j - st[1]);
         if (d < bd) {
           bd = d;
@@ -224,7 +231,7 @@ export class Fleet {
         }
       }
       if (!best) return;
-      out++;
+      if (best.state === 'idle') out++;
       this.stationBot[s] = best.k;
       this.parkBot[best.park] = null;
       best.park = -1;
