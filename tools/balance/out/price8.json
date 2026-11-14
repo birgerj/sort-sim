@@ -1,0 +1,1286 @@
+{
+ "2.5": {
+  "price": 2.5,
+  "plain": 5517.226206767356,
+  "plainLeft": 1645.0361932673354,
+  "best": 13699.017316056412,
+  "bestLeft": 315.66666666666697,
+  "score": 402.74612984835767,
+  "restarts": [
+   13049.24,
+   12944.45
+  ],
+  "bestPlan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 120,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 240,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 270,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 330,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 90,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 60,
+     "end": 120,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 150,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 210,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 240,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 270,
+     "end": 330,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 60,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 120,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 3
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 240,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 240,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 300,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 120,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 210,
+     "end": 390,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 300,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 360,
+     "end": 420,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 3,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 420,
+     "end": 480,
+     "people": 1,
+     "docks": 2
+    },
+    {
+     "city": 4,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 120,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 180,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 150,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 30,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 360,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    0,
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "robots": 20
+  }
+ },
+ "2.0": {
+  "price": 2.0,
+  "plain": 6339.744303401025,
+  "plainLeft": 1645.0361932673354,
+  "best": 13856.850649389748,
+  "bestLeft": 315.66666666666697,
+  "score": 457.5169685963402,
+  "restarts": [
+   13340.19,
+   12552.69
+  ],
+  "bestPlan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 120,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 240,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 270,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 330,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 90,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 60,
+     "end": 120,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 150,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 210,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 240,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 270,
+     "end": 330,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 60,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 120,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 3
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 240,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 240,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 300,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 120,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 210,
+     "end": 390,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 300,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 360,
+     "end": 420,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 3,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 420,
+     "end": 480,
+     "people": 1,
+     "docks": 2
+    },
+    {
+     "city": 4,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 120,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 180,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 150,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 30,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 360,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    0,
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "robots": 20
+  }
+ },
+ "1.5": {
+  "price": 1.5,
+  "plain": 7162.262400034691,
+  "plainLeft": 1645.0361932673356,
+  "best": 14014.68398272308,
+  "bestLeft": 315.66666666666697,
+  "score": 511.0541492668784,
+  "restarts": [
+   13545.3,
+   13440.42
+  ],
+  "bestPlan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 120,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 240,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 270,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 330,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 90,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 60,
+     "end": 120,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 150,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 210,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 240,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 270,
+     "end": 330,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 60,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 120,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 3
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 240,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 240,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 300,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 120,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 210,
+     "end": 390,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 300,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 360,
+     "end": 420,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 3,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 420,
+     "end": 480,
+     "people": 1,
+     "docks": 2
+    },
+    {
+     "city": 4,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 120,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 180,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 150,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 30,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 360,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    0,
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "robots": 20
+  }
+ },
+ "1.0": {
+  "price": 1.0,
+  "plain": 7984.780496668358,
+  "plainLeft": 1645.0361932673354,
+  "best": 14172.517316056412,
+  "bestLeft": 315.66666666666697,
+  "score": 563.3988880452588,
+  "restarts": [
+   13953.8,
+   13334.08
+  ],
+  "bestPlan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 120,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 240,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 270,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 330,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 90,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 60,
+     "end": 120,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 1,
+     "start": 150,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 210,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 240,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 270,
+     "end": 330,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 60,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 120,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 3
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 240,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 240,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 300,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 120,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 210,
+     "end": 390,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 300,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 360,
+     "end": 420,
+     "people": 2,
+     "docks": 2
+    },
+    {
+     "city": 3,
+     "start": 390,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 420,
+     "end": 480,
+     "people": 1,
+     "docks": 2
+    },
+    {
+     "city": 4,
+     "start": 0,
+     "end": 60,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 30,
+     "end": 90,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 90,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 120,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 180,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 180,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 150,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 30,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 360,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    0,
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "robots": 20
+  }
+ }
+}

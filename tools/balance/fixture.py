@@ -25,7 +25,7 @@ BADGE = [('lean', 'One person is enough'), ('oneDock', 'Never more than 2 docks 
          ('smallFleet', 'At most 6 robots'), ('halfBuffer', 'Buffer never over half full'), ('allOnTime', 'Every truck on time'), ('allOnTime', 'Every truck on time'),
          ('lean12', 'Never more than 12 people at work'), ('allOnTime', 'Every truck on time')]
 # Best profit found per level with plans in the game's shape (par.py; see REPORT.md).
-PAR = [178, 628, 836, 669, 1689, 2537, 7659, 13560, 11746, 23762]
+PAR = [177, 628, 836, 669, 1688, 2537, 7637, 13699, 13743, 26233]  # rounded down, so the best known plan scores at least 1000
 
 
 def level_json(L):
@@ -62,9 +62,12 @@ def lines_for(L, city):
 
 def to_solver(L, plan):
     """Contract plan -> solver plan, or None when it is not valid. Doors: a block's docks take, in block order by
-    start, the door that last served the same city if free, else the door free longest (15 min after another city)."""
+    start, the door that last served the same city if free, else the door free longest (15 min after another city).
+    The order in which a plan lists its blocks and robot cities must not change the score, so both are put in a
+    fixed order first: blocks by start, city, end, people; robot cities by number. (Blocks of one city that start
+    together are served in that order: the belt of the first fills first.)"""
     L['lines'] = 999
-    blocks = sorted(plan['blocks'], key=lambda b: (b['start'], b['city']))
+    blocks = sorted(plan['blocks'], key=lambda b: (b['start'], b['city'], b['end'], b['people'], b['docks']))
     doors = [(-999, -1)] * L['docks']  # (free from, last city)
     out = []
     for b in blocks:
@@ -77,7 +80,7 @@ def to_solver(L, plan):
             doors[k] = (b['end'], b['city'])
             out.append([b['city'], k, b['start'], b['end'], b['people']])
     lines = []
-    for c in plan['robotCities']:
+    for c in sorted(plan['robotCities']):
         lines += [[c, L['first'][c], L['dests'][c]['d']]] * lines_for(L, c)
     p = dict(b=out, l=lines, N=plan['robots'])
     return p if solve.valid(L, p) else None

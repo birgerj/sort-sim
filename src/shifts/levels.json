@@ -28,7 +28,7 @@
     "Doors"
    ]
   },
-  "par": 178,
+  "par": 177,
   "badge": {
    "id": "lean",
    "text": "One person is enough"
@@ -302,7 +302,7 @@
     "Doors"
    ]
   },
-  "par": 1689,
+  "par": 1688,
   "badge": {
    "id": "smallFleet",
    "text": "At most 6 robots"
@@ -575,7 +575,7 @@
     "Doors"
    ]
   },
-  "par": 7659,
+  "par": 7637,
   "badge": {
    "id": "allOnTime",
    "text": "Every truck on time"
@@ -742,7 +742,7 @@
     "Doors"
    ]
   },
-  "par": 13560,
+  "par": 13699,
   "badge": {
    "id": "allOnTime",
    "text": "Every truck on time"
@@ -927,7 +927,7 @@
     "Doors"
    ]
   },
-  "par": 11746,
+  "par": 13743,
   "badge": {
    "id": "lean12",
    "text": "Never more than 12 people at work"
@@ -1277,7 +1277,7 @@
     "Doors"
    ]
   },
-  "par": 23762,
+  "par": 26233,
   "badge": {
    "id": "allOnTime",
    "text": "Every truck on time"

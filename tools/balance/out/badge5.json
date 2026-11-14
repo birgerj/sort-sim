@@ -1,0 +1,72 @@
+{
+ "level": 5,
+ "badge": "smallFleet",
+ "par": 1688.6998020995952,
+ "parPlanEarns": false,
+ "plainEarns": false,
+ "plainProfit": 1035.0,
+ "found": true,
+ "profit": 1673.9714285714285,
+ "plan": {
+  "blocks": [
+   {
+    "city": 0,
+    "start": 30,
+    "end": 120,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 120,
+    "end": 180,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 180,
+    "end": 240,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 1,
+    "start": 0,
+    "end": 60,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 1,
+    "start": 90,
+    "end": 180,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 150,
+    "end": 210,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 210,
+    "end": 270,
+    "people": 2,
+    "docks": 1
+   }
+  ],
+  "robotCities": [
+   0,
+   3,
+   4,
+   5
+  ],
+  "robots": 6
+ },
+ "closest": null,
+ "closestPlan": null
+}
