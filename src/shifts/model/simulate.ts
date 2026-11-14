@@ -92,6 +92,39 @@ function byTruck<T extends { city: number }>(level: Level, items: T[]): T[] {
     .map((x) => x.item);
 }
 
+/** Docks in the order they are served: earliest truck first, then city, door and start. Nothing in
+ *  it changes when a block is cut in two. */
+function docksInOrder(level: Level, placed: DoorBlock[]): DoorBlock[] {
+  return [...placed].sort((x, y) => level.cities[x.city]!.truck - level.cities[y.city]!.truck || x.city - y.city || x.door - y.door || x.start - y.start);
+}
+
+/**
+ * A run is one door serving one city, block after block (gaps allowed). The belt, the trailer and
+ * its swap belong to the run, not to the block, so cutting a block in two changes nothing.
+ * `run[b]` is the run of block b; `handsBack[b]` is false when the run's next block starts the
+ * minute b ends: then the belt's parcels simply stay where they are.
+ */
+function runsOf(blocks: DoorBlock[]): { run: number[]; handsBack: boolean[] } {
+  const run = new Array<number>(blocks.length).fill(0);
+  const handsBack = new Array<boolean>(blocks.length).fill(true);
+  const byDoor = new Map<number, number[]>();
+  blocks.forEach((b, j) => byDoor.set(b.door, [...(byDoor.get(b.door) ?? []), j]));
+  let count = 0;
+  for (const door of [...byDoor.keys()].sort((a, b) => a - b)) {
+    const js = byDoor.get(door)!.sort((a, b) => blocks[a]!.start - blocks[b]!.start);
+    js.forEach((j, a) => {
+      const before = a > 0 ? js[a - 1]! : -1;
+      if (before >= 0 && blocks[before]!.city === blocks[j]!.city) {
+        run[j] = run[before]!;
+        if (blocks[before]!.end === blocks[j]!.start) handsBack[before] = false;
+      } else {
+        run[j] = count++;
+      }
+    });
+  }
+  return { run, handsBack };
+}
+
 /** How many people and docks a plan has at work at the same moment, at most. */
 export function planPeaks(plan: Plan): { people: number; docks: number } {
   const peak = (weight: (i: number) => number): number => {
@@ -150,7 +183,7 @@ function badgeGoal(level: Level, plan: Plan, statuses: TruckStatus[], bufferPeak
 export function simulate(level: Level, given: Plan): ShiftOutcome {
   // The same plan must score the same however its blocks are listed: put them in one fixed order.
   const plan: Plan = {
-    blocks: [...given.blocks].sort((a, b) => a.city - b.city || a.start - b.start || a.end - b.end || a.people - b.people || a.docks - b.docks),
+    blocks: [...given.blocks].sort((a, b) => a.city - b.city || a.start - b.start || a.people - b.people || a.docks - b.docks || a.end - b.end),
     robotCities: [...new Set(given.robotCities)].sort((a, b) => a - b),
     robots: given.robots,
   };
@@ -169,7 +202,8 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
     const line = { city, start: firstParcel(level, city), end: cities[city]!.truck };
     for (let k = linesFor(level, city); k > 0; k--) openLines.push(line);
   }
-  const blocks: DoorBlock[] = byTruck(level, placed);
+  const blocks: DoorBlock[] = docksInOrder(level, placed);
+  const { run, handsBack } = runsOf(blocks);
   const lines: Line[] = byTruck(level, openLines);
   const nb = blocks.length;
   const nl = lines.length;
@@ -177,12 +211,13 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
   const arrivals: Float64Array[] = [];
   for (let i = 0; i < n; i++) arrivals.push(arrivalsPerMinute(level, i, minutes));
 
-  const upstream = new Float64Array(n); // arrived, not yet on a belt, a table or in the buffer
+  const upstream = new Float64Array(n); // arrived this minute (or handed back the minute before), looking for a place
   const stored = new Float64Array(n); // in the buffer, per city
   const loaded = new Float64Array(n); // on the trucks
-  const belt = new Float64Array(nb); // waiting on each dock's belt
-  const inTrailer = new Float64Array(nb); // in the trailer now at each dock
-  const swapLeft = new Float64Array(nb); // minutes of trailer swap still to go
+  const belt = new Float64Array(nb); // waiting on the belt, per run
+  const inTrailer = new Float64Array(nb); // in the trailer now, per run
+  const swapUntil = new Float64Array(nb); // the trailer is being swapped until this minute, per run
+  let refused = 0; // found the buffer full: missed for the night
   const table = new Float64Array(nl); // waiting on each line's table
   const taken = new Float64Array(nl); // carried off each line this minute
   let bufferFee = 0; // parcels that went into the buffer
@@ -207,9 +242,10 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
     for (let b = 0; b < nb; b++) {
       const blk = blocks[b]!;
       if (blk.start <= t && t < blk.end) {
-        const x = Math.min(BELT_ROOM - belt[b]!, upstream[blk.city]!);
+        const r = run[b]!;
+        const x = Math.min(BELT_ROOM - belt[r]!, upstream[blk.city]!);
         if (x > 0) {
-          belt[b] = belt[b]! + x;
+          belt[r] = belt[r]! + x;
           upstream[blk.city] = upstream[blk.city]! - x;
         }
       }
@@ -225,7 +261,9 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
       }
     }
 
-    // 3. What found no room goes into the buffer, until that is full; the rest waits upstream.
+    // 3. What found no room goes into the buffer, until that is full. Full is full: the rest is
+    //    refused, missed for the night (it counts as left behind for its city and never comes back).
+    //    That goes for a belt's parcels handed back the minute before, too.
     for (let i = 0; i < n; i++) {
       if (upstream[i]! > 1e-9) {
         const x = Math.min(upstream[i]!, level.bufferCap - inBuffer);
@@ -235,6 +273,8 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
           upstream[i] = upstream[i]! - x;
           bufferFee += x;
         }
+        refused += upstream[i]!;
+        upstream[i] = 0;
       }
     }
 
@@ -243,9 +283,10 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
     for (let b = 0; b < nb && budget > 0; b++) {
       const blk = blocks[b]!;
       if (blk.start <= t && t < blk.end) {
-        const x = Math.min(BELT_ROOM - belt[b]!, stored[blk.city]!, budget);
+        const r = run[b]!;
+        const x = Math.min(BELT_ROOM - belt[r]!, stored[blk.city]!, budget);
         if (x > 0) {
-          belt[b] = belt[b]! + x;
+          belt[r] = belt[r]! + x;
           stored[blk.city] = stored[blk.city]! - x;
           inBuffer -= x;
           budget -= x;
@@ -269,17 +310,15 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
     for (let b = 0; b < nb; b++) {
       const blk = blocks[b]!;
       if (blk.start <= t && t < blk.end) {
-        if (swapLeft[b]! > 0) {
-          swapLeft[b] = swapLeft[b]! - 1;
-          continue;
-        }
-        const x = Math.min(belt[b]!, blk.people === 1 ? ONE_PERSON_PER_MINUTE : TWO_PEOPLE_PER_MINUTE);
-        belt[b] = belt[b]! - x;
+        const r = run[b]!;
+        if (t < swapUntil[r]!) continue;
+        const x = Math.min(belt[r]!, blk.people === 1 ? ONE_PERSON_PER_MINUTE : TWO_PEOPLE_PER_MINUTE);
+        belt[r] = belt[r]! - x;
         loaded[blk.city] = loaded[blk.city]! + x;
-        inTrailer[b] = inTrailer[b]! + x;
-        if (inTrailer[b]! >= TRAILER) {
-          inTrailer[b] = inTrailer[b]! - TRAILER;
-          swapLeft[b] = TRAILER_SWAP_MINUTES;
+        inTrailer[r] = inTrailer[r]! + x;
+        if (inTrailer[r]! >= TRAILER) {
+          inTrailer[r] = inTrailer[r]! - TRAILER;
+          swapUntil[r] = t + 1 + TRAILER_SWAP_MINUTES; // the next ten minutes, whoever stands at the door
         }
       }
     }
@@ -322,12 +361,14 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
       }
     }
 
-    // 7. A block or line that ends hands back what still waits there.
+    // 7. A block or line that ends hands back what still waits there, unless the same door goes on
+    //    for the same city the next minute. What is handed back looks for a place the next minute
+    //    like a parcel that has just arrived.
     for (let b = 0; b < nb; b++) {
       const blk = blocks[b]!;
-      if (t === blk.end - 1) {
-        upstream[blk.city] = upstream[blk.city]! + belt[b]!;
-        belt[b] = 0;
+      if (t === blk.end - 1 && handsBack[b]) {
+        upstream[blk.city] = upstream[blk.city]! + belt[run[b]!]!;
+        belt[run[b]!] = 0;
       }
     }
     for (let l = 0; l < nl; l++) {
@@ -421,7 +462,7 @@ export function simulate(level: Level, given: Plan): ShiftOutcome {
       buffer: roundHalfEven(amounts.buffer),
     },
     trucks,
-    buffer: { series: bufferSeries, cap, fullRanges },
+    buffer: { series: bufferSeries, cap, fullRanges, refused: roundHalfEven(refused) },
   };
   const timeline: Timeline = {
     stepMinutes: 5,

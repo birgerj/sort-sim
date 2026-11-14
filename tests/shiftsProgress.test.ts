@@ -28,7 +28,7 @@ function result(score: number, stars: 0 | 1 | 2 | 3, badge = false, profit = sco
     badge,
     lines: { revenue: 900, bonus: 100, late: 0, left: 0, docks: 150, people: 300, robots: 0, buffer: 10 },
     trucks: [],
-    buffer: { series: [0, 5, 0], cap: 800, fullRanges: [] },
+    buffer: { series: [0, 5, 0], cap: 800, fullRanges: [], refused: 0 },
   };
 }
 

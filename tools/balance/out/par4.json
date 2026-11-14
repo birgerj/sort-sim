@@ -53,6 +53,12 @@
     669.25,
     669.25
    ]
+  },
+  {
+   "iters": 30000,
+   "restarts": [
+    669.25
+   ]
   }
  ],
  "detail": {
@@ -66,7 +72,8 @@
   "robots": 0.0,
   "store": 31.5,
   "peak": 180.0,
-  "ontime": 3
+  "ontime": 3,
+  "refused": 0.0
  },
  "peaks": [
   4,

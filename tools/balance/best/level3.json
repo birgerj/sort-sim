@@ -3,22 +3,8 @@
   {
    "city": 0,
    "start": 30,
-   "end": 90,
-   "people": 1,
-   "docks": 1
-  },
-  {
-   "city": 0,
-   "start": 90,
-   "end": 150,
+   "end": 180,
    "people": 2,
-   "docks": 1
-  },
-  {
-   "city": 0,
-   "start": 150,
-   "end": 210,
-   "people": 1,
    "docks": 1
   }
  ],

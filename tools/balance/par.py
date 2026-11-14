@@ -304,13 +304,35 @@ def starts(L):
     return [p for p in out if score(L, p) is not None] or [{'blocks': [], 'robotCities': [], 'robots': 0}]
 
 
+BLOCK_COST = 1.0  # in the search only: of two plans that earn the same, the one with fewer blocks wins
+
+
+def tidy_value(L):
+    """What the search maximises: the profit, less a little per block so that plans stay short to enter."""
+    def value(plan):
+        v = score(L, plan)
+        return None if v is None else v - BLOCK_COST * len(plan['blocks'])
+    return value
+
+
+def tidy(L, plan):
+    """The plan written with as few blocks as possible, when that scores exactly the same."""
+    m = merged(plan)
+    a, b = score(L, plan), score(L, m)
+    return m if b is not None and abs(a - b) < 1e-9 else canon(plan)
+
+
 def search(L, iters, restarts, value=None, seed0=1000, log=None, first=()):
-    value = value or (lambda p: score(L, p))
+    plain_profit = value is None
+    value = value or tidy_value(L)
     st = [p for p in first if value(p) is not None] + starts(L)
     res = []
     t = time.time()
     for s in range(restarts):
         p, v = anneal(L, st[s % len(st)], iters, seed0 + s, value)
+        if plain_profit:
+            p = tidy(L, p)
+            v = score(L, p)
         res.append((v, p))
         if log:
             print(log, 'restart', s, round(v, 2), round(time.time() - t), 's', flush=True)
@@ -447,11 +469,13 @@ def cmd_polish(Ls, n, iters, restarts, T0=12):
     """Cooler runs that start from the best plan known: closes most of the gap the warm restarts leave."""
     L = Ls[n - 1]
     old = known(L, n)
-    value = lambda p: score(L, p)
-    v, p = old['profit'], old['plan']
+    value = tidy_value(L)
+    v, p = old['profit'], tidy(L, old['plan'])
     got = []
     for s in range(restarts):
         q, w = anneal(L, p, iters, 5000 + 10 * len(old['runs']) + s, value, T0=float(T0))
+        q = tidy(L, q)
+        w = score(L, q)
         got.append(round(w, 2))
         print('level', n, 'polish', s, round(w, 2), flush=True)
         if w > v:
