@@ -1,0 +1,1287 @@
+[
+ {
+  "id": 1,
+  "name": "First door",
+  "shiftMinutes": 120,
+  "cities": [
+   {
+    "volume": 150.0,
+    "truck": 120,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 90,
+      "perMinute": 1.666667
+     }
+    ]
+   }
+  ],
+  "docks": 2,
+  "robotsMax": 0,
+  "bufferCap": 800,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "Plan one dock: start, end, and 1 or 2 people.",
+   "setForYou": [
+    "Unloading",
+    "Robots are off",
+    "Doors"
+   ]
+  },
+  "par": 178,
+  "badge": {
+   "id": "lean",
+   "text": "One person is enough"
+  }
+ },
+ {
+  "id": 2,
+  "name": "Two cities",
+  "shiftMinutes": 180,
+  "cities": [
+   {
+    "volume": 400.0,
+    "truck": 180,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 150,
+      "perMinute": 2.666667
+     }
+    ]
+   },
+   {
+    "volume": 120.0,
+    "truck": 120,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 90,
+      "perMinute": 1.333333
+     }
+    ]
+   }
+  ],
+  "docks": 4,
+  "robotsMax": 0,
+  "bufferCap": 800,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "A city too big for one trailer. Give it a second dock, or lose ten minutes at each trailer swap.",
+   "setForYou": [
+    "Unloading",
+    "Robots are off",
+    "Doors"
+   ]
+  },
+  "par": 612,
+  "badge": {
+   "id": "oneDock",
+   "text": "Never more than 2 docks open"
+  }
+ },
+ {
+  "id": 3,
+  "name": "Robots",
+  "shiftMinutes": 240,
+  "cities": [
+   {
+    "volume": 500.0,
+    "truck": 240,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 210,
+      "perMinute": 2.380952
+     }
+    ]
+   },
+   {
+    "volume": 60.0,
+    "truck": 210,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 180,
+      "perMinute": 0.333333
+     }
+    ]
+   },
+   {
+    "volume": 70.0,
+    "truck": 210,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 180,
+      "perMinute": 0.388889
+     }
+    ]
+   },
+   {
+    "volume": 50.0,
+    "truck": 240,
+    "arrivals": [
+     {
+      "from": 30,
+      "to": 200,
+      "perMinute": 0.294118
+     }
+    ]
+   }
+  ],
+  "docks": 4,
+  "robotsMax": 6,
+  "bufferCap": 800,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "Put a city on robots and choose the fleet size. One price per robot for the whole shift.",
+   "setForYou": [
+    "Unloading",
+    "Doors"
+   ]
+  },
+  "par": 833,
+  "badge": {
+   "id": "noDockSmall",
+   "text": "Only the biggest city on a dock"
+  }
+ },
+ {
+  "id": 4,
+  "name": "One door, two trucks",
+  "shiftMinutes": 240,
+  "cities": [
+   {
+    "volume": 240.0,
+    "truck": 105,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 90,
+      "perMinute": 2.666667
+     }
+    ]
+   },
+   {
+    "volume": 200.0,
+    "truck": 240,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 200,
+      "perMinute": 1.0
+     }
+    ]
+   },
+   {
+    "volume": 150.0,
+    "truck": 180,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 150,
+      "perMinute": 1.0
+     }
+    ]
+   }
+  ],
+  "docks": 2,
+  "robotsMax": 0,
+  "bufferCap": 800,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "More cities than docks. A dock can switch city in 15 minutes; waiting parcels go to the buffer.",
+   "setForYou": [
+    "Unloading",
+    "Robots are off",
+    "Doors"
+   ]
+  },
+  "par": 669,
+  "badge": {
+   "id": "lean3",
+   "text": "Never more than 3 people at work"
+  }
+ },
+ {
+  "id": 5,
+  "name": "Staggered wave",
+  "shiftMinutes": 300,
+  "cities": [
+   {
+    "volume": 420.0,
+    "truck": 270,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 240,
+      "perMinute": 1.75
+     }
+    ]
+   },
+   {
+    "volume": 300.0,
+    "truck": 210,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 60,
+      "perMinute": 3.0
+     },
+     {
+      "from": 60,
+      "to": 180,
+      "perMinute": 1.0
+     }
+    ]
+   },
+   {
+    "volume": 260.0,
+    "truck": 300,
+    "arrivals": [
+     {
+      "from": 60,
+      "to": 200,
+      "perMinute": 0.742857
+     },
+     {
+      "from": 200,
+      "to": 270,
+      "perMinute": 2.228571
+     }
+    ]
+   },
+   {
+    "volume": 180.0,
+    "truck": 180,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 150,
+      "perMinute": 1.2
+     }
+    ]
+   },
+   {
+    "volume": 140.0,
+    "truck": 270,
+    "arrivals": [
+     {
+      "from": 30,
+      "to": 240,
+      "perMinute": 0.666667
+     }
+    ]
+   },
+   {
+    "volume": 100.0,
+    "truck": 300,
+    "arrivals": [
+     {
+      "from": 90,
+      "to": 217,
+      "perMinute": 0.314961
+     },
+     {
+      "from": 217,
+      "to": 280,
+      "perMinute": 0.952381
+     }
+    ]
+   }
+  ],
+  "docks": 6,
+  "robotsMax": 10,
+  "bufferCap": 800,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "Parcels come in peaks. Start blocks later and change the crew size during the night.",
+   "setForYou": [
+    "Unloading",
+    "Doors"
+   ]
+  },
+  "par": 1687,
+  "badge": {
+   "id": "smallFleet",
+   "text": "At most 6 robots"
+  }
+ },
+ {
+  "id": 6,
+  "name": "Tight store",
+  "shiftMinutes": 360,
+  "cities": [
+   {
+    "volume": 520.0,
+    "truck": 330,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 300,
+      "perMinute": 1.733333
+     }
+    ]
+   },
+   {
+    "volume": 380.0,
+    "truck": 240,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 66,
+      "perMinute": 3.454545
+     },
+     {
+      "from": 66,
+      "to": 200,
+      "perMinute": 1.134328
+     }
+    ]
+   },
+   {
+    "volume": 320.0,
+    "truck": 360,
+    "arrivals": [
+     {
+      "from": 90,
+      "to": 250,
+      "perMinute": 0.8
+     },
+     {
+      "from": 250,
+      "to": 330,
+      "perMinute": 2.4
+     }
+    ]
+   },
+   {
+    "volume": 260.0,
+    "truck": 210,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 180,
+      "perMinute": 1.444444
+     }
+    ]
+   },
+   {
+    "volume": 220.0,
+    "truck": 330,
+    "arrivals": [
+     {
+      "from": 60,
+      "to": 300,
+      "perMinute": 0.916667
+     }
+    ]
+   },
+   {
+    "volume": 160.0,
+    "truck": 180,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 50,
+      "perMinute": 1.92
+     },
+     {
+      "from": 50,
+      "to": 150,
+      "perMinute": 0.64
+     }
+    ]
+   },
+   {
+    "volume": 140.0,
+    "truck": 360,
+    "arrivals": [
+     {
+      "from": 120,
+      "to": 330,
+      "perMinute": 0.666667
+     }
+    ]
+   },
+   {
+    "volume": 100.0,
+    "truck": 330,
+    "arrivals": [
+     {
+      "from": 100,
+      "to": 234,
+      "perMinute": 0.298507
+     },
+     {
+      "from": 234,
+      "to": 300,
+      "perMinute": 0.909091
+     }
+    ]
+   }
+  ],
+  "docks": 8,
+  "robotsMax": 14,
+  "bufferCap": 250,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "The buffer is small tonight. Choose what you let wait.",
+   "setForYou": [
+    "Unloading",
+    "Doors"
+   ]
+  },
+  "par": 2549,
+  "badge": {
+   "id": "halfBuffer",
+   "text": "Buffer never over half full"
+  }
+ },
+ {
+  "id": 7,
+  "name": "Robots down",
+  "shiftMinutes": 360,
+  "cities": [
+   {
+    "volume": 1380.0,
+    "truck": 340,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 310,
+      "perMinute": 4.451613
+     }
+    ]
+   },
+   {
+    "volume": 1104.0,
+    "truck": 250,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 73,
+      "perMinute": 9.073973
+     },
+     {
+      "from": 73,
+      "to": 220,
+      "perMinute": 3.004082
+     }
+    ]
+   },
+   {
+    "volume": 920.0,
+    "truck": 360,
+    "arrivals": [
+     {
+      "from": 60,
+      "to": 240,
+      "perMinute": 2.044444
+     },
+     {
+      "from": 240,
+      "to": 330,
+      "perMinute": 6.133333
+     }
+    ]
+   },
+   {
+    "volume": 782.0,
+    "truck": 150,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 130,
+      "perMinute": 6.015385
+     }
+    ]
+   },
+   {
+    "volume": 690.0,
+    "truck": 330,
+    "arrivals": [
+     {
+      "from": 30,
+      "to": 300,
+      "perMinute": 2.555556
+     }
+    ]
+   },
+   {
+    "volume": 552.0,
+    "truck": 360,
+    "arrivals": [
+     {
+      "from": 120,
+      "to": 267,
+      "perMinute": 1.502041
+     },
+     {
+      "from": 267,
+      "to": 340,
+      "perMinute": 4.536986
+     }
+    ]
+   },
+   {
+    "volume": 414.0,
+    "truck": 270,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 240,
+      "perMinute": 1.725
+     }
+    ]
+   },
+   {
+    "volume": 322.0,
+    "truck": 210,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 60,
+      "perMinute": 3.22
+     },
+     {
+      "from": 60,
+      "to": 180,
+      "perMinute": 1.073333
+     }
+    ]
+   },
+   {
+    "volume": 276.0,
+    "truck": 350,
+    "arrivals": [
+     {
+      "from": 100,
+      "to": 320,
+      "perMinute": 1.254545
+     }
+    ]
+   }
+  ],
+  "docks": 8,
+  "robotsMax": 12,
+  "bufferCap": 800,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "Full hall: you need every dock and every robot. The robots are off from 01:00 to 02:00 and one truck leaves early.",
+   "setForYou": [
+    "Unloading",
+    "Doors"
+   ]
+  },
+  "par": 7659,
+  "badge": {
+   "id": "allOnTime",
+   "text": "Every truck on time"
+  },
+  "robotOutage": [
+   180,
+   240
+  ]
+ },
+ {
+  "id": 8,
+  "name": "Peak night",
+  "shiftMinutes": 480,
+  "cities": [
+   {
+    "volume": 2400.0,
+    "truck": 450,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 420,
+      "perMinute": 5.714286
+     }
+    ]
+   },
+   {
+    "volume": 1860.0,
+    "truck": 330,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 100,
+      "perMinute": 11.16
+     },
+     {
+      "from": 100,
+      "to": 300,
+      "perMinute": 3.72
+     }
+    ]
+   },
+   {
+    "volume": 2700.0,
+    "truck": 450,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 180,
+      "perMinute": 2.25
+     },
+     {
+      "from": 180,
+      "to": 210,
+      "perMinute": 62.25
+     },
+     {
+      "from": 210,
+      "to": 400,
+      "perMinute": 2.25
+     }
+    ]
+   },
+   {
+    "volume": 1440.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 120,
+      "to": 340,
+      "perMinute": 2.618182
+     },
+     {
+      "from": 340,
+      "to": 450,
+      "perMinute": 7.854545
+     }
+    ]
+   },
+   {
+    "volume": 1140.0,
+    "truck": 270,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 240,
+      "perMinute": 4.75
+     }
+    ]
+   },
+   {
+    "volume": 960.0,
+    "truck": 450,
+    "arrivals": [
+     {
+      "from": 60,
+      "to": 420,
+      "perMinute": 2.666667
+     }
+    ]
+   },
+   {
+    "volume": 780.0,
+    "truck": 240,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 66,
+      "perMinute": 7.090909
+     },
+     {
+      "from": 66,
+      "to": 200,
+      "perMinute": 2.328358
+     }
+    ]
+   },
+   {
+    "volume": 600.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 200,
+      "to": 374,
+      "perMinute": 1.37931
+     },
+     {
+      "from": 374,
+      "to": 460,
+      "perMinute": 4.186047
+     }
+    ]
+   },
+   {
+    "volume": 420.0,
+    "truck": 390,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 360,
+      "perMinute": 1.166667
+     }
+    ]
+   },
+   {
+    "volume": 300.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 150,
+      "to": 450,
+      "perMinute": 1.0
+     }
+    ]
+   }
+  ],
+  "docks": 12,
+  "robotsMax": 20,
+  "bufferCap": 800,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "A large batch for one city at 01:00. Not everything fits tonight: choose what stays behind.",
+   "setForYou": [
+    "Unloading",
+    "Doors"
+   ]
+  },
+  "par": 13560,
+  "badge": {
+   "id": "allOnTime",
+   "text": "Every truck on time"
+  }
+ },
+ {
+  "id": 9,
+  "name": "Holiday rates",
+  "shiftMinutes": 480,
+  "cities": [
+   {
+    "volume": 2050.0,
+    "truck": 450,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 420,
+      "perMinute": 4.880952
+     }
+    ]
+   },
+   {
+    "volume": 1700.0,
+    "truck": 300,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 90,
+      "perMinute": 11.333333
+     },
+     {
+      "from": 90,
+      "to": 270,
+      "perMinute": 3.777778
+     }
+    ]
+   },
+   {
+    "volume": 1400.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 30,
+      "to": 310,
+      "perMinute": 2.0
+     },
+     {
+      "from": 310,
+      "to": 450,
+      "perMinute": 6.0
+     }
+    ]
+   },
+   {
+    "volume": 1250.0,
+    "truck": 240,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 210,
+      "perMinute": 5.952381
+     }
+    ]
+   },
+   {
+    "volume": 1100.0,
+    "truck": 420,
+    "arrivals": [
+     {
+      "from": 60,
+      "to": 390,
+      "perMinute": 3.333333
+     }
+    ]
+   },
+   {
+    "volume": 1000.0,
+    "truck": 360,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 110,
+      "perMinute": 5.454545
+     },
+     {
+      "from": 110,
+      "to": 330,
+      "perMinute": 1.818182
+     }
+    ]
+   },
+   {
+    "volume": 900.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 90,
+      "to": 330,
+      "perMinute": 1.5
+     },
+     {
+      "from": 330,
+      "to": 450,
+      "perMinute": 4.5
+     }
+    ]
+   },
+   {
+    "volume": 800.0,
+    "truck": 330,
+    "arrivals": [
+     {
+      "from": 30,
+      "to": 300,
+      "perMinute": 2.962963
+     }
+    ]
+   },
+   {
+    "volume": 700.0,
+    "truck": 450,
+    "arrivals": [
+     {
+      "from": 120,
+      "to": 420,
+      "perMinute": 2.333333
+     }
+    ]
+   },
+   {
+    "volume": 650.0,
+    "truck": 210,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 60,
+      "perMinute": 6.5
+     },
+     {
+      "from": 60,
+      "to": 180,
+      "perMinute": 2.166667
+     }
+    ]
+   },
+   {
+    "volume": 550.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 150,
+      "to": 350,
+      "perMinute": 1.1
+     },
+     {
+      "from": 350,
+      "to": 450,
+      "perMinute": 3.3
+     }
+    ]
+   },
+   {
+    "volume": 400.0,
+    "truck": 390,
+    "arrivals": [
+     {
+      "from": 60,
+      "to": 360,
+      "perMinute": 1.333333
+     }
+    ]
+   }
+  ],
+  "docks": 12,
+  "robotsMax": 24,
+  "bufferCap": 800,
+  "wageFactor": 1.5,
+  "notes": {
+   "fresh": "People cost 50% more and you get 16 at most.",
+   "setForYou": [
+    "Unloading",
+    "Doors"
+   ]
+  },
+  "par": 11746,
+  "badge": {
+   "id": "lean12",
+   "text": "Never more than 12 people at work"
+  },
+  "peopleCap": 16
+ },
+ {
+  "id": 10,
+  "name": "Full house",
+  "shiftMinutes": 480,
+  "cities": [
+   {
+    "volume": 2853.0,
+    "truck": 450,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 300,
+      "perMinute": 6.428571
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 11.528571
+     },
+     {
+      "from": 330,
+      "to": 420,
+      "perMinute": 6.428571
+     }
+    ]
+   },
+   {
+    "volume": 4056.0,
+    "truck": 420,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 150,
+      "perMinute": 6.0
+     },
+     {
+      "from": 150,
+      "to": 180,
+      "perMinute": 56.0
+     },
+     {
+      "from": 180,
+      "to": 300,
+      "perMinute": 6.0
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 13.2
+     },
+     {
+      "from": 330,
+      "to": 390,
+      "perMinute": 6.0
+     }
+    ]
+   },
+   {
+    "volume": 2154.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 30,
+      "to": 300,
+      "perMinute": 2.914286
+     },
+     {
+      "from": 300,
+      "to": 310,
+      "perMinute": 6.714286
+     },
+     {
+      "from": 310,
+      "to": 330,
+      "perMinute": 12.542857
+     },
+     {
+      "from": 330,
+      "to": 450,
+      "perMinute": 8.742857
+     }
+    ]
+   },
+   {
+    "volume": 1800.0,
+    "truck": 270,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 80,
+      "perMinute": 13.5
+     },
+     {
+      "from": 80,
+      "to": 240,
+      "perMinute": 4.5
+     }
+    ]
+   },
+   {
+    "volume": 1710.0,
+    "truck": 450,
+    "arrivals": [
+     {
+      "from": 60,
+      "to": 300,
+      "perMinute": 4.5
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 7.5
+     },
+     {
+      "from": 330,
+      "to": 420,
+      "perMinute": 4.5
+     }
+    ]
+   },
+   {
+    "volume": 1440.0,
+    "truck": 330,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 100,
+      "perMinute": 8.64
+     },
+     {
+      "from": 100,
+      "to": 300,
+      "perMinute": 2.88
+     }
+    ]
+   },
+   {
+    "volume": 1395.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 90,
+      "to": 300,
+      "perMinute": 2.2
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 4.7
+     },
+     {
+      "from": 330,
+      "to": 450,
+      "perMinute": 6.6
+     }
+    ]
+   },
+   {
+    "volume": 1269.0,
+    "truck": 390,
+    "arrivals": [
+     {
+      "from": 30,
+      "to": 300,
+      "perMinute": 3.636364
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 5.936364
+     },
+     {
+      "from": 330,
+      "to": 360,
+      "perMinute": 3.636364
+     }
+    ]
+   },
+   {
+    "volume": 1140.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 120,
+      "to": 300,
+      "perMinute": 3.272727
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 5.272727
+     },
+     {
+      "from": 330,
+      "to": 450,
+      "perMinute": 3.272727
+     }
+    ]
+   },
+   {
+    "volume": 960.0,
+    "truck": 240,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 70,
+      "perMinute": 8.228571
+     },
+     {
+      "from": 70,
+      "to": 210,
+      "perMinute": 2.742857
+     }
+    ]
+   },
+   {
+    "volume": 951.0,
+    "truck": 450,
+    "arrivals": [
+     {
+      "from": 150,
+      "to": 300,
+      "perMinute": 2.0
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 3.7
+     },
+     {
+      "from": 330,
+      "to": 420,
+      "perMinute": 6.0
+     }
+    ]
+   },
+   {
+    "volume": 780.0,
+    "truck": 360,
+    "arrivals": [
+     {
+      "from": 60,
+      "to": 330,
+      "perMinute": 2.888889
+     }
+    ]
+   },
+   {
+    "volume": 660.0,
+    "truck": 300,
+    "arrivals": [
+     {
+      "from": 0,
+      "to": 90,
+      "perMinute": 4.4
+     },
+     {
+      "from": 90,
+      "to": 270,
+      "perMinute": 1.466667
+     }
+    ]
+   },
+   {
+    "volume": 570.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 180,
+      "to": 300,
+      "perMinute": 1.2
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 2.2
+     },
+     {
+      "from": 330,
+      "to": 360,
+      "perMinute": 1.2
+     },
+     {
+      "from": 360,
+      "to": 450,
+      "perMinute": 3.6
+     }
+    ]
+   },
+   {
+    "volume": 444.0,
+    "truck": 420,
+    "arrivals": [
+     {
+      "from": 30,
+      "to": 300,
+      "perMinute": 1.166667
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 1.966667
+     },
+     {
+      "from": 330,
+      "to": 390,
+      "perMinute": 1.166667
+     }
+    ]
+   },
+   {
+    "volume": 318.0,
+    "truck": 480,
+    "arrivals": [
+     {
+      "from": 210,
+      "to": 300,
+      "perMinute": 1.25
+     },
+     {
+      "from": 300,
+      "to": 330,
+      "perMinute": 1.85
+     },
+     {
+      "from": 330,
+      "to": 450,
+      "perMinute": 1.25
+     }
+    ]
+   }
+  ],
+  "docks": 20,
+  "robotsMax": 30,
+  "bufferCap": 400,
+  "wageFactor": 1.0,
+  "notes": {
+   "fresh": "Everything at once: batch, late inbound, small buffer, a limit on people.",
+   "setForYou": [
+    "Unloading",
+    "Doors"
+   ]
+  },
+  "par": 23762,
+  "badge": {
+   "id": "allOnTime",
+   "text": "Every truck on time"
+  },
+  "peopleCap": 40
+ }
+]

@@ -1,0 +1,15 @@
+# Decisions (coordinator writes; one line each)
+
+- 2026-11-14 Ten fixed levels, no seed; city names follow the country. Currency: Sorty, sign §.
+- 2026-11-14 Plan in steps of half an hour, blocks of at least an hour. No door numbers for the player.
+- 2026-11-14 Robots: § 11 × shift hours each for the whole shift; no separate price or timing for lines.
+- 2026-11-14 Levels 7–10 run a full hall (volumes × 2.3, 3, 2.5, 3 against the first draft).
+- 2026-11-14 Level 10: at most 40 people (was 32), so all 20 docks can open.
+- 2026-11-14 The planner shows fixed costs and a rough buffer guess only; real figures come with the result.
+- 2026-11-14 Skipping the shift stays. The score service answers after 5 seconds (as the server will later).
+- 2026-11-14 This build has no unloading plan for the player; unloading runs by itself in every level.
+- 2026-11-14 The old night game (seed, drift, moves) is removed once the new game is merged.
+- 2026-11-14 Open, for agent B: the price of a parcel left behind (now § 2.50). Aim: in levels 7–10 a plain
+  plan that gives every city enough docks still earns one star. Report a value; the coordinator decides.
+- 2026-11-14 Open, for agent B: par for every level under the final rules. `levels.json` holds provisional values.
+- 2026-11-14 New code lives in `src/shifts`, `src/ui/shifts` and `src/scene/director.ts`; `src/game` is the old game.
