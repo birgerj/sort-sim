@@ -55,8 +55,8 @@ const LOOP_STOCK = 150;
 const CITY_STOCK = 14;
 /** Parcels a robot station may have waiting on its table or on their way to it. */
 const TABLE_AHEAD = 3;
-/** Minutes ahead of the timeline's loading that a parcel is sent down a dock's chute. */
-const SEND_AHEAD = 2;
+/** Minutes of margin on top of the ride from the infeeds, in how far ahead of the timeline's loading a parcel is sent down a dock's chute. */
+const SEND_AHEAD = 4;
 /** Seconds between two camera cuts at least, seconds a cut is held, and the fastest pace that still cuts (hall beats per music beat). */
 const CUT_GAP = 9;
 const CUT_HOLD = 4.5;
@@ -127,6 +127,8 @@ export function createDirector(scene: Sorter): Director {
   let pendingCut: Shot | null = null;
   let overviewKey = '';
   let wasOutside = false;
+  /** The closing shot has been played. */
+  let closed = false;
   let finaleTimer: ReturnType<typeof setTimeout> | null = null;
   const now = () => performance.now() / 1000;
   const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -203,6 +205,20 @@ export function createDirector(scene: Sorter): Director {
     },
     took(city) {
       out[city] = (out[city] ?? 0) + 1;
+    },
+    route(city) {
+      if (!playing || !schedule) return null;
+      const chutes = scene.shiftChutes().doors;
+      for (const [d, r] of doors.entries()) {
+        const chute = chutes[d];
+        if (!r.open || r.state?.city !== city || chute === undefined || r.sent >= mayHave(d, chute)) continue;
+        return { chute, pc: postcode(city) };
+      }
+      return null;
+    },
+    sent(chute) {
+      const r = doors[scene.shiftChutes().doors.indexOf(chute)];
+      if (r) r.sent++;
     },
   };
 
@@ -332,6 +348,13 @@ export function createDirector(scene: Sorter): Director {
     return [no, 'closed', 'off'];
   }
 
+  /** Parcels door `d` may have been sent in its block by now (see `flow`). */
+  function mayHave(d: number, chute: number): number {
+    const st = doors[d]?.state;
+    if (!st?.open || !st.stint || !schedule) return 0;
+    return inHall(sample(st.stint.loaded, minute + scene.shiftLead(chute) * MIN_PER_BEAT + SEND_AHEAD, schedule.stepMinutes), factor);
+  }
+
   /**
    * One beat of the plan's parcels: those that are due and that no lane brought are set on
    * the loop; those riding it go down the chute of an open dock of their city or to its
@@ -356,10 +379,12 @@ export function createDirector(scene: Sorter): Director {
       const st = r.state;
       const chute = dockChutes[d];
       if (!r.open || !st || !st.stint || chute === undefined) return;
-      // Only what the timeline has loaded here (a couple of minutes ahead: the way down the
-      // chute and along the belt). So the crew never has to stand beside a parcel it may not
-      // take yet; what must wait, waits on the loop or in the rack.
-      const may = inHall(sample(st.stint.loaded, minute + SEND_AHEAD, s.stepMinutes), factor);
+      // Only what the timeline has loaded here, as far ahead as a parcel is let onto the loop
+      // before it is due (its ride from the infeeds, see `due`) and a little more: one that
+      // comes in on time goes straight down, and is not sent round the loop again. So the crew
+      // never has to stand beside a parcel it may not take yet; what must wait, waits on the
+      // loop or in the rack.
+      const may = mayHave(d, chute);
       for (let n = 0; n < 2 && r.sent < may && (waiting[st.city] ?? 0) > 0; n++) {
         if (!scene.shiftSend(chute, st.city, postcode(st.city))) break;
         r.sent++;
@@ -460,6 +485,7 @@ export function createDirector(scene: Sorter): Director {
     hooks.inflow = 0;
     hooks.warp = 1;
     hooks.night = 0;
+    closed = false;
     if (finaleTimer) clearTimeout(finaleTimer);
     finaleTimer = null;
   }
@@ -541,7 +567,8 @@ export function createDirector(scene: Sorter): Director {
 
   /** Every beat: the automatic direction. The overview follows the open docks; cuts come and go on the beat. */
   function direct(): void {
-    if (!active || !auto || finaleTimer) return;
+    // (After the closing shot the camera stays where it is, on the party or the last dock, until the next attempt.)
+    if (!active || !auto || finaleTimer || closed) return;
     const t = now();
     if (pendingCut) {
       go(pendingCut, true);
@@ -627,7 +654,8 @@ export function createDirector(scene: Sorter): Director {
       bare(false);
       // The music at the hall's own tempo, and the loop fast enough for what the level brings in.
       scene.rate = TEMPO_RATE;
-      scene.setBeltSpeed(peakPerMinute(lv) / 4 / factor > 1.5 ? 2 : Math.min(2, Math.max(1, saved?.belt ?? 1)));
+      // (Never at its slowest: a parcel that has to go round once more would be away for three quarters of an hour.)
+      scene.setBeltSpeed(2);
       // Automatic direction, on the overview.
       auto = true;
       shotName = '';
@@ -739,6 +767,7 @@ export function createDirector(scene: Sorter): Director {
     setAutoCamera(on) {
       if (!active) return;
       if (!on) return setAuto(false);
+      closed = false;
       auto = false;
       shotName = '';
       overviewKey = '';
@@ -753,21 +782,25 @@ export function createDirector(scene: Sorter): Director {
     finale(stars, done) {
       // (Not after a skip, and never twice.)
       if (!active || !schedule || skipped || playing || finaleTimer) return done();
-      // The last truck pulling out, seen from the yard; after a perfect night the party starts.
+      // All inside the hall: the last dock, its last cages in the trailer and the door coming
+      // down; after a perfect night the lights go and the camera stands on the floor inside
+      // the loop, among the people, looking at the party.
       const last = [...schedule.events].reverse().find((e) => e.kind === 'depart' && e.doors.length > 0);
       const d = last && last.kind === 'depart' ? last.doors[last.doors.length - 1]! : -1;
       const dock = d >= 0 ? scene.shiftParts().trucks.docks[d] : undefined;
-      if (dock) go({ eye: v(dock.x + 13, 4.5, dock.wallZ - 24), look: v(dock.x, 2.2, dock.wallZ - 9), name: `${cityName(last!.city)}: the last truck`, free: true }, true);
-      else go(overview(), true);
+      const cx = dock ? dock.x : overview().look.x;
+      if (dock) go({ eye: v(dock.x + 3.5, 2.6, -27), look: v(dock.x, 1.9, -40), name: `${cityName(last!.city)}: the last truck` }, true);
+      else go({ eye: v(cx + 6, 4.6, -19.5), look: v(cx + 1, 1.3, -34), name: 'Docks' }, true);
       const t0 = now();
       const party = stars >= 3;
       const step = () => {
         const t = now() - t0;
         if (party) hooks.night = Math.min(1, Math.max(0, (t - 1.2) / 1.6));
-        if (party && t > 2.4 && shotName !== 'Party') go({ ...overview(), name: 'Party' }, true);
+        if (party && t > 2.2 && shotName !== 'Party') go({ eye: v(cx - 9, 1.75, 5), look: v(cx + 5, 1.9, -3), name: 'Party' }, true);
         if (t < FINALE_SECONDS && active) finaleTimer = setTimeout(step, 100);
         else {
           finaleTimer = null;
+          closed = true;
           done();
         }
       };
