@@ -5,3 +5,5 @@ shots/
 .DS_Store
 .vite/
 measure/
+dist-server/
+data/

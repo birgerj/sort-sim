@@ -51,6 +51,34 @@ function bakedBodies(): Plugin {
   };
 }
 
+/**
+ * The build for the server (`SCORES=server`): scores come from the server, and the score model
+ * must not be in what the browser gets. score.ts is swapped for score.remote.ts, and the build
+ * fails if any file of the model still ends up in it.
+ */
+const SERVER = process.env.SCORES === 'server';
+function serverScores(): Plugin {
+  return {
+    name: 'sort-sim-server-scores',
+    apply: 'build',
+    enforce: 'pre',
+    async resolveId(source, importer) {
+      if (!SERVER || !importer) return null;
+      const found = await this.resolve(source, importer, { skipSelf: true });
+      if (found && /[\\/]src[\\/]shifts[\\/]score\.ts$/.test(found.id)) return found.id.replace(/score\.ts$/, 'score.remote.ts');
+      return null;
+    },
+    generateBundle(_, bundle) {
+      if (!SERVER) return;
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== 'chunk') continue;
+        const leak = Object.keys(chunk.modules).find((id) => /[\\/]src[\\/]shifts[\\/]model[\\/]/.test(id) || /[\\/]tools[\\/]balance[\\/]/.test(id));
+        if (leak) this.error(`The score model must not be in the browser build: ${leak}`);
+      }
+    },
+  };
+}
+
 export default defineConfig({
   // Relative asset paths, so the build works on GitHub Pages under /sort-sim/.
   base: './',
@@ -59,7 +87,7 @@ export default defineConfig({
     // (mock-people.html: a trial page, not linked from the hall.)
     rollupOptions: { input: { main: 'index.html', mock: 'mock-people.html' } },
   },
-  plugins: [bakedBodies(), serviceWorker()],
+  plugins: [serverScores(), bakedBodies(), serviceWorker()],
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',

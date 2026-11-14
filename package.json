@@ -6,11 +6,13 @@
   "description": "A parcel sorting hub in three.js that moves to its own ambient music: day is clean production, night is a secret party.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p server && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "shots": "node scripts/shots.mjs"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p server",
+    "shots": "node scripts/shots.mjs",
+    "build:server": "tsc --noEmit && tsc --noEmit -p server && SCORES=server vite build && vite build --config vite.server.config.ts",
+    "start": "node dist-server/server.mjs"
   },
   "dependencies": {
     "three": "^0.160.0"
@@ -19,6 +21,7 @@
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
+    "@types/node": "^22.20.5",
     "@types/three": "^0.160.0",
     "meshoptimizer": "^1.3.0",
     "typescript": "^7.0.2",

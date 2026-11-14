@@ -1,0 +1,15 @@
+# Start with: docker compose up -d --build
+# The game is then on port 8080 of this machine; put a reverse proxy with HTTPS in front of it.
+services:
+  sort-sim:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      # 1 when a reverse proxy in front sets X-Forwarded-For (it is used to limit plans per address).
+      TRUST_PROXY: "1"
+      # Milliseconds a scored plan's answer is held back.
+      WAIT_MS: "5000"
