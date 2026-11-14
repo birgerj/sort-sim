@@ -11,7 +11,7 @@
      {
       "from": 0,
       "to": 90,
-      "perMinute": 1.666667
+      "perMinute": 1.6666666666666667
      }
     ]
    }
@@ -46,7 +46,7 @@
      {
       "from": 0,
       "to": 150,
-      "perMinute": 2.666667
+      "perMinute": 2.6666666666666665
      }
     ]
    },
@@ -57,7 +57,7 @@
      {
       "from": 0,
       "to": 90,
-      "perMinute": 1.333333
+      "perMinute": 1.3333333333333333
      }
     ]
    }
@@ -74,7 +74,7 @@
     "Doors"
    ]
   },
-  "par": 612,
+  "par": 628,
   "badge": {
    "id": "oneDock",
    "text": "Never more than 2 docks open"
@@ -86,35 +86,35 @@
   "shiftMinutes": 240,
   "cities": [
    {
-    "volume": 500.0,
+    "volume": 499.99999999999994,
     "truck": 240,
     "arrivals": [
      {
       "from": 0,
       "to": 210,
-      "perMinute": 2.380952
+      "perMinute": 2.380952380952381
      }
     ]
    },
    {
-    "volume": 60.0,
+    "volume": 59.999999999999986,
     "truck": 210,
     "arrivals": [
      {
       "from": 0,
       "to": 180,
-      "perMinute": 0.333333
+      "perMinute": 0.3333333333333333
      }
     ]
    },
    {
-    "volume": 70.0,
+    "volume": 70.00000000000001,
     "truck": 210,
     "arrivals": [
      {
       "from": 0,
       "to": 180,
-      "perMinute": 0.388889
+      "perMinute": 0.3888888888888889
      }
     ]
    },
@@ -125,7 +125,7 @@
      {
       "from": 30,
       "to": 200,
-      "perMinute": 0.294118
+      "perMinute": 0.29411764705882354
      }
     ]
    }
@@ -141,7 +141,7 @@
     "Doors"
    ]
   },
-  "par": 833,
+  "par": 836,
   "badge": {
    "id": "noDockSmall",
    "text": "Only the biggest city on a dock"
@@ -159,7 +159,7 @@
      {
       "from": 0,
       "to": 90,
-      "perMinute": 2.666667
+      "perMinute": 2.6666666666666665
      }
     ]
    },
@@ -243,12 +243,12 @@
      {
       "from": 60,
       "to": 200,
-      "perMinute": 0.742857
+      "perMinute": 0.7428571428571429
      },
      {
       "from": 200,
       "to": 270,
-      "perMinute": 2.228571
+      "perMinute": 2.2285714285714286
      }
     ]
    },
@@ -270,7 +270,7 @@
      {
       "from": 30,
       "to": 240,
-      "perMinute": 0.666667
+      "perMinute": 0.6666666666666666
      }
     ]
    },
@@ -281,12 +281,12 @@
      {
       "from": 90,
       "to": 217,
-      "perMinute": 0.314961
+      "perMinute": 0.31496062992125984
      },
      {
       "from": 217,
       "to": 280,
-      "perMinute": 0.952381
+      "perMinute": 0.9523809523809523
      }
     ]
    }
@@ -302,7 +302,7 @@
     "Doors"
    ]
   },
-  "par": 1687,
+  "par": 1689,
   "badge": {
    "id": "smallFleet",
    "text": "At most 6 robots"
@@ -314,29 +314,29 @@
   "shiftMinutes": 360,
   "cities": [
    {
-    "volume": 520.0,
+    "volume": 520.0000000000002,
     "truck": 330,
     "arrivals": [
      {
       "from": 0,
       "to": 300,
-      "perMinute": 1.733333
+      "perMinute": 1.7333333333333334
      }
     ]
    },
    {
-    "volume": 380.0,
+    "volume": 379.99999999999994,
     "truck": 240,
     "arrivals": [
      {
       "from": 0,
       "to": 66,
-      "perMinute": 3.454545
+      "perMinute": 3.4545454545454546
      },
      {
       "from": 66,
       "to": 200,
-      "perMinute": 1.134328
+      "perMinute": 1.1343283582089552
      }
     ]
    },
@@ -363,18 +363,18 @@
      {
       "from": 0,
       "to": 180,
-      "perMinute": 1.444444
+      "perMinute": 1.4444444444444444
      }
     ]
    },
    {
-    "volume": 220.0,
+    "volume": 219.99999999999997,
     "truck": 330,
     "arrivals": [
      {
       "from": 60,
       "to": 300,
-      "perMinute": 0.916667
+      "perMinute": 0.9166666666666666
      }
     ]
    },
@@ -401,7 +401,7 @@
      {
       "from": 120,
       "to": 330,
-      "perMinute": 0.666667
+      "perMinute": 0.6666666666666666
      }
     ]
    },
@@ -412,12 +412,12 @@
      {
       "from": 100,
       "to": 234,
-      "perMinute": 0.298507
+      "perMinute": 0.29850746268656714
      },
      {
       "from": 234,
       "to": 300,
-      "perMinute": 0.909091
+      "perMinute": 0.9090909090909091
      }
     ]
    }
@@ -433,7 +433,7 @@
     "Doors"
    ]
   },
-  "par": 2549,
+  "par": 2537,
   "badge": {
    "id": "halfBuffer",
    "text": "Buffer never over half full"
@@ -445,29 +445,29 @@
   "shiftMinutes": 360,
   "cities": [
    {
-    "volume": 1380.0,
+    "volume": 1380.0000000000002,
     "truck": 340,
     "arrivals": [
      {
       "from": 0,
       "to": 310,
-      "perMinute": 4.451613
+      "perMinute": 4.451612903225806
      }
     ]
    },
    {
-    "volume": 1104.0,
+    "volume": 1103.9999999999998,
     "truck": 250,
     "arrivals": [
      {
       "from": 0,
       "to": 73,
-      "perMinute": 9.073973
+      "perMinute": 9.073972602739724
      },
      {
       "from": 73,
       "to": 220,
-      "perMinute": 3.004082
+      "perMinute": 3.004081632653061
      }
     ]
    },
@@ -478,23 +478,23 @@
      {
       "from": 60,
       "to": 240,
-      "perMinute": 2.044444
+      "perMinute": 2.0444444444444443
      },
      {
       "from": 240,
       "to": 330,
-      "perMinute": 6.133333
+      "perMinute": 6.133333333333333
      }
     ]
    },
    {
-    "volume": 782.0,
+    "volume": 782.0000000000001,
     "truck": 150,
     "arrivals": [
      {
       "from": 0,
       "to": 130,
-      "perMinute": 6.015385
+      "perMinute": 6.015384615384615
      }
     ]
    },
@@ -505,34 +505,34 @@
      {
       "from": 30,
       "to": 300,
-      "perMinute": 2.555556
+      "perMinute": 2.5555555555555554
      }
     ]
    },
    {
-    "volume": 552.0,
+    "volume": 551.9999999999999,
     "truck": 360,
     "arrivals": [
      {
       "from": 120,
       "to": 267,
-      "perMinute": 1.502041
+      "perMinute": 1.5020408163265304
      },
      {
       "from": 267,
       "to": 340,
-      "perMinute": 4.536986
+      "perMinute": 4.536986301369862
      }
     ]
    },
    {
-    "volume": 414.0,
+    "volume": 414.00000000000006,
     "truck": 270,
     "arrivals": [
      {
       "from": 0,
       "to": 240,
-      "perMinute": 1.725
+      "perMinute": 1.7249999999999999
      }
     ]
    },
@@ -543,23 +543,23 @@
      {
       "from": 0,
       "to": 60,
-      "perMinute": 3.22
+      "perMinute": 3.2199999999999998
      },
      {
       "from": 60,
       "to": 180,
-      "perMinute": 1.073333
+      "perMinute": 1.0733333333333333
      }
     ]
    },
    {
-    "volume": 276.0,
+    "volume": 275.9999999999999,
     "truck": 350,
     "arrivals": [
      {
       "from": 100,
       "to": 320,
-      "perMinute": 1.254545
+      "perMinute": 1.2545454545454544
      }
     ]
    }
@@ -591,18 +591,18 @@
   "shiftMinutes": 480,
   "cities": [
    {
-    "volume": 2400.0,
+    "volume": 2399.9999999999995,
     "truck": 450,
     "arrivals": [
      {
       "from": 0,
       "to": 420,
-      "perMinute": 5.714286
+      "perMinute": 5.7142857142857135
      }
     ]
    },
    {
-    "volume": 1860.0,
+    "volume": 1859.9999999999998,
     "truck": 330,
     "arrivals": [
      {
@@ -613,7 +613,7 @@
      {
       "from": 100,
       "to": 300,
-      "perMinute": 3.72
+      "perMinute": 3.7199999999999998
      }
     ]
    },
@@ -639,18 +639,18 @@
     ]
    },
    {
-    "volume": 1440.0,
+    "volume": 1439.9999999999995,
     "truck": 480,
     "arrivals": [
      {
       "from": 120,
       "to": 340,
-      "perMinute": 2.618182
+      "perMinute": 2.618181818181818
      },
      {
       "from": 340,
       "to": 450,
-      "perMinute": 7.854545
+      "perMinute": 7.8545454545454545
      }
     ]
    },
@@ -666,45 +666,45 @@
     ]
    },
    {
-    "volume": 960.0,
+    "volume": 959.9999999999998,
     "truck": 450,
     "arrivals": [
      {
       "from": 60,
       "to": 420,
-      "perMinute": 2.666667
+      "perMinute": 2.6666666666666665
      }
     ]
    },
    {
-    "volume": 780.0,
+    "volume": 780.0000000000001,
     "truck": 240,
     "arrivals": [
      {
       "from": 0,
       "to": 66,
-      "perMinute": 7.090909
+      "perMinute": 7.090909090909092
      },
      {
       "from": 66,
       "to": 200,
-      "perMinute": 2.328358
+      "perMinute": 2.328358208955224
      }
     ]
    },
    {
-    "volume": 600.0,
+    "volume": 600.0000000000001,
     "truck": 480,
     "arrivals": [
      {
       "from": 200,
       "to": 374,
-      "perMinute": 1.37931
+      "perMinute": 1.3793103448275863
      },
      {
       "from": 374,
       "to": 460,
-      "perMinute": 4.186047
+      "perMinute": 4.186046511627907
      }
     ]
    },
@@ -715,7 +715,7 @@
      {
       "from": 0,
       "to": 360,
-      "perMinute": 1.166667
+      "perMinute": 1.1666666666666667
      }
     ]
    },
@@ -760,23 +760,23 @@
      {
       "from": 0,
       "to": 420,
-      "perMinute": 4.880952
+      "perMinute": 4.8809523809523805
      }
     ]
    },
    {
-    "volume": 1700.0,
+    "volume": 1699.9999999999995,
     "truck": 300,
     "arrivals": [
      {
       "from": 0,
       "to": 90,
-      "perMinute": 11.333333
+      "perMinute": 11.333333333333332
      },
      {
       "from": 90,
       "to": 270,
-      "perMinute": 3.777778
+      "perMinute": 3.7777777777777777
      }
     ]
    },
@@ -797,24 +797,24 @@
     ]
    },
    {
-    "volume": 1250.0,
+    "volume": 1249.9999999999995,
     "truck": 240,
     "arrivals": [
      {
       "from": 0,
       "to": 210,
-      "perMinute": 5.952381
+      "perMinute": 5.9523809523809526
      }
     ]
    },
    {
-    "volume": 1100.0,
+    "volume": 1100.0000000000002,
     "truck": 420,
     "arrivals": [
      {
       "from": 60,
       "to": 390,
-      "perMinute": 3.333333
+      "perMinute": 3.333333333333333
      }
     ]
    },
@@ -825,12 +825,12 @@
      {
       "from": 0,
       "to": 110,
-      "perMinute": 5.454545
+      "perMinute": 5.454545454545454
      },
      {
       "from": 110,
       "to": 330,
-      "perMinute": 1.818182
+      "perMinute": 1.8181818181818183
      }
     ]
    },
@@ -851,13 +851,13 @@
     ]
    },
    {
-    "volume": 800.0,
+    "volume": 799.9999999999999,
     "truck": 330,
     "arrivals": [
      {
       "from": 30,
       "to": 300,
-      "perMinute": 2.962963
+      "perMinute": 2.962962962962963
      }
     ]
    },
@@ -868,7 +868,7 @@
      {
       "from": 120,
       "to": 420,
-      "perMinute": 2.333333
+      "perMinute": 2.3333333333333335
      }
     ]
    },
@@ -884,7 +884,7 @@
      {
       "from": 60,
       "to": 180,
-      "perMinute": 2.166667
+      "perMinute": 2.166666666666667
      }
     ]
    },
@@ -900,18 +900,18 @@
      {
       "from": 350,
       "to": 450,
-      "perMinute": 3.3
+      "perMinute": 3.3000000000000003
      }
     ]
    },
    {
-    "volume": 400.0,
+    "volume": 399.99999999999994,
     "truck": 390,
     "arrivals": [
      {
       "from": 60,
       "to": 360,
-      "perMinute": 1.333333
+      "perMinute": 1.3333333333333333
      }
     ]
    }
@@ -940,23 +940,23 @@
   "shiftMinutes": 480,
   "cities": [
    {
-    "volume": 2853.0,
+    "volume": 2853.0000000000005,
     "truck": 450,
     "arrivals": [
      {
       "from": 0,
       "to": 300,
-      "perMinute": 6.428571
+      "perMinute": 6.428571428571429
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 11.528571
+      "perMinute": 11.528571428571428
      },
      {
       "from": 330,
       "to": 420,
-      "perMinute": 6.428571
+      "perMinute": 6.428571428571429
      }
     ]
    },
@@ -982,7 +982,7 @@
      {
       "from": 300,
       "to": 330,
-      "perMinute": 13.2
+      "perMinute": 13.200000000000001
      },
      {
       "from": 330,
@@ -998,22 +998,22 @@
      {
       "from": 30,
       "to": 300,
-      "perMinute": 2.914286
+      "perMinute": 2.914285714285714
      },
      {
       "from": 300,
       "to": 310,
-      "perMinute": 6.714286
+      "perMinute": 6.714285714285714
      },
      {
       "from": 310,
       "to": 330,
-      "perMinute": 12.542857
+      "perMinute": 12.542857142857141
      },
      {
       "from": 330,
       "to": 450,
-      "perMinute": 8.742857
+      "perMinute": 8.742857142857142
      }
     ]
    },
@@ -1077,7 +1077,7 @@
      {
       "from": 90,
       "to": 300,
-      "perMinute": 2.2
+      "perMinute": 2.1999999999999997
      },
      {
       "from": 300,
@@ -1087,28 +1087,28 @@
      {
       "from": 330,
       "to": 450,
-      "perMinute": 6.6
+      "perMinute": 6.6000000000000005
      }
     ]
    },
    {
-    "volume": 1269.0,
+    "volume": 1269.0000000000005,
     "truck": 390,
     "arrivals": [
      {
       "from": 30,
       "to": 300,
-      "perMinute": 3.636364
+      "perMinute": 3.6363636363636367
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 5.936364
+      "perMinute": 5.936363636363637
      },
      {
       "from": 330,
       "to": 360,
-      "perMinute": 3.636364
+      "perMinute": 3.6363636363636367
      }
     ]
    },
@@ -1119,33 +1119,33 @@
      {
       "from": 120,
       "to": 300,
-      "perMinute": 3.272727
+      "perMinute": 3.2727272727272725
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 5.272727
+      "perMinute": 5.272727272727272
      },
      {
       "from": 330,
       "to": 450,
-      "perMinute": 3.272727
+      "perMinute": 3.2727272727272725
      }
     ]
    },
    {
-    "volume": 960.0,
+    "volume": 960.0000000000002,
     "truck": 240,
     "arrivals": [
      {
       "from": 0,
       "to": 70,
-      "perMinute": 8.228571
+      "perMinute": 8.228571428571428
      },
      {
       "from": 70,
       "to": 210,
-      "perMinute": 2.742857
+      "perMinute": 2.742857142857143
      }
     ]
    },
@@ -1171,29 +1171,29 @@
     ]
    },
    {
-    "volume": 780.0,
+    "volume": 779.9999999999999,
     "truck": 360,
     "arrivals": [
      {
       "from": 60,
       "to": 330,
-      "perMinute": 2.888889
+      "perMinute": 2.888888888888889
      }
     ]
    },
    {
-    "volume": 660.0,
+    "volume": 659.9999999999999,
     "truck": 300,
     "arrivals": [
      {
       "from": 0,
       "to": 90,
-      "perMinute": 4.4
+      "perMinute": 4.3999999999999995
      },
      {
       "from": 90,
       "to": 270,
-      "perMinute": 1.466667
+      "perMinute": 1.4666666666666666
      }
     ]
    },
@@ -1204,7 +1204,7 @@
      {
       "from": 180,
       "to": 300,
-      "perMinute": 1.2
+      "perMinute": 1.2000000000000002
      },
      {
       "from": 300,
@@ -1214,33 +1214,33 @@
      {
       "from": 330,
       "to": 360,
-      "perMinute": 1.2
+      "perMinute": 1.2000000000000002
      },
      {
       "from": 360,
       "to": 450,
-      "perMinute": 3.6
+      "perMinute": 3.5999999999999996
      }
     ]
    },
    {
-    "volume": 444.0,
+    "volume": 444.00000000000006,
     "truck": 420,
     "arrivals": [
      {
       "from": 30,
       "to": 300,
-      "perMinute": 1.166667
+      "perMinute": 1.1666666666666667
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 1.966667
+      "perMinute": 1.9666666666666668
      },
      {
       "from": 330,
       "to": 390,
-      "perMinute": 1.166667
+      "perMinute": 1.1666666666666667
      }
     ]
    },

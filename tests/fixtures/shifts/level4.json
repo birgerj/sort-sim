@@ -11,7 +11,7 @@
      {
       "from": 0,
       "to": 90,
-      "perMinute": 2.666667
+      "perMinute": 2.6666666666666665
      }
     ]
    },
@@ -87,7 +87,7 @@
   "profit": 606,
   "score": 906,
   "stars": 3,
-  "badge": false,
+  "badge": true,
   "lines": {
    "revenue": 885,
    "bonus": 177,

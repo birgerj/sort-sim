@@ -1,0 +1,13 @@
+{
+ "blocks": [
+  {
+   "city": 0,
+   "start": 30,
+   "end": 90,
+   "people": 2,
+   "docks": 1
+  }
+ ],
+ "robotCities": [],
+ "robots": 0
+}

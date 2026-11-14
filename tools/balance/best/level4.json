@@ -1,0 +1,27 @@
+{
+ "blocks": [
+  {
+   "city": 0,
+   "start": 0,
+   "end": 105,
+   "people": 2,
+   "docks": 1
+  },
+  {
+   "city": 1,
+   "start": 120,
+   "end": 210,
+   "people": 2,
+   "docks": 1
+  },
+  {
+   "city": 2,
+   "start": 90,
+   "end": 150,
+   "people": 2,
+   "docks": 1
+  }
+ ],
+ "robotCities": [],
+ "robots": 0
+}
