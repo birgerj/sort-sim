@@ -271,7 +271,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           laneEnd[k] = b.end;
           lane.set(i, k);
         }
-        const blockH = dense ? 32 : phone ? 38 : 46;
+        const blockH = dense ? 34 : phone ? 38 : 46;
         const onRobots = hasRobots && plan.robotCities.includes(c);
         const height = Math.max(1, laneEnd.length) * (blockH + 4) + 6 + (onRobots ? 12 : 0);
         const first = firstParcel(city);
@@ -353,6 +353,9 @@ export function plannerView(o: PlannerOptions): HTMLElement {
       rows.push(strips);
       grid.style.width = `${labelW + trackW + 6}px`;
       grid.replaceChildren(...rows);
+      // The hours, the city names and the strips stay in place over the rows: keep a block that is
+      // scrolled into view clear of them.
+      scroll.style.scrollPadding = `26px 8px ${strips.offsetHeight + 6}px ${labelW + 6}px`;
 
       legend.replaceChildren(
         h('span', {}, h('i', { class: 'shp-key-fill' }), 'how full a block is: the work that can reach it against what its crew can load'),
@@ -485,7 +488,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           cell('People', money(costs.people), 'shp-wide'),
           hasRobots ? cell('Robots', money(costs.robots), 'shp-wide') : null,
           cell('Buffer', 'after the shift', 'shp-wide'),
-          cell(phone ? 'Fixed costs, buffer comes later' : 'Fixed costs', money(costs.total)),
+          cell(phone && !problems.length ? 'Fixed costs, buffer comes later' : 'Fixed costs', money(costs.total)),
           cell('Most you can earn', money(mostToEarn(level)), 'shp-wide'),
           cell('Result', 'after the shift', 'shp-wide')),
         h('div', { class: 'shp-go' },

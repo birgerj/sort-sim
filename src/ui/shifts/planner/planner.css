@@ -618,9 +618,6 @@
 .shp-dense .shp-fill {
   height: 6px;
 }
-.shp-dense .shp-city-label {
-  min-height: 42px;
-}
 
 /* ---- planner: the fleet ---- */
 .shp-fleet {
@@ -833,6 +830,7 @@
   border-radius: 10px;
 }
 .shp-money {
+  flex: 1;
   display: flex;
   gap: 26px;
   min-width: 0;
@@ -1100,6 +1098,7 @@
   .shp-insp-city,
   .shp-switch-btn small,
   .shp-has-sel .shp-goal,
+  .shp-has-sel .shp-problems,
   .shp-has-sel .shp-fleet {
     display: none;
   }
