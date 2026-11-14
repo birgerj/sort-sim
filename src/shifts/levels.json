@@ -76,8 +76,8 @@
   },
   "par": 628,
   "badge": {
-   "id": "oneDock",
-   "text": "Never more than 2 docks open"
+   "id": "lean3",
+   "text": "Never more than 3 people at work"
   }
  },
  {
@@ -141,10 +141,10 @@
     "Doors"
    ]
   },
-  "par": 836,
+  "par": 809,
   "badge": {
-   "id": "noDockSmall",
-   "text": "Only the biggest city on a dock"
+   "id": "fleet3",
+   "text": "At most 3 robots"
   }
  },
  {
@@ -302,7 +302,7 @@
     "Doors"
    ]
   },
-  "par": 1688,
+  "par": 1622,
   "badge": {
    "id": "smallFleet",
    "text": "At most 6 robots"
@@ -433,7 +433,7 @@
     "Doors"
    ]
   },
-  "par": 2537,
+  "par": 2443,
   "badge": {
    "id": "halfBuffer",
    "text": "Buffer never over half full"
@@ -564,18 +564,18 @@
     ]
    }
   ],
-  "docks": 8,
+  "docks": 10,
   "robotsMax": 12,
   "bufferCap": 800,
   "wageFactor": 1.0,
   "notes": {
-   "fresh": "Full hall: you need every dock and every robot. The robots are off from 01:00 to 02:00 and one truck leaves early.",
+   "fresh": "Full hall: you need every dock. The robots are off from 01:00 to 02:00 and one truck leaves early.",
    "setForYou": [
     "Unloading",
     "Doors"
    ]
   },
-  "par": 7637,
+  "par": 7780,
   "badge": {
    "id": "allOnTime",
    "text": "Every truck on time"
@@ -591,148 +591,148 @@
   "shiftMinutes": 480,
   "cities": [
    {
-    "volume": 2399.9999999999995,
+    "volume": 2239.9999999999995,
     "truck": 450,
     "arrivals": [
      {
       "from": 0,
       "to": 420,
-      "perMinute": 5.7142857142857135
+      "perMinute": 5.333333333333333
      }
     ]
    },
    {
-    "volume": 1859.9999999999998,
+    "volume": 1736.0000000000002,
     "truck": 330,
     "arrivals": [
      {
       "from": 0,
       "to": 100,
-      "perMinute": 11.16
+      "perMinute": 10.416
      },
      {
       "from": 100,
       "to": 300,
-      "perMinute": 3.7199999999999998
+      "perMinute": 3.472
      }
     ]
    },
    {
-    "volume": 2700.0,
+    "volume": 2520.0,
     "truck": 450,
     "arrivals": [
      {
       "from": 0,
       "to": 180,
-      "perMinute": 2.25
+      "perMinute": 2.0999999999999996
      },
      {
       "from": 180,
       "to": 210,
-      "perMinute": 62.25
+      "perMinute": 58.099999999999994
      },
      {
       "from": 210,
       "to": 400,
-      "perMinute": 2.25
+      "perMinute": 2.0999999999999996
      }
     ]
    },
    {
-    "volume": 1439.9999999999995,
+    "volume": 1344.0,
     "truck": 480,
     "arrivals": [
      {
       "from": 120,
       "to": 340,
-      "perMinute": 2.618181818181818
+      "perMinute": 2.4436363636363634
      },
      {
       "from": 340,
       "to": 450,
-      "perMinute": 7.8545454545454545
+      "perMinute": 7.33090909090909
      }
     ]
    },
    {
-    "volume": 1140.0,
+    "volume": 1063.9999999999995,
     "truck": 270,
     "arrivals": [
      {
       "from": 0,
       "to": 240,
-      "perMinute": 4.75
+      "perMinute": 4.433333333333333
      }
     ]
    },
    {
-    "volume": 959.9999999999998,
+    "volume": 895.9999999999998,
     "truck": 450,
     "arrivals": [
      {
       "from": 60,
       "to": 420,
-      "perMinute": 2.6666666666666665
+      "perMinute": 2.4888888888888885
      }
     ]
    },
    {
-    "volume": 780.0000000000001,
+    "volume": 727.9999999999999,
     "truck": 240,
     "arrivals": [
      {
       "from": 0,
       "to": 66,
-      "perMinute": 7.090909090909092
+      "perMinute": 6.618181818181818
      },
      {
       "from": 66,
       "to": 200,
-      "perMinute": 2.328358208955224
+      "perMinute": 2.1731343283582087
      }
     ]
    },
    {
-    "volume": 600.0000000000001,
+    "volume": 559.9999999999999,
     "truck": 480,
     "arrivals": [
      {
       "from": 200,
       "to": 374,
-      "perMinute": 1.3793103448275863
+      "perMinute": 1.2873563218390804
      },
      {
       "from": 374,
       "to": 460,
-      "perMinute": 4.186046511627907
+      "perMinute": 3.9069767441860463
      }
     ]
    },
    {
-    "volume": 420.0,
+    "volume": 391.99999999999994,
     "truck": 390,
     "arrivals": [
      {
       "from": 0,
       "to": 360,
-      "perMinute": 1.1666666666666667
+      "perMinute": 1.0888888888888888
      }
     ]
    },
    {
-    "volume": 300.0,
+    "volume": 280.0,
     "truck": 480,
     "arrivals": [
      {
       "from": 150,
       "to": 450,
-      "perMinute": 1.0
+      "perMinute": 0.9333333333333332
      }
     ]
    }
   ],
   "docks": 12,
-  "robotsMax": 20,
+  "robotsMax": 24,
   "bufferCap": 800,
   "wageFactor": 1.0,
   "notes": {
@@ -742,10 +742,10 @@
     "Doors"
    ]
   },
-  "par": 13699,
+  "par": 12726,
   "badge": {
-   "id": "allOnTime",
-   "text": "Every truck on time"
+   "id": "onTime9",
+   "text": "At least 9 trucks on time"
   }
  },
  {
@@ -916,23 +916,23 @@
     ]
    }
   ],
-  "docks": 12,
+  "docks": 16,
   "robotsMax": 24,
   "bufferCap": 800,
   "wageFactor": 1.5,
   "notes": {
-   "fresh": "People cost 50% more and you get 16 at most.",
+   "fresh": "People cost 50% more tonight. Two on every dock is no longer the easy answer.",
    "setForYou": [
     "Unloading",
     "Doors"
    ]
   },
-  "par": 13743,
+  "par": 13429,
   "badge": {
    "id": "lean12",
    "text": "Never more than 12 people at work"
   },
-  "peopleCap": 16
+  "peopleCap": 32
  },
  {
   "id": 10,
@@ -940,328 +940,328 @@
   "shiftMinutes": 480,
   "cities": [
    {
-    "volume": 2853.0000000000005,
+    "volume": 2662.7999999999997,
     "truck": 450,
     "arrivals": [
      {
       "from": 0,
       "to": 300,
-      "perMinute": 6.428571428571429
+      "perMinute": 5.999999999999999
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 11.528571428571428
+      "perMinute": 10.759999999999998
      },
      {
       "from": 330,
       "to": 420,
-      "perMinute": 6.428571428571429
+      "perMinute": 5.999999999999999
      }
     ]
    },
    {
-    "volume": 4056.0,
+    "volume": 3785.6,
     "truck": 420,
     "arrivals": [
      {
       "from": 0,
       "to": 150,
-      "perMinute": 6.0
+      "perMinute": 5.6
      },
      {
       "from": 150,
       "to": 180,
-      "perMinute": 56.0
+      "perMinute": 52.266666666666666
      },
      {
       "from": 180,
       "to": 300,
-      "perMinute": 6.0
+      "perMinute": 5.6
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 13.200000000000001
+      "perMinute": 12.32
      },
      {
       "from": 330,
       "to": 390,
-      "perMinute": 6.0
+      "perMinute": 5.6
      }
     ]
    },
    {
-    "volume": 2154.0,
+    "volume": 2010.3999999999994,
     "truck": 480,
     "arrivals": [
      {
       "from": 30,
       "to": 300,
-      "perMinute": 2.914285714285714
+      "perMinute": 2.7199999999999998
      },
      {
       "from": 300,
       "to": 310,
-      "perMinute": 6.714285714285714
+      "perMinute": 6.266666666666667
      },
      {
       "from": 310,
       "to": 330,
-      "perMinute": 12.542857142857141
+      "perMinute": 11.706666666666663
      },
      {
       "from": 330,
       "to": 450,
-      "perMinute": 8.742857142857142
+      "perMinute": 8.159999999999998
      }
     ]
    },
    {
-    "volume": 1800.0,
+    "volume": 1679.9999999999995,
     "truck": 270,
     "arrivals": [
      {
       "from": 0,
       "to": 80,
-      "perMinute": 13.5
+      "perMinute": 12.6
      },
      {
       "from": 80,
       "to": 240,
-      "perMinute": 4.5
+      "perMinute": 4.199999999999999
      }
     ]
    },
    {
-    "volume": 1710.0,
+    "volume": 1596.0,
     "truck": 450,
     "arrivals": [
      {
       "from": 60,
       "to": 300,
-      "perMinute": 4.5
+      "perMinute": 4.199999999999999
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 7.5
+      "perMinute": 7.0
      },
      {
       "from": 330,
       "to": 420,
-      "perMinute": 4.5
+      "perMinute": 4.199999999999999
      }
     ]
    },
    {
-    "volume": 1440.0,
+    "volume": 1344.0,
     "truck": 330,
     "arrivals": [
      {
       "from": 0,
       "to": 100,
-      "perMinute": 8.64
+      "perMinute": 8.064
      },
      {
       "from": 100,
       "to": 300,
-      "perMinute": 2.88
+      "perMinute": 2.6879999999999997
      }
     ]
    },
    {
-    "volume": 1395.0,
+    "volume": 1302.0,
     "truck": 480,
     "arrivals": [
      {
       "from": 90,
       "to": 300,
-      "perMinute": 2.1999999999999997
+      "perMinute": 2.0533333333333332
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 4.7
+      "perMinute": 4.386666666666667
      },
      {
       "from": 330,
       "to": 450,
-      "perMinute": 6.6000000000000005
+      "perMinute": 6.16
      }
     ]
    },
    {
-    "volume": 1269.0000000000005,
+    "volume": 1184.3999999999996,
     "truck": 390,
     "arrivals": [
      {
       "from": 30,
       "to": 300,
-      "perMinute": 3.6363636363636367
+      "perMinute": 3.393939393939394
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 5.936363636363637
+      "perMinute": 5.540606060606061
      },
      {
       "from": 330,
       "to": 360,
-      "perMinute": 3.6363636363636367
+      "perMinute": 3.393939393939394
      }
     ]
    },
    {
-    "volume": 1140.0,
+    "volume": 1064.0,
     "truck": 480,
     "arrivals": [
      {
       "from": 120,
       "to": 300,
-      "perMinute": 3.2727272727272725
+      "perMinute": 3.0545454545454542
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 5.272727272727272
+      "perMinute": 4.92121212121212
      },
      {
       "from": 330,
       "to": 450,
-      "perMinute": 3.2727272727272725
+      "perMinute": 3.0545454545454542
      }
     ]
    },
    {
-    "volume": 960.0000000000002,
+    "volume": 896.0,
     "truck": 240,
     "arrivals": [
      {
       "from": 0,
       "to": 70,
-      "perMinute": 8.228571428571428
+      "perMinute": 7.68
      },
      {
       "from": 70,
       "to": 210,
-      "perMinute": 2.742857142857143
+      "perMinute": 2.5599999999999996
      }
     ]
    },
    {
-    "volume": 951.0,
+    "volume": 887.5999999999999,
     "truck": 450,
     "arrivals": [
      {
       "from": 150,
       "to": 300,
-      "perMinute": 2.0
+      "perMinute": 1.8666666666666665
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 3.7
+      "perMinute": 3.453333333333333
      },
      {
       "from": 330,
       "to": 420,
-      "perMinute": 6.0
+      "perMinute": 5.6
      }
     ]
    },
    {
-    "volume": 779.9999999999999,
+    "volume": 728.0,
     "truck": 360,
     "arrivals": [
      {
       "from": 60,
       "to": 330,
-      "perMinute": 2.888888888888889
+      "perMinute": 2.696296296296296
      }
     ]
    },
    {
-    "volume": 659.9999999999999,
+    "volume": 616.0000000000002,
     "truck": 300,
     "arrivals": [
      {
       "from": 0,
       "to": 90,
-      "perMinute": 4.3999999999999995
+      "perMinute": 4.1066666666666665
      },
      {
       "from": 90,
       "to": 270,
-      "perMinute": 1.4666666666666666
+      "perMinute": 1.3688888888888888
      }
     ]
    },
    {
-    "volume": 570.0,
+    "volume": 532.0,
     "truck": 480,
     "arrivals": [
      {
       "from": 180,
       "to": 300,
-      "perMinute": 1.2000000000000002
+      "perMinute": 1.1199999999999999
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 2.2
+      "perMinute": 2.0533333333333332
      },
      {
       "from": 330,
       "to": 360,
-      "perMinute": 1.2000000000000002
+      "perMinute": 1.1199999999999999
      },
      {
       "from": 360,
       "to": 450,
-      "perMinute": 3.5999999999999996
+      "perMinute": 3.36
      }
     ]
    },
    {
-    "volume": 444.00000000000006,
+    "volume": 414.4,
     "truck": 420,
     "arrivals": [
      {
       "from": 30,
       "to": 300,
-      "perMinute": 1.1666666666666667
+      "perMinute": 1.0888888888888888
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 1.9666666666666668
+      "perMinute": 1.8355555555555554
      },
      {
       "from": 330,
       "to": 390,
-      "perMinute": 1.1666666666666667
+      "perMinute": 1.0888888888888888
      }
     ]
    },
    {
-    "volume": 318.0,
+    "volume": 296.80000000000007,
     "truck": 480,
     "arrivals": [
      {
       "from": 210,
       "to": 300,
-      "perMinute": 1.25
+      "perMinute": 1.1666666666666667
      },
      {
       "from": 300,
       "to": 330,
-      "perMinute": 1.85
+      "perMinute": 1.7266666666666666
      },
      {
       "from": 330,
       "to": 450,
-      "perMinute": 1.25
+      "perMinute": 1.1666666666666667
      }
     ]
    }
@@ -1277,10 +1277,10 @@
     "Doors"
    ]
   },
-  "par": 26233,
+  "par": 24214,
   "badge": {
-   "id": "allOnTime",
-   "text": "Every truck on time"
+   "id": "onTime15",
+   "text": "At least 15 trucks on time"
   },
   "peopleCap": 40
  }

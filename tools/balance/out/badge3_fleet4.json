@@ -1,25 +1,25 @@
 {
  "level": 3,
- "badge": "noDockSmall",
- "par": 836.5,
- "parPlanEarns": true,
- "plainEarns": true,
- "plainProfit": 752.0,
+ "badge": "fleet4",
+ "par": 809.0,
+ "parPlanEarns": false,
+ "plainEarns": false,
+ "plainProfit": 664.0,
  "found": true,
- "profit": 836.5,
+ "profit": 795.5,
  "plan": {
   "blocks": [
    {
     "city": 0,
-    "start": 30,
-    "end": 120,
+    "start": 0,
+    "end": 90,
     "people": 1,
     "docks": 1
    },
    {
     "city": 0,
-    "start": 120,
-    "end": 180,
+    "start": 90,
+    "end": 210,
     "people": 2,
     "docks": 1
    }
@@ -30,7 +30,7 @@
    2,
    3
   ],
-  "robots": 5
+  "robots": 4
  },
  "closest": null,
  "closestPlan": null

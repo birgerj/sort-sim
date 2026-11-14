@@ -1,106 +1,79 @@
 # Balance report
 
-All figures come from `par.py`, which searches plans in the game's shape (blocks with a dock count, robot
-cities, a fleet size) and scores each one through `fixture.to_solver`, so doors and robot lines are the
-ones the game gives. Results per run are in `out/`, the best plan per level in `best/level<N>.json`.
+Rules these figures were computed with: a parcel left behind costs § 1.50, a robot loads 17 parcels an
+hour. Everything comes from `par.py`, which searches plans in the game's shape and scores each one through
+`fixture.to_solver`. Results per level are in `out/`, the best plan per level in `best/level<N>.json`.
+Par is rounded down, so the best known plan scores at least 1000.
 
-Two things were fixed on the way and are worth knowing:
+## Levels changed
 
-- `to_solver` now puts blocks and robot cities in a fixed order before scoring. Before, the same plan
-  listed in another order could score differently (level 9: up to § 1,900 apart), because blocks of one
-  city that start together fill their belts in list order. The fixtures did not change by this.
-- Par is rounded down, so the best known plan scores at least 1000.
+| Level | Was | Now | Why |
+|---|---|---|---|
+| 7 | 8 docks | 10 docks | the plain plan left a fifth of the night behind |
+| 8 | volume × 3, 20 robots | volume × 2.8 (11,760 parcels), 24 robots | slower robots took the plain plan under one star |
+| 9 | 12 docks, 16 people at most | 16 docks, 32 people at most | 16 people opened only 8 docks with two each |
+| 10 | volume × 3 | volume × 2.8 (21,000 parcels) | slower robots took the plain plan to about 410 |
+
+Level 9's limit of 32 people is two on every dock, so it no longer binds; what makes people scarce there
+is the pay (× 1.5) and the extra goal (12 people). The level note says so. Levels 8 and 10 were not in the
+first proposal: with robots at 17 an hour nothing else brought the plain plan back to one star (level 10
+already has every dock of the hall).
 
 ## Par
 
-| Level | Old par | Par | Restarts (4 each, profit) | Spread | After polishing |
-|---|---|---|---|---|---|
-| 1 | 178 | 177 | 177.5 × 4 | 0 | |
-| 2 | 612 | 628 | 628.5, 628.5, 623.6, 598.5 | 30 | |
-| 3 | 833 | 836 | 836.5 × 3, 834.9 | 2 | |
-| 4 | 669 | 669 | 669.25 × 3, 664.75 | 5 | |
-| 5 | 1687 | 1688 | 1688.7 × 4 (300,000 plans each) | 0 | |
-| 6 | 2549 | 2537 | 2537, 2535, 2526, 2525 (300,000) | 13 | |
-| 7 | 7659 | 7637 | 7632, 7617, 7286, 7233 (400,000) | 399 (5%) | 7637.58 |
-| 8 | 13560 | 13699 | 13629, 13522, 13498, 13327 (400,000) | 302 (2%) | 13699.02 |
-| 9 | 11746 | 13743 | 12547, 12110, 11921, 11918 and 13138, 11898, 11694, 11639 (400,000) | 1,499 (11%) | 13743.07 |
-| 10 | 23762 | 26233 | 25418, 25310, 25285, 25167 (400,000) | 251 (1%) | 26233.16 |
-
-"Polishing" is further cooler runs that start from the best plan known (150,000 to 300,000 plans each).
-
-How sure: levels 1–5 are settled. Level 6 and the old par 2549 differ because the old search could give
-robot lines its own hours. Levels 7 and 8 moved little in polishing. **Levels 9 and 10 are not settled**:
-every polishing round still found more (level 9: 13138 → 13683 → 13743; level 10: 25811 → 26058 → 26233),
-and the restarts of level 9 lie 11% apart. Expect the true best a few percent higher; a longer run before
-par is frozen is worth it (`par.py polish 9 300000 3 40`, about 10 minutes; the same for 10, 15 minutes).
-
-Level 4: par stays 669, so `level.par`, `result.score` (906) and `stars` (3) in the example are unchanged.
-
-## Price of a parcel left behind
-
-The plain plan (`par.plain`): steady cities go to the robots, smallest first, while the fleet covers
-them; every other city, largest first, gets ceil(needed rate ÷ 150) docks with two people from first
-parcel to truck time while docks and people last. Its score against the best plan at each price:
-
-| Level | § 2.50 | § 2.00 | § 1.50 | § 1.00 | Parcels the plain plan leaves |
-|---|---|---|---|---|---|
-| 7 | 213 (1,627 of 7,638) | 297 | 381 (2,914 of 7,657) | 464 | 1,287 |
-| 8 | 403 (5,517 of 13,699) | 458 | 511 (7,162 of 14,015) | 563 | 1,645 |
-| 9 | 0 (−2,735 of 13,743) | 0 (−800) | 83 (1,135 of 13,743) | 223 | 3,870 |
-| 10 | 391 (10,244 of 26,233) | 451 | 512 (13,601 of 26,590) | 571 | 3,356 |
-
-A second plain plan that shares the docks out (one dock per city first, then second docks;
-`par.plain_spread`) gives 273 / 514 / 0 / 316 at § 2.50 and 419 / 582 / 95 / 450 at § 1.50.
-
-**Recommendation: § 1.50.** It is the price of a parcel, so it is easy to say ("a parcel left behind
-costs what it would have earned"), and it brings the plain plan to one star in levels 8 and 10.
-Shipping still always beats leaving: a shipped parcel brings + § 1.50 against − § 1.50, a swing of
-§ 3.00, while loading it costs § 0.50 to § 0.78 (dock and people per parcel, the dearest case being one
-person at holiday pay), and one parcel left also loses the on-time bonus of its whole truck. Even one
-extra hour of a dock with one person (§ 55, § 70 in level 9) pays from 19 to 24 parcels on.
-
-The price alone does not get levels 7 and 9 to 500, not even at § 1.00:
-
-- Level 7: the plain plan runs out of docks (8) and its robots stand still for an hour; it leaves a
-  fifth of the night. One star needs either a lower one-star line for this level or about two more docks.
-- Level 9: 16 people at two per dock open only 8 of the 12 docks, and 3,870 parcels stay behind. The
-  level is about exactly that (one person per dock, robots for the rest), so a plain two-person plan
-  cannot pass at any price. Either accept that level 9 asks for more than the plain plan, or raise the
-  limit on people (20 would open 10 docks).
-
-Par at § 1.50 would be about 7,657 / 14,015 / 13,743 / 26,590 for levels 7–10 (levels 1–6 and 9 leave
-nothing behind in their best plan, so their par does not move). The price was not changed in code.
-
-## Badges
-
-"With badge" is the best profit found that also meets the goal; the badge needs a score of 500.
-
-| Level | Badge | With badge | Score | Verdict |
+| Level | Par | Search (profit per restart) | Plain plan | Best plan uses |
 |---|---|---|---|---|
-| 1 | lean | 160 | 904 | Reachable, costs a little: fine for a first level. |
-| 2 | oneDock | 628.5 | 1000 | **Trivial**: the best plan and the plain plan both earn it. |
-| 3 | noDockSmall | 836.5 | 1000 | **Trivial**: the best plan and the plain plan both earn it. |
-| 4 | lean3 | 663.75 | 993 | Good: the best plan uses 4 people at one moment; the example plan earns it. |
-| 5 | smallFleet | 1,674 | 992 | Good: the best plan uses more robots. |
-| 6 | halfBuffer | 2,512 | 990 | Easy: the plain plan (score 612) already earns it; the best plan does not. |
-| 7 | allOnTime | 7,628 | 999 | Good: the best plan leaves 19 parcels; the plain plan does not earn it. |
-| 8 | allOnTime | none found | | **Impossible as far as searched**: with leaving and lateness made very dear the best is 9 of 10 trucks, 258 parcels left. The briefing itself says not everything fits. |
-| 9 | lean12 | 7,932 | 577 | Reachable but only just one star (short search; more is likely possible). Hard, fits the level. |
-| 10 | allOnTime | none found | | **Impossible as far as searched**: best is 14 of 16 trucks, 280 parcels left. |
+| 1 | 177 | 177.5 × 4 | 565 | 1 of 2 docks |
+| 2 | 628 | 628.5, 628.5, 623.6, 598.5 | 814 | 2 of 4 docks, 3 people |
+| 3 | 809 | 809 × 4 | 821 | 1 dock, 5 of 6 robots |
+| 4 | 669 | 669.25 × 4 | 84 | 2 of 2 docks |
+| 5 | 1622 | 1617, 1614, 1610, 1602; 1622.9 found in the badge search | 504 | 6 of 10 robots |
+| 6 | 2443 | 2439, 2409, 2407, 2386; polished to 2443.6 | 525 | 4 of 8 docks, 7 of 14 robots |
+| 7 | 7780 | 7723, 7675, 7661, 7657; polished to 7780.8 | 560 | 10 of 10 docks, 6 of 12 robots |
+| 8 | 12726 | one polishing run of 200,000 plans from the best plan of the larger level, twice | 514 | 12 of 12 docks, 19 of 24 robots |
+| 9 | 13429 | 13430, 13394, 13279, 13238 (with 28 people; no gain from 32) | 557 | 15 of 16 docks, 24 of 24 robots |
+| 10 | 24214 | one polishing run of 200,000 plans from the best plan of the larger level | 528 | 20 of 20 docks, 29 of 30 robots |
 
-Proposed replacements, in words (levels.json is unchanged):
+"Plain plan" is its level score: steady cities to the robots while the fleet covers them (17 an hour
+each), every other city ceil(needed rate ÷ 150) docks with two people from first parcel to truck time,
+largest first, while docks and people last (`par.plain`).
 
-- Level 2: "No trailer swap lost": the big city never waits for a swap, or simpler "At most 5 people at
-  work" if it turns out to cost something; best checked with the search first.
-- Level 3: "At most 3 robots" (the best plan has to trade robots against a second dock).
-- Level 6: "Buffer never over a quarter full" (63 parcels) instead of half.
-- Level 8: "At most 300 parcels left behind" or "At least 9 trucks on time".
-- Level 10: "At least 14 trucks on time".
+How sure: levels 1–7 are settled within about 1%. **Levels 8 and 10 had a short search** after their
+volume changed (5 minutes each, started from the best plan of the larger level): expect the true best 1–3%
+higher, which would put the plain plan of level 8 at about 500. Level 9's four restarts lie within 1.5%.
+A longer run before par is frozen: `par.py par <level> 400000 4`, then `par.py polish <level> 300000 2 40`.
 
-None of the replacements has been searched yet.
+The search no longer needs every robot in levels 5–7: at 17 an hour a robot costs § 11 an hour for
+§ 25.50 to § 30.60 of parcels only when it is busy all night. Level 7's note was changed to match
+("you need every dock").
 
-## Not done
+## Badges (checked with 1.50 and 17)
 
-- Longer runs for levels 9 and 10 (see above); the last polishing rounds for levels 8 and 10 were cut off.
-- The badge search for levels 8 and 10 was 150,000 plans × 2 per stage: "impossible" is a strong
-  indication, not a proof.
+| Level | Badge | Best with badge | Score | Best plan earns it | Plain plan earns it |
+|---|---|---|---|---|---|
+| 1 | lean: one person is enough | 160 | 904 | no | no |
+| 2 | **lean3**: never more than 3 people at work (was oneDock, trivial) | 628.5 | 1000 | yes | no |
+| 3 | **fleet3**: at most 3 robots (was noDockSmall, trivial) | 778 | 962 | no | no |
+| 4 | lean3 | 663.75 | 992 | no | no |
+| 5 | smallFleet: at most 6 robots | 1622.9 | 1000 | yes | no |
+| 6 | halfBuffer | 2413 | 987 | no | **yes** (easy) |
+| 7 | allOnTime | 7780 | 1000 | yes | no |
+| 8 | **onTime9**: at least 9 trucks on time (was allOnTime, not reachable) | 12726 | 1000 | yes | no (6 on time) |
+| 9 | lean12 | 7529 | 560 | no | no |
+| 10 | **onTime15**: at least 15 trucks on time (was allOnTime, none found) | 24214 | 1000 | yes | no (9 on time) |
+
+New ids `fleet<N>` and `onTime<N>` are known to both models (`fixture.badge_condition`, `badgeGoal` in
+`src/shifts/model/simulate.ts`). Level 6 stays easy; "Buffer never over a quarter full" is the proposal,
+not searched. Level 9's badge is hard: one star only just.
+
+## Robots at 17 an hour
+
+A robot line passes 60 an hour, so it now takes 60 ÷ 17 = 3.5 robots to fill one: 3 robots give 51 an hour
+(85% of a line), 4 give 68. The planner's default of `lines × 3` robots when a city is switched to robots
+leaves each line 15% short; `Math.ceil(lines × 60 ÷ RATES.robot)` (4 a line, within the level's fleet)
+fills it.
+
+## History
+
+The study at § 2.50, § 2.00, § 1.50 and § 1.00 with 20-an-hour robots (plain plan 213 / 403 / 0 / 391 at
+§ 2.50 in levels 7–10) led to the price of § 1.50; its tables are in this file's history in git.

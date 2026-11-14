@@ -112,7 +112,8 @@ describe('plan rules', () => {
   it('says how the plan stands against the extra goal', () => {
     expect(goalStanding(FIX.level, FIX.plan)).toEqual({ ok: true, text: 'Your plan peaks at 3 people.' });
     expect(goalStanding(level(5), { ...empty(), robots: 6 })!.ok).toBe(true);
-    expect(goalStanding(level(3), { ...empty(), blocks: [starterBlock(level(3), 1)] })!.ok).toBe(false);
+    expect(goalStanding({ ...level(3), badge: { id: 'noDockSmall', text: '' } }, { ...empty(), blocks: [starterBlock(level(3), 1)] })!.ok).toBe(false);
+    expect(goalStanding(level(2), { ...empty(), blocks: [{ ...starterBlock(level(2), 0), people: 2, docks: 2 }] })!.ok).toBe(false); // lean3
     expect(goalStanding(level(7), empty())).toBeNull();
   });
 });

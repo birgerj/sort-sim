@@ -16,8 +16,8 @@
   },
   {
    "city": 1,
-   "start": 60,
-   "end": 210,
+   "start": 90,
+   "end": 240,
    "people": 2,
    "docks": 1
   },
@@ -37,16 +37,16 @@
   },
   {
    "city": 3,
-   "start": 90,
-   "end": 150,
-   "people": 1,
+   "start": 120,
+   "end": 180,
+   "people": 2,
    "docks": 1
   },
   {
    "city": 3,
-   "start": 120,
-   "end": 180,
-   "people": 2,
+   "start": 150,
+   "end": 210,
+   "people": 1,
    "docks": 1
   }
  ],

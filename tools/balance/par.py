@@ -319,6 +319,8 @@ def badge_rule(L, bid):
         return (lambda plan: all(b['city'] == biggest for b in plan['blocks'])), none
     if bid == 'smallFleet':
         return (lambda plan: plan['robots'] <= 6), none
+    if bid.startswith('fleet'):
+        return (lambda plan: plan['robots'] <= int(bid[5:])), none
     if bid == 'halfBuffer':  # the highest minute, a little stricter than the 5-minute curve the player sees
         return yes, (lambda r: max(0.0, r['peak'] - L['store'] / 2))
     if bid == 'allOnTime':

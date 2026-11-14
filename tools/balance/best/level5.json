@@ -2,27 +2,55 @@
  "blocks": [
   {
    "city": 0,
-   "start": 60,
-   "end": 120,
+   "start": 90,
+   "end": 150,
    "people": 1,
    "docks": 1
   },
   {
    "city": 0,
+   "start": 150,
+   "end": 210,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 0,
+   "start": 210,
+   "end": 270,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 1,
+   "start": 30,
+   "end": 120,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 1,
    "start": 120,
    "end": 180,
    "people": 2,
    "docks": 1
   },
   {
-   "city": 0,
+   "city": 2,
    "start": 180,
    "end": 240,
    "people": 2,
    "docks": 1
   },
   {
-   "city": 1,
+   "city": 2,
+   "start": 240,
+   "end": 300,
+   "people": 1,
+   "docks": 1
+  },
+  {
+   "city": 3,
    "start": 30,
    "end": 90,
    "people": 1,
@@ -37,11 +65,9 @@
   }
  ],
  "robotCities": [
-  1,
-  2,
-  3,
+  0,
   4,
   5
  ],
- "robots": 10
+ "robots": 5
 }

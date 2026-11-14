@@ -135,7 +135,10 @@ function badgeGoal(level: Level, plan: Plan, statuses: TruckStatus[], bufferPeak
     default: {
       // onTime9: at least nine trucks complete and on time (levels where not everything fits).
       const atLeast = /^onTime(\d+)$/.exec(level.badge.id);
-      return atLeast !== null && statuses.filter((s) => s === 'onTime').length >= Number(atLeast[1]);
+      if (atLeast !== null) return statuses.filter((s) => s === 'onTime').length >= Number(atLeast[1]);
+      // fleet3: at most three robots.
+      const fleet = /^fleet(\d+)$/.exec(level.badge.id);
+      return fleet !== null && plan.robots <= Number(fleet[1]);
     }
   }
 }

@@ -150,7 +150,7 @@ describe('the shift', () => {
     const lv = level(1);
     const none = simulate(lv, plan([]));
     expect(none.result.trucks[0]).toEqual({ city: 0, loaded: 0, planned: 120, left: 120, status: 'incomplete' });
-    expect(none.result.lines.left).toBe(375);
+    expect(none.result.lines.left).toBe(225); // 150 parcels at 1.50
     expect(none.result.score).toBe(0);
     expect(none.result.stars).toBe(0);
     expect(none.result.badge).toBe(false);
@@ -232,8 +232,8 @@ describe('checkPlan', () => {
   });
 
   it('keeps to the limit on people', () => {
-    const lv = level(9); // 16 people at most
-    expect(lv.peopleCap).toBe(16);
+    expect(level(9).peopleCap).toBe(32);
+    const lv: Level = { ...level(9), peopleCap: 16 };
     expect(checkPlan(lv, plan([block(0, 0, 60, 2, 8)]))).toEqual([]);
     expect(checkPlan(lv, plan([block(0, 0, 60, 2, 8), block(1, 30, 90)]))).toEqual([{ kind: 'tooManyPeople', at: 30 }]);
     expect(checkPlan(lv, plan([block(0, 0, 60, 2, 8), block(1, 60, 120)]))).toEqual([]); // one crew leaves as the next starts
@@ -258,7 +258,7 @@ describe('badges', () => {
   const named = (id: number, name: string): Plan => golden.find((g) => g.level === id && g.name === name)!.plan;
 
   it('every level has a badge the model knows', () => {
-    expect(LEVELS.map((l) => l.badge.id)).toEqual(['lean', 'oneDock', 'noDockSmall', 'lean3', 'smallFleet', 'halfBuffer', 'allOnTime', 'allOnTime', 'lean12', 'allOnTime']);
+    expect(LEVELS.map((l) => l.badge.id)).toEqual(['lean', 'lean3', 'fleet3', 'lean3', 'smallFleet', 'halfBuffer', 'allOnTime', 'onTime9', 'lean12', 'onTime15']);
   });
 
   it('lean: one person is enough', () => {
@@ -275,21 +275,39 @@ describe('badges', () => {
   });
 
   it('oneDock: never more than 2 docks open at once', () => {
-    const two = run(2, plan([block(0, 0, 180, 2), block(1, 0, 120, 1)]));
+    // No level asks for this one any more; the model still knows it.
+    const lv: Level = { ...level(2), badge: { id: 'oneDock', text: '' } };
+    const two = simulate(lv, plan([block(0, 0, 180, 2), block(1, 0, 120, 1)])).result;
     expect(two.score).toBeGreaterThanOrEqual(500);
     expect(two.badge).toBe(true);
-    const three = run(2, plan([block(0, 0, 180, 1, 2), block(1, 0, 120, 1)]));
+    const three = simulate(lv, plan([block(0, 0, 180, 1, 2), block(1, 0, 120, 1)])).result;
     expect(three.score).toBeGreaterThanOrEqual(500);
     expect(three.badge).toBe(false);
   });
 
   it('noDockSmall: only the biggest city on a dock', () => {
-    const robots = run(3, plan([block(0, 0, 240, 2)], [1, 2, 3], 6));
+    // No level asks for this one any more; the model still knows it.
+    const lv: Level = { ...level(3), badge: { id: 'noDockSmall', text: '' } };
+    const robots = simulate(lv, plan([block(0, 0, 240, 2)], [1, 2, 3], 6)).result;
     expect(robots.score).toBeGreaterThanOrEqual(500);
     expect(robots.badge).toBe(true);
-    const mixed = run(3, plan([block(0, 0, 240, 2), block(3, 30, 240, 1)], [1, 2], 5));
+    const mixed = simulate(lv, plan([block(0, 0, 240, 2), block(3, 30, 240, 1)], [1, 2], 5)).result;
     expect(mixed.score).toBeGreaterThanOrEqual(500);
     expect(mixed.badge).toBe(false);
+  });
+
+  it('fleet3: at most 3 robots', () => {
+    const lv: Level = { ...level(3), par: 100 };
+    expect(lv.badge.id).toBe('fleet3');
+    expect(simulate(lv, plan([block(0, 0, 240, 2)], [1, 2, 3], 3)).result.badge).toBe(true);
+    expect(simulate(lv, plan([block(0, 0, 240, 2)], [1, 2, 3], 4)).result.badge).toBe(false);
+  });
+
+  it('onTime9: at least that many trucks complete and on time', () => {
+    // Level 2 with a low par: one truck served, the other left behind.
+    const oneOnTime = plan([block(0, 0, 180, 2)]);
+    expect(simulate({ ...level(2), par: 100, badge: { id: 'onTime1', text: '' } }, oneOnTime).result.badge).toBe(true);
+    expect(simulate({ ...level(2), par: 100, badge: { id: 'onTime2', text: '' } }, oneOnTime).result.badge).toBe(false);
   });
 
   it('lean3: never more than 3 people at work', () => {

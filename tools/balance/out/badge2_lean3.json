@@ -1,9 +1,9 @@
 {
  "level": 2,
- "badge": "oneDock",
+ "badge": "lean3",
  "par": 628.5,
  "parPlanEarns": true,
- "plainEarns": true,
+ "plainEarns": false,
  "plainProfit": 511.0,
  "found": true,
  "profit": 628.5,
