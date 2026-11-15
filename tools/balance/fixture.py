@@ -192,16 +192,11 @@ def badge_condition(L, bid, plan, r):
 
 
 def trace(L, p, step=5):
-    ds = L['dests']
-    i64 = np.int64
-    B = solve.block_order(L, p['b'])
-    run, hand = solve.runs(B)
-    Ln = sorted(p['l'], key=lambda l: ds[l[0]]['d'])
-    col = lambda rows, k: np.array([r[k] for r in rows], dtype=i64)
+    args = solve.sim_args(L, p)[0]
     loaded, buf = [], []
     TT = L['arr'].shape[0]
     for t in range(0, TT + 1, step):
-        ld, fee, peak, stot, refused = solve.sim(L['arr'][:max(t, 1)] if t else L['arr'][:1] * 0, col(B, 0), col(B, 1), col(B, 2), col(B, 3), col(B, 4), np.array(run, dtype=i64), np.array(hand, dtype=np.bool_), col(Ln, 0), col(Ln, 1), col(Ln, 2), p['N'], float(L['store']), L['mt'], L['outage'][0], L['outage'][1])
+        ld, fee, peak, stot = solve.sim(L['arr'][:max(t, 1)] if t else L['arr'][:1] * 0, *args)[:4]
         loaded.append([round(float(x), 1) for x in ld])
         buf.append(round(float(stot), 1))
     return loaded, buf
@@ -215,20 +210,18 @@ def run(L, plan, par):
     ds = L['dests']
     loaded, buf = trace(L, p)
     final = loaded[-1]
-    end = {}
-    for b in p['b']:
-        end[b[0]] = max(end.get(b[0], 0), b[3])
-    for l in p['l']:
-        end[l[0]] = max(end.get(l[0], 0), l[2])
     trucks, deps = [], []
     for i, d in enumerate(ds):
         v = float(L['arr'][:, i].sum())
         ld = min(v, final[i])
-        left = end.get(i, d['d'])
+        left = r['leave'][i]  # when the truck really left: cut-off + 15 at the earliest, + 45 at the latest
+        planned = d['d'] + solve.CLEAR
         miss = v - ld
-        status = 'incomplete' if miss >= 0.5 else ('late' if left > d['d'] else 'onTime')
-        trucks.append({'city': i, 'loaded': round(ld), 'planned': d['d'], 'left': left, 'status': status})
+        status = 'incomplete' if miss >= 0.5 else ('late' if left > planned else 'onTime')
+        trucks.append({'city': i, 'loaded': round(ld), 'planned': planned, 'left': left, 'status': status})
         deps.append({'city': i, 'at': left, 'status': status})
+    # Doors in cleardown: from the cut-off until the door is done (at least 15 minutes).
+    cleardowns = [{'city': b[0], 'door': b[1], 'from': b[3], 'to': r['done'][j]} for j, b in enumerate(p['b']) if r['done'][j]]
     cap = L['store']
     full, start = [], None
     for k, x in enumerate(buf):
@@ -247,7 +240,8 @@ def run(L, plan, par):
               'trucks': trucks, 'buffer': {'series': buf, 'cap': cap, 'fullRanges': full, 'refused': round(float(r['refused']))}}
     timeline = {'stepMinutes': 5, 'cityLoaded': loaded, 'buffer': buf,
                 'blocks': [{'city': b[0], 'door': b[1], 'start': b[2], 'end': b[3], 'people': b[4]} for b in p['b']],
-                'robotsActive': [0 if L['outage'][0] <= t < L['outage'][1] else p['N'] for t in range(0, L['arr'].shape[0] + 1, 5)], 'departures': deps}
+                'robotsActive': [0 if L['outage'][0] <= t < L['outage'][1] else p['N'] for t in range(0, L['arr'].shape[0] + 1, 5)], 'departures': deps,
+                'cleardowns': cleardowns}
     return result, timeline, float(r['profit'])
 
 
