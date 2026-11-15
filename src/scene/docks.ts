@@ -186,6 +186,8 @@ interface Run {
   busyAt: number;
   name: string;
 }
+/** Parcels waiting on the belt end from which it counts as backing up (the second person sorts too). */
+const RUN_BACKING = 4;
 /** Beats the belt must have been empty before a half-full cage is pushed in. */
 const RUN_IDLE = 8;
 /** How much shorter the cage runs are during a shift (beats × this), and how far a step goes then (m per beat). */
@@ -475,7 +477,8 @@ export class Docks {
         if (d.queue.length || !run.cages) run.busyAt = b;
         this.chatAtBelt(d, run);
         if (run.people >= 1) this.tick(d.worker, d, b, false, () => this.plan(d));
-        if (run.people === 2) this.tick(d.loader, d, b, false, () => void (this.planLoad(d, d.loader) || this.plan(d, d.loader)));
+        // Two people: the second runs the cages while the first keeps the belt moving; once the belt backs up, both sort.
+        if (run.people === 2) this.tick(d.loader, d, b, false, () => void ((d.queue.length < RUN_BACKING && this.planLoad(d, d.loader)) || this.plan(d, d.loader)));
         // (For the checks: how long somebody here stood without a job beside a waiting parcel.)
         const stood = run.people >= 1 && d.queue.length > 0 && ((!d.worker.step && !d.worker.steps.length) || (run.people === 2 && !d.loader.step && !d.loader.steps.length));
         this.idleNow[i] = stood ? (this.idleNow[i] ?? 0) + 1 : 0;
@@ -805,9 +808,10 @@ export class Docks {
     const helper = w !== d.worker && w !== d.loader;
     const at = w === d.worker ? w.home : v(d.x + (helper ? -SECOND_AT[0] : SECOND_AT[0]), 0, DOCK_BELT_END + SECOND_AT[1]);
     if (run) {
-      // A shift: alone, the cages are this one's job too; and at the end of the block everyone pushes.
-      // And whoever finds the belt empty, or no cage ready to fill, does a cage run (see `planLoad`).
-      if ((run.people === 1 || this.runClearing(d, run) || !d.queue.length || this.fillCage(d) < 0) && this.planLoad(d, w)) return;
+      // A shift: the belt comes first, always. Cage runs (see `planLoad`) only when the belt is
+      // empty, or when no cage has room for the next parcel (then a full one goes in, so
+      // sorting can go on).
+      if ((!d.queue.length || this.fillCage(d) < 0) && this.planLoad(d, w)) return;
     } else if (this.planLoad(d, w, true)) return;
     // (Otherwise: at cleardown the picker helps to push the cages into the trailer, with nothing in hand.)
     // Back to the belt end first (after helping at a cleardown).
