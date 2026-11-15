@@ -1828,3 +1828,90 @@
 .shp-hud .shp-hud-bottom .shp-hud-money:not(.is-open) > :nth-child(-n + 4) {
   display: none;
 }
+
+/* ---- planner: one line per city ---- */
+.shp-adds {
+  position: absolute;
+  top: 3px;
+  display: flex;
+  gap: 6px;
+}
+.shp-planner .shp-add {
+  height: 40px;
+  padding: 0 10px;
+  border: 1.5px dashed var(--c, var(--grey));
+  border-radius: 8px;
+  background: var(--panel);
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.shp-block-text {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.shp-figs {
+  flex: none;
+  display: inline-flex;
+  gap: 1px;
+}
+.shp-fig {
+  fill: currentColor;
+}
+.shp-tag {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--grey);
+  font-size: 11px;
+  font-style: normal;
+}
+.shp-count.is-bad b {
+  color: #ff9d8a;
+}
+.shp-hint {
+  transform: translateY(-50%);
+}
+@media (min-width: 761px) {
+  .shp-main {
+    grid-template-columns: minmax(0, 1fr) 290px;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 12px 16px;
+  }
+  .shp-side {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  .shp-side > * {
+    flex: 1 1 260px;
+    margin: 0;
+  }
+  .shp-side > .shp-fresh {
+    flex: 2 1 340px;
+  }
+  .shp-side > .shp-problems {
+    flex-basis: 100%;
+  }
+}
+@media (max-width: 760px) {
+  .shp-planner .shp-add {
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .shp-money {
+    gap: 12px;
+  }
+  .shp-planner .shp-cell-money.shp-narrow {
+    display: flex;
+  }
+  .shp-count b {
+    font-size: 16px;
+  }
+}

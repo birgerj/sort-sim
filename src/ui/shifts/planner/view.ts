@@ -62,7 +62,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   // Many cities: lower rows, so more of the night is in view at once.
   const dense = level.cities.length > 8;
   const root = h('div', { class: `shp-planner${dense ? ' shp-dense' : ''}` });
-  const side = h('aside', { class: 'shp-side', 'aria-label': 'Orders' });
+  const side = h('aside', { class: 'shp-side', 'aria-label': 'Plan notes' });
   const scroll = h('div', { class: 'shp-scroll', tabindex: '0', role: 'group', 'aria-label': 'Time line of the shift' });
   const grid = h('div', { class: 'shp-grid' });
   scroll.append(grid);
@@ -73,7 +73,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   const targets = [0.5, 0.75, 0.9].map((f) => Math.round(level.par * f));
   // What is new in this level: shown until the player closes it, once per level.
   let freshOpen = !!level.notes.fresh && !seenFresh(level.id);
-  const insp = h('aside', { class: 'shp-insp', 'aria-label': 'Selected block' });
+  const insp = h('aside', { class: 'shp-insp', 'aria-label': 'Selected city or block' });
   const bar = h('footer', { class: 'shp-bar' });
   const ask = h('div', { class: 'shp-ask', hidden: true });
   root.append(
@@ -87,7 +87,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   );
 
   const isPhone = () => root.clientWidth > 0 && root.clientWidth <= 760;
-  const labelWidth = () => (isPhone() ? 86 : 104);
+  const labelWidth = () => (isPhone() ? 88 : 140);
 
   /** Takes a changed plan: remember it, tell the owner, draw again. */
   function commit(next: Plan, select?: Selection | null): void {
@@ -106,14 +106,39 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     }
   }
 
-  /** A tap on a city: an unplanned one gets its starter block, a planned one is selected. */
+  /** A tap on a city's label or its empty line: the city is selected, its sheet opens. */
   function tapCity(city: number): void {
     const first = plan.blocks.findIndex((b) => b.city === city);
-    if (first < 0 && !plan.robotCities.includes(city)) {
-      const made = addBlock(level, plan, city);
-      commit(made.plan, { city, block: made.index });
-      grid.querySelector(`[data-key="block-${made.index}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    } else select({ city, block: sel?.city === city && sel.block !== null ? sel.block : first >= 0 ? first : null }, true);
+    select({ city, block: sel?.city === city && sel.block !== null ? sel.block : first >= 0 ? first : null }, true);
+  }
+
+  /** A first (or another) dock block for a city, selected so it can be changed at once. */
+  function addDock(city: number): void {
+    const made = addBlock(level, plan, city);
+    commit(made.plan, { city, block: made.index });
+    grid.querySelector(`[data-key="block-${made.index}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  /** Robots on or off for a city. A switched-on city with no robots would do nothing: the fleet gets enough for its lines. */
+  function toggleRobots(city: number): void {
+    const on = plan.robotCities.includes(city);
+    let next = setRobotCity(level, plan, city, !on);
+    if (!on && next.robots === 0) next = setRobots(level, next, robotLines(level.cities[city]!) * Math.ceil(60 / RATES.robot));
+    commit(next, { city, block: sel?.city === city ? sel.block : null });
+  }
+
+  /** A small standing figure: one per person on a dock. */
+  function figure(): SVGSVGElement {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'shp-fig');
+    svg.setAttribute('viewBox', '0 0 8 14');
+    svg.setAttribute('width', '8');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M4 0a2.2 2.2 0 1 1 0 4.4A2.2 2.2 0 0 1 4 0ZM1.6 5.4h4.8A1.6 1.6 0 0 1 8 7v3H6.6v4H1.4v-4H0V7a1.6 1.6 0 0 1 1.6-1.6Z');
+    svg.append(path);
+    return svg;
   }
 
   function blockRange(i: number): string {
@@ -200,7 +225,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     const phone = isPhone();
     const labelW = labelWidth();
     const room = (scroll.clientWidth || (phone ? 340 : 640)) - labelW - 6;
-    pph = Math.max(phone ? 58 : 60, Math.floor((room / (span / 60)) * 100) / 100);
+    // A phone shows a shift of up to about six hours whole; a longer one scrolls sideways.
+    pph = Math.max(phone ? (span <= 400 ? 34 : 58) : 60, Math.floor((room / (span / 60)) * 100) / 100);
     const x = (t: number) => (t / 60) * pph;
     const trackW = Math.ceil(x(span));
     // When a city's parcels come in, and how many at a time: the same scale for every city of
@@ -255,26 +281,13 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     }
 
     function drawSide(list: PlanProblem[], left: number[]): void {
-      const orders = h('div', { class: 'shp-orders' });
-      for (const c of order) {
-        const city = level.cities[c]!;
-        // (No warning colour when a city does not fit: the fill bar is the only hint.)
-        const short = false;
-        void left;
-        orders.append(
-          h('button', { class: `shp-order${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `--c:${cityColour(c)}`, 'data-key': `order-${c}`, 'aria-pressed': String(sel?.city === c), onclick: () => tapCity(c) },
-            h('span', { class: 'shp-order-top' }, h('b', { text: name(c) }), h('span', { class: 'shp-num', text: count(city.volume) })),
-            h('span', { class: `shp-order-sub${short ? ' is-warn' : ''}` }, h('span', { class: 'shp-wide', text: `cut-off ${clock(city.truck)} · ${cityState(c)}` }), h('span', { class: 'shp-narrow', text: `${count(city.volume)} · ${clock(city.truck)}` }))),
-        );
-      }
+      void left;
       const goal = plan.blocks.length || plan.robotCities.length ? goalStanding(level, plan) : null;
       const parts = [
         freshOpen
           ? h('div', { class: 'shp-fresh' }, h('span', {}, h('b', { text: 'New in this level. ' }), level.notes.fresh),
               h('button', { class: 'shp-fresh-x', type: 'button', 'aria-label': 'Close', text: '✕', onclick: () => { freshOpen = false; rememberFresh(level.id); render(); } }))
           : null,
-        h('div', { class: 'shp-cap', text: 'ORDERS · TAP TO PLAN' }),
-        orders,
         list.length
           ? h('div', { class: 'shp-problems', role: 'status' },
               h('div', { class: 'shp-problems-head', text: `${plural(list.length, 'problem', 'problems')} to solve before the shift can start` }),
@@ -284,7 +297,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
               }))
           : null,
         h('div', { class: `shp-goal${goal ? (goal.ok ? ' is-ok' : ' is-off') : ''}` }, h('b', { text: 'Badge: ' }), `${level.badge.text}.`, goal ? ` ${goal.text}` : ''),
-        h('div', { class: 'shp-tip' }, h('b', { text: 'Tip. ' }), 'Tap an order for a starter block from its first parcel to its cut-off. Then change it with the buttons, or drag its ends: steps of half an hour.'),
+        h('div', { class: 'shp-tip' }, h('b', { text: 'Tip. ' }), 'Every city has one line. Add a dock block or robots in the line, tap a block to change it, or drag its ends: steps of half an hour. Tap a city name for its robots and more blocks.'),
       ];
       side.replaceChildren(...parts.filter((p): p is HTMLDivElement => !!p));
     }
@@ -341,7 +354,15 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           waveShape(city, first, lastIn, WAVE),
           h('div', { class: 'shp-truck', style: `left:${x(city.truck)}px`, title: `Cut-off ${clock(city.truck)}` }),
         );
-        if (!mine.length && !onRobots) track.append(h('span', { class: 'shp-hint', style: `left:${x(first) + 10}px`, text: 'Tap to plan' }));
+        if (!mine.length && !onRobots) {
+          track.append(
+            h('div', { class: 'shp-adds', style: `left:${Math.max(4, Math.min(x(first) + 6, trackW - (hasRobots ? 170 : 86)))}px` },
+              h('button', { class: 'shp-add', type: 'button', 'data-key': `add-dock-${c}`, 'aria-label': `Add a dock block for ${name(c)}`, text: '+ Dock', onclick: () => addDock(c) }),
+              hasRobots ? h('button', { class: 'shp-add', type: 'button', 'data-key': `add-robots-${c}`, 'aria-label': `Let robots load ${name(c)}`, text: '+ Robots', onclick: () => toggleRobots(c) }) : null),
+          );
+        } else if (!mine.length) {
+          track.append(h('span', { class: 'shp-hint', style: `left:${x(first) + 10}px;top:${(blockH + 4) / 2}px`, text: plan.robots ? 'robots only' : 'robots only · no fleet yet' }));
+        }
         if (onRobots) {
           track.append(h('div', { class: 'shp-robots-band', style: `left:${x(first)}px;width:${x(city.truck) - x(first)}px;top:${height - 13 - WAVE}px`, title: `Robot lines ${clock(first)}–${clock(city.truck)}` }, h('span', { text: 'robots' })));
         }
@@ -353,7 +374,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           const w = Math.max(18, x(b.end) - x(b.start));
           const people = b.people === 1 ? '1 person' : '2 people';
           const docks = plural(b.docks, 'dock', 'docks');
-          const label = w >= 236 ? `${blockRange(i)} · ${docks} · ${people}` : w >= 122 ? `${docks} · ${people}` : b.docks === 1 && w >= 62 ? people : `${b.docks}×${b.people}`;
+          const label = w >= 236 ? `${blockRange(i)} · ${docks}` : w >= 122 ? docks : b.docks > 1 ? `×${b.docks}` : '';
+          const figs = h('span', { class: 'shp-figs' }, figure(), b.people === 2 ? figure() : null);
           const bad = badBlocks.get(i);
           if (bad) notes.push(...bad.map((t) => (mine.length > 1 ? `${blockRange(i)}: ${t}` : t)));
           track.append(
@@ -363,7 +385,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
               'aria-label': `${name(c)}, ${blockRange(i)}, ${docks}, ${people} per dock, ${Math.round(Math.min(fill, 9.99) * 100)}% full${bad ? `. Problem: ${bad.join(' ')}` : ''}`,
               onpointerdown: (e: PointerEvent) => startDrag(e, i),
               onclick: () => select({ city: c, block: i }) },
-              h('span', { class: 'shp-block-text', text: label }),
+              h('span', { class: 'shp-block-text' }, figs, label ? h('span', { text: label }) : null),
               h('span', { class: `shp-fill${fill > 1.005 ? ' is-over' : ''}` }, h('span', { style: `width:${Math.min(100, Math.round(fill * 100))}%` }))),
           );
         }
@@ -371,7 +393,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         rows.push(
           h('div', { class: 'shp-row', 'data-key': `row-${c}` },
             h('button', { class: `shp-label shp-city-label${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `width:${labelW}px;--c:${cityColour(c)}`, 'data-key': `label-${c}`, onclick: () => tapCity(c), title: `${name(c)} · ${count(city.volume)} parcels · cut-off ${clock(city.truck)}` },
-              h('b', { text: name(c) }), h('span', { text: phone ? clock(city.truck) : `cut-off ${clock(city.truck)}` })),
+              h('b', { text: name(c) }), h('span', { class: 'shp-num', text: phone ? `${count(city.volume)} · ${clock(city.truck)}` : `${count(city.volume)} · cut-off ${clock(city.truck)}` }),
+              onRobots && !phone ? h('i', { class: 'shp-tag', text: mine.length ? 'docks + robots' : 'robots' }) : null),
             h('div', { class: 'shp-cell' }, track, notes.length ? h('div', { class: `shp-note${isBad ? ' is-bad' : ''}`, style: `width:${trackW}px`, text: notes.join(' ') }) : null)),
         );
       }
@@ -447,7 +470,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
 
     function drawInspector(): void {
       if (!sel) {
-        insp.replaceChildren(h('div', { class: 'shp-cap', text: 'NOTHING SELECTED' }), h('p', { class: 'shp-muted', text: 'Tap an order or a block to plan it. A city can have several blocks, and robots as well.' }));
+        insp.replaceChildren(h('div', { class: 'shp-cap', text: 'NOTHING SELECTED' }), h('p', { class: 'shp-muted', text: 'Tap a city or a block to change it. A city can have several blocks, and robots as well.' }));
         return;
       }
       const c = sel.city;
@@ -489,7 +512,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           h('div', { class: 'shp-facts shp-num shp-narrow' }, `About ${count(reach)} parcels to load here · room for ${count(f.capacity)}`),
         );
       } else if (!own.length) {
-        parts.push(h('p', { class: 'shp-muted', text: hasRobots && plan.robotCities.includes(c) ? 'Robots load this city. A dock block is only needed if they cannot keep up.' : 'No block yet.' }));
+        parts.push(h('p', { class: 'shp-muted', text: hasRobots && plan.robotCities.includes(c) ? 'Robots load this city. A dock block is only needed if they cannot keep up.' : 'Nothing planned yet: add a dock block' + (hasRobots ? ', or switch on robots.' : '.') }));
       } else {
         parts.push(h('p', { class: 'shp-muted', text: `${plural(own.length, 'block', 'blocks')}. Tap one on the time line to change it.` }));
       }
@@ -499,22 +522,14 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         const on = plan.robotCities.includes(c);
         const lines = robotLines(city);
         foot.append(
-          h('button', { class: 'shp-switch-btn', type: 'button', role: 'switch', 'aria-checked': String(on), 'data-key': 'robots', onclick: () => {
-            let next = setRobotCity(level, plan, c, !on);
-            // A switched-on city with no robots would do nothing: give the fleet enough for its lines.
-            if (!on && next.robots === 0) next = setRobots(level, next, lines * Math.ceil(60 / RATES.robot));
-            commit(next);
-          } },
+          h('button', { class: 'shp-switch-btn', type: 'button', role: 'switch', 'aria-checked': String(on), 'data-key': 'robots', onclick: () => toggleRobots(c) },
             h('span', { class: 'shp-switch-knob', 'aria-hidden': 'true' }),
             h('span', {}, h('b', { class: 'shp-wide', text: 'Robots for this city' }), h('b', { class: 'shp-narrow', text: 'Robots' }), h('small', { text: on ? (plan.robots ? `On · ${clock(firstParcel(city))}–${clock(city.truck)} · up to ${Math.min(lines * 60, plan.robots * RATES.robot)} an hour, shared with other robot cities. Docks are extra.` : 'On, but the fleet is 0: set robots below.') : 'Off. Robots load without a dock or people.' }))),
         );
       }
       foot.append(
         h('div', { class: 'shp-actions' },
-          h('button', { class: 'shp-btn', type: 'button', 'data-key': 'add', text: own.length ? 'Add block' : 'Add a block', onclick: () => {
-            const made = addBlock(level, plan, c);
-            commit(made.plan, { city: c, block: made.index });
-          } }),
+          h('button', { class: 'shp-btn', type: 'button', 'data-key': 'add', text: own.length ? 'Add block' : 'Add a dock block', onclick: () => addDock(c) }),
           b && i !== null ? h('button', { class: 'shp-btn', type: 'button', 'data-key': 'remove', text: phone ? 'Remove' : 'Remove block', onclick: () => {
             const rest = removeBlock(plan, i);
             const other = rest.blocks.findIndex((blk) => blk.city === c);
@@ -551,6 +566,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     function drawBar(): void {
       const cell = (label: string, value: string, cls = '') => h('div', { class: `shp-cell-money ${cls}` }, h('span', { text: label }), h('b', { class: 'shp-num', text: value }));
       const blocked = problems.length > 0;
+      const dockPeak = peak(busyDockSteps(plan, doors));
+      const peoplePeak = peak(peopleSteps(plan));
       // The fixed costs open into how they add up: hours × price, from the plan alone.
       const hours = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)} h`;
       const dockHours = plan.blocks.reduce((a, b) => a + (b.docks * (b.end - b.start)) / 60, 0);
@@ -575,6 +592,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
       bar.replaceChildren(
         ...(breakdown ? [breakdown] : []),
         h('div', { class: 'shp-money' },
+          cell('Docks', `${dockPeak} of ${level.docks}`, `shp-narrow shp-count${dockPeak > level.docks ? ' is-bad' : ''}`),
+          cell('People', level.peopleCap !== undefined ? `${peoplePeak} of ${level.peopleCap}` : String(peoplePeak), `shp-narrow shp-count${level.peopleCap !== undefined && peoplePeak > level.peopleCap ? ' is-bad' : ''}`),
           cell('Docks', money(costs.docks), 'shp-wide'),
           cell('People', money(costs.people), 'shp-wide'),
           hasRobots ? cell('Robots', money(costs.robots), 'shp-wide') : null,
