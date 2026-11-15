@@ -83,7 +83,16 @@ export interface Timeline {
   blocks: { city: number; door: number; start: number; end: number; people: number }[];
   robotsActive: number[];
   departures: { city: number; at: number; status: TruckStatus }[];
+  /**
+   * Cleardowns: from a city's cut-off (its truck time), the crew of each door still open for it
+   * loads what is on the belt and pushes the cages in; `to` is when that door is done. The truck
+   * leaves when its last door is done: on time within CLEARDOWN_MINUTES, late after.
+   */
+  cleardowns?: { city: number; door: number; from: number; to: number }[];
 }
+
+/** Minutes after the cut-off that a truck is planned to leave. */
+export const CLEARDOWN_MINUTES = 15;
 
 /** The only way the screens reach the score model. In phase 2 this becomes a call to a server
  *  that answers after 5 seconds, so nothing in the screens may depend on it being instant. */
