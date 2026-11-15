@@ -133,6 +133,8 @@ interface Worker extends Human {
   rate: number;
   phase: number;
   style: number;
+  /** During a shift: its own chat place of the free simulation, put back afterwards. */
+  own?: { chat?: V3; chatMid?: V3; mates?: V3[] };
   /** Dances a little while working (headphones on); caught by the camera until this beat. */
   dancer?: boolean;
   caughtUntil?: number;
@@ -180,8 +182,12 @@ interface Run {
   taken: number;
   /** The last minutes of the block: every cage with parcels goes into the trailer. */
   clearing: boolean;
+  /** The last beat a parcel lay on the belt end. */
+  busyAt: number;
   name: string;
 }
+/** Beats the belt must have been empty before a half-full cage is pushed in. */
+const RUN_IDLE = 8;
 /** How much shorter the cage runs are during a shift (beats × this), and how far a step goes then (m per beat). */
 const RUN_PACE = 0.4;
 const RUN_WALK = 2.8;
@@ -433,7 +439,7 @@ export class Docks {
   cageNumber(chute: number, pc: number): number {
     const d = this.docks.find((x) => x.chute === chute);
     if (!d) return 0;
-    return this.cageIndex(d, pc) + 1;
+    return (this.runs ? this.fillCage(d) : this.cageIndex(d, pc)) + 1;
   }
 
   /** Which of a dock's cages takes this postcode (−1: none; during a shift there is always one). */
@@ -466,6 +472,8 @@ export class Docks {
         // A shift of the planning game: the people the plan has here, and nobody else.
         this.leaveWithTruck(d);
         this.show(d, run);
+        if (d.queue.length || !run.cages) run.busyAt = b;
+        this.chatAtBelt(d, run);
         if (run.people >= 1) this.tick(d.worker, d, b, false, () => this.plan(d));
         if (run.people === 2) this.tick(d.loader, d, b, false, () => void (this.planLoad(d, d.loader) || this.plan(d, d.loader)));
         // (For the checks: how long somebody here stood without a job beside a waiting parcel.)
@@ -489,7 +497,7 @@ export class Docks {
       this.tick(d.loader, d, b, day, () => this.planLoad(d, d.loader));
     }
     // A shift: the helper of a pair of doors comes over for a cleardown (the belt first, then the cages), and goes again.
-    for (const h of this.runs ? this.helpers : []) {
+    for (const h of this.runs && this.runHelpers ? this.helpers : []) {
       const d = h.pair.find((x) => {
         const r = this.runs![this.docks.indexOf(x)]!;
         return r.clearing && r.people > 0 && (x.queue.length > 0 || this.cagesLeft(this.docks.indexOf(x)) > 0);
@@ -542,6 +550,9 @@ export class Docks {
     return run.clearing && d.queue.length === 0;
   }
 
+  /** A shift: the helper of a pair of doors comes over for a cleardown (off: for measuring without). */
+  runHelpers = true;
+
   /** A shift: cages of this dock that still have to go into the trailer (with parcels in their place, or on their way). */
   cagesLeft(i: number): number {
     const d = this.docks[i];
@@ -567,6 +578,24 @@ export class Docks {
   }
   private idle: number[] = [];
   private idleNow: number[] = [];
+
+  /**
+   * A shift, two people at a dock with nothing to do: they stand at the belt end and have a
+   * word (the free simulation's chat, without the walk to the others inside the loop).
+   */
+  private chatAtBelt(d: Dock, run: Run): void {
+    const two = run.people === 2;
+    const a = d.worker.home;
+    const b = v(d.x + SECOND_AT[0], 0, DOCK_BELT_END + SECOND_AT[1]);
+    const mates = [a, b];
+    const mid = a.clone().lerp(b, 0.5);
+    for (const [w, at] of [[d.worker, a], [d.loader, b]] as [Worker, V3][]) {
+      if (!w.own) w.own = { chat: w.chat, chatMid: w.chatMid, mates: w.mates };
+      w.chat = two ? at : undefined;
+      w.chatMid = two ? mid : undefined;
+      w.mates = two ? mates : undefined;
+    }
+  }
 
   /** Cages in the trailer leave with it once the door is down. */
   private leaveWithTruck(d: Dock): void {
@@ -661,8 +690,11 @@ export class Docks {
     }
     const full = home.find((x) => this.isFull(x));
     if (truck) {
-      // At cleardown every cage with parcels goes; otherwise full ones.
-      const c = clearing ? home.find((x) => x.n > 0) : full;
+      // At cleardown every cage with parcels goes; otherwise full ones. A shift: also the one
+      // being filled, once it is half full and the belt has been empty for a while (a fresh one
+      // is fetched in its place), so nobody stands waiting beside it.
+      const part = run && !clearing && !full && this.now - run.busyAt >= RUN_IDLE ? home.find((x) => x.n >= this.runCap / 2) : undefined;
+      const c = clearing ? home.find((x) => x.n > 0) : (full ?? part);
       if (c) this.pushJob(d, c, door, v(d.x, 0, c.at.z), w);
       return !!c;
     }
@@ -774,7 +806,8 @@ export class Docks {
     const at = w === d.worker ? w.home : v(d.x + (helper ? -SECOND_AT[0] : SECOND_AT[0]), 0, DOCK_BELT_END + SECOND_AT[1]);
     if (run) {
       // A shift: alone, the cages are this one's job too; and at the end of the block everyone pushes.
-      if ((run.people === 1 || this.runClearing(d, run)) && this.planLoad(d, w)) return;
+      // And whoever finds the belt empty, or no cage ready to fill, does a cage run (see `planLoad`).
+      if ((run.people === 1 || this.runClearing(d, run) || !d.queue.length || this.fillCage(d) < 0) && this.planLoad(d, w)) return;
     } else if (this.planLoad(d, w, true)) return;
     // (Otherwise: at cleardown the picker helps to push the cages into the trailer, with nothing in hand.)
     // Back to the belt end first (after helping at a cleardown).
@@ -1031,12 +1064,20 @@ export class Docks {
   private pickCage(d: Dock, p: DockParcel): number {
     const i = this.cageIndex(d, p.pc);
     const c = d.cages[i];
-    if (c && c.state === 'home' && !this.isFull(c)) return i;
-    if (!this.runs) return -1;
-    // A shift: its own cage is full or on its way to the trailer; then the emptiest one that stands ready.
+    if (this.runs) return this.fillCage(d);
+    return c && c.state === 'home' && !this.isFull(c) ? i : -1;
+  }
+
+  /**
+   * A shift: every cage of a dock is for the one city, so they are filled one at a time. The
+   * cage being filled is the one in its place that has parcels and is not full (the fullest,
+   * should there be two); else the first empty one in its place. −1: none stands ready.
+   */
+  private fillCage(d: Dock): number {
     let best = -1;
     d.cages.forEach((x, k) => {
-      if (x.state === 'home' && x.n < RUN_CAGE && (best < 0 || x.n < d.cages[best]!.n)) best = k;
+      if (x.state !== 'home' || this.isFull(x)) return;
+      if (best < 0 || (x.n > 0 && x.n > d.cages[best]!.n)) best = k;
     });
     return best;
   }
@@ -1475,7 +1516,7 @@ export class Docks {
     this.clears = [];
     this.cleared.length = 0;
     this.runCap = clamp(Math.round(cap), 1, RUN_CAGE);
-    this.runs = on ? this.docks.map(() => ({ cages: false, people: 0, allow: 0, taken: 0, clearing: false, name: '' })) : null;
+    this.runs = on ? this.docks.map(() => ({ cages: false, people: 0, allow: 0, taken: 0, clearing: false, busyAt: 0, name: '' })) : null;
     this.docks.forEach((d, n) => {
       if (this.runs) return this.show(d, this.runs[n]!);
       const ranges = split(NORTH_CITIES[d.city]!, CAGES);
@@ -1483,6 +1524,13 @@ export class Docks {
       this.cardsFor(n * CAGES, d.city, d.cages);
     });
     for (const h of this.helpers) h.w.root.visible = !on;
+    if (!on) for (const d of this.docks) for (const w of [d.worker, d.loader]) {
+      if (!w.own) continue;
+      w.chat = w.own.chat;
+      w.chatMid = w.own.chatMid;
+      w.mates = w.own.mates;
+      w.own = undefined;
+    }
   }
 
   /** What is in sight at a directed dock: its cages, its picker, its loader. */
