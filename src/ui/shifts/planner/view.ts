@@ -3,8 +3,8 @@
 // briefing's numbers and the plan: fixed costs, how full a block is, docks and people in use and
 // a rough buffer guess. No profit, no real buffer figures, no word on trucks being on time: those
 // come with the result. This file never touches the score service.
-import { CURRENCY, PRICES, RATES, type Level, type Plan, type PlanProblem } from '../../../shifts/contract';
-import { arrivedBy, dockRate, firstParcel, nominalFlow, robotLines } from '../../../shifts/estimate';
+import { CLEARDOWN_MINUTES, CURRENCY, PRICES, RATES, type City, type Level, type Plan, type PlanProblem } from '../../../shifts/contract';
+import { arrivalRate, arrivedBy, dockRate, firstParcel, nominalFlow, robotLines } from '../../../shifts/estimate';
 import { cityColour, cityName, clock, count, h, mark, money, plural } from './dom';
 import { addBlock, canStep, moveBlock, removeBlock, setDocks, setEnd, setPeople, setRobotCity, setRobots, setStart, stepEnd, stepStart } from './edit';
 import { assignDoors, blockCost, busyDockSteps, checkPlan, fixedCosts, goalStanding, mostToEarn, peak, peopleSteps, unservedCities, type Step, capacitySteps, influxSteps } from './rules';
@@ -29,7 +29,7 @@ const clonePlan = (p: Plan): Plan => ({ blocks: p.blocks.map((b) => ({ ...b })),
 export function plannerView(o: PlannerOptions): HTMLElement {
   const { level, cityNames } = o;
   const name = (c: number) => cityName(cityNames, c);
-  const span = level.shiftMinutes + RATES.maxLateMinutes; // blocks may run half an hour past the last truck
+  const span = level.shiftMinutes + Math.max(RATES.maxLateMinutes, CLEARDOWN_MINUTES); // room for the last truck's cleardown
   const hasRobots = level.robotsMax > 0;
   // Rows in the order the trucks leave: the night reads from top to bottom.
   const order = level.cities.map((_, i) => i).sort((a, b) => level.cities[a]!.truck - level.cities[b]!.truck || a - b);
@@ -181,6 +181,32 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     pph = Math.max(phone ? 58 : 60, Math.floor((room / (span / 60)) * 100) / 100);
     const x = (t: number) => (t / 60) * pph;
     const trackW = Math.ceil(x(span));
+    // When a city's parcels come in, and how many at a time: the same scale for every city of
+    // the level, so a big wave looks big. This is what the briefing gives, not a result.
+    const topRate = Math.max(1, ...level.cities.flatMap((c) => c.arrivals.map((a) => arrivalRate(c, (a.from + a.to) / 2))));
+    const waveShape = (city: City, from: number, to: number, hgt: number): SVGSVGElement => {
+      const left = x(from);
+      const w = Math.max(1, x(to) - left);
+      let d = `M0 ${hgt}`;
+      for (let m = from; m < to; m += 5) {
+        const y = hgt - Math.max(1.5, (arrivalRate(city, m + 2.5) / topRate) * (hgt - 1));
+        d += ` L${(x(m) - left).toFixed(1)} ${y.toFixed(1)} L${(x(Math.min(to, m + 5)) - left).toFixed(1)} ${y.toFixed(1)}`;
+      }
+      d += ` L${w.toFixed(1)} ${hgt} Z`;
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'shp-wave');
+      svg.setAttribute('width', String(w));
+      svg.setAttribute('height', String(hgt));
+      svg.setAttribute('style', `left:${left}px`);
+      svg.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      svg.append(path);
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      title.textContent = `Parcels come in ${clock(from)}–${clock(to)}`;
+      svg.append(title);
+      return svg;
+    };
     root.classList.toggle('shp-has-sel', !!sel);
 
     drawSide(problems, flow.left);
@@ -275,7 +301,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         }
         const blockH = dense || phone ? 40 : 46; // a finger needs 40
         const onRobots = hasRobots && plan.robotCities.includes(c);
-        const height = Math.max(1, laneEnd.length) * (blockH + 4) + 6 + (onRobots ? 12 : 0);
+        const WAVE = 16; // the strip under the blocks that shows when this city's parcels come in
+        const height = Math.max(1, laneEnd.length) * (blockH + 4) + 6 + (onRobots ? 12 : 0) + WAVE;
         const first = firstParcel(city);
         const lastIn = Math.max(...city.arrivals.map((a) => a.to));
         const track = h('div', { class: `shp-track shp-city${sel?.city === c ? ' is-sel' : ''}`, style: `width:${trackW}px;height:${height}px;--c:${cityColour(c)}`,
@@ -284,12 +311,13 @@ export function plannerView(o: PlannerOptions): HTMLElement {
             tapCity(c);
           } },
           h('div', { class: 'shp-after', style: `left:${x(level.shiftMinutes)}px` }),
-          h('div', { class: 'shp-inflow', style: `left:${x(first)}px;width:${x(lastIn) - x(first)}px`, title: `Parcels come in ${clock(first)}–${clock(lastIn)}` }),
-          h('div', { class: 'shp-truck', style: `left:${x(city.truck)}px`, title: `Truck ${clock(city.truck)}` }),
+          h('div', { class: 'shp-clear', style: `left:${x(city.truck)}px;width:${x(city.truck + CLEARDOWN_MINUTES) - x(city.truck)}px`, title: `Cleardown: the ${CLEARDOWN_MINUTES} minutes after the cut-off, the crew loads the last parcels and cages` }),
+          waveShape(city, first, lastIn, WAVE),
+          h('div', { class: 'shp-truck', style: `left:${x(city.truck)}px`, title: `Cut-off ${clock(city.truck)}` }),
         );
         if (!mine.length && !onRobots) track.append(h('span', { class: 'shp-hint', style: `left:${x(first) + 10}px`, text: 'Tap to plan' }));
         if (onRobots) {
-          track.append(h('div', { class: 'shp-robots-band', style: `left:${x(first)}px;width:${x(city.truck) - x(first)}px;top:${height - 13}px`, title: `Robot lines ${clock(first)}–${clock(city.truck)}` }, h('span', { text: 'robots' })));
+          track.append(h('div', { class: 'shp-robots-band', style: `left:${x(first)}px;width:${x(city.truck) - x(first)}px;top:${height - 13 - WAVE}px`, title: `Robot lines ${clock(first)}–${clock(city.truck)}` }, h('span', { text: 'robots' })));
         }
         const notes: string[] = [];
         for (const { b, i } of mine) {
@@ -316,8 +344,8 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         const isBad = mine.some((e) => badBlocks.has(e.i));
         rows.push(
           h('div', { class: 'shp-row', 'data-key': `row-${c}` },
-            h('button', { class: `shp-label shp-city-label${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `width:${labelW}px;--c:${cityColour(c)}`, 'data-key': `label-${c}`, onclick: () => tapCity(c), title: `${name(c)} · ${count(city.volume)} parcels · truck ${clock(city.truck)}` },
-              h('b', { text: name(c) }), h('span', { text: phone ? clock(city.truck) : `truck ${clock(city.truck)}` })),
+            h('button', { class: `shp-label shp-city-label${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `width:${labelW}px;--c:${cityColour(c)}`, 'data-key': `label-${c}`, onclick: () => tapCity(c), title: `${name(c)} · ${count(city.volume)} parcels · cut-off ${clock(city.truck)}` },
+              h('b', { text: name(c) }), h('span', { text: phone ? clock(city.truck) : `cut-off ${clock(city.truck)}` })),
             h('div', { class: 'shp-cell' }, track, notes.length ? h('div', { class: `shp-note${isBad ? ' is-bad' : ''}`, style: `width:${trackW}px`, text: notes.join(' ') }) : null)),
         );
       }

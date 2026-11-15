@@ -378,12 +378,26 @@
   background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.14) 0 2px, transparent 2px 6px);
   pointer-events: none;
 }
-.shp-inflow {
+/* When this city's parcels come in, and how many at a time. */
+.shp-wave {
   position: absolute;
   bottom: 0;
-  height: 3px;
-  background: var(--c);
-  border-radius: 2px;
+  pointer-events: none;
+  overflow: visible;
+}
+.shp-wave path {
+  fill: var(--c);
+  opacity: 0.6;
+}
+/* The cleardown: the minutes after the cut-off in which the crew loads the last parcels and cages. */
+.shp-clear {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  border: 1px dashed color-mix(in srgb, var(--ink) 55%, transparent);
+  border-left: 0;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 16%, transparent) 0 2px, transparent 2px 7px);
   pointer-events: none;
 }
 .shp-truck {
