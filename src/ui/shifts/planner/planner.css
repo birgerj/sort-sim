@@ -1578,8 +1578,20 @@
   padding-top: 0;
 }
 @media (max-width: 760px) {
-  /* Cards for the cities still loading sit just above the bottom bar. */
+  /* Cards for the cities still loading sit at the top, under the clock; the trucks that have
+     left come below them, and the middle of the screen stays free for the hall. */
+  .shp-hud .shp-hud-top {
+    order: 0;
+  }
   .shp-hud .shp-hud-side {
+    order: 1;
+    margin-top: 0;
+  }
+  .shp-hud .shp-hud-gone {
+    order: 2;
+  }
+  .shp-hud .shp-hud-bottom {
+    order: 3;
     margin-top: auto;
   }
   .shp-hud .shp-hud-bottom {
