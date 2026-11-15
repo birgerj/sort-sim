@@ -135,13 +135,13 @@ const hud = new Hud(scene, music, settings, { showStart: false, showUi, onQualit
 document.body.append(hud.root);
 // Ten Shifts, the planning game: a full-screen layer over the hall (see ui/shifts). While it is open
 // the free simulation's own controls are out of the way.
-// Trophies: in the game they always stand; in the free simulation the player may put them away.
+// Trophies: the decorations earned with badges stand in the hall while the game is open. The
+// free simulation follows its Christmas setting only.
 let earnedLevels: number[] = [];
 let inGame = false;
 function showTrophies(): void {
-  setTrophies(inGame || settings.trophies !== false ? earnedLevels : []);
+  setTrophies(inGame ? earnedLevels : []);
 }
-hud.onTrophies = showTrophies;
 const shifts = showUi
   ? mountShifts({
       score: new LocalScoreService(),
@@ -157,7 +157,7 @@ const shifts = showUi
         nightBefore = false;
       },
       views: { planner: plannerView, shiftHud },
-      // A badge earns a Christmas decoration in the hall, in the game and in the free simulation.
+      // A badge earns a Christmas decoration in the hall, shown in the game.
       onBadges: (levels) => {
         earnedLevels = levels;
         showTrophies();
