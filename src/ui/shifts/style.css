@@ -1979,3 +1979,102 @@
   justify-content: flex-end;
   margin-top: 14px;
 }
+
+/* ---- Ranking ---- */
+
+.sh-root .sh-rank {
+  max-width: 720px;
+}
+
+.sh-root .sh-rank-me {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.sh-root .sh-rank-label {
+  font-size: 14px;
+  color: var(--sh-grey);
+}
+
+.sh-root .sh-rank-input {
+  flex: 1 1 160px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sh-ink);
+  border: 1px solid var(--sh-line);
+  border-radius: var(--sh-radius-s);
+  font: 600 16px/1.2 var(--sh-font);
+}
+
+.sh-root .sh-rank-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.sh-root .sh-rank-pick {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.sh-root .sh-rank-pick[aria-pressed='true'] {
+  background: var(--sh-acc);
+  border-color: var(--sh-acc);
+  color: #ffffff;
+}
+
+.sh-root .sh-rank-note {
+  min-height: 18px;
+  margin: 0 0 8px;
+}
+
+.sh-root .sh-rank-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sh-root .sh-rank-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  border-top: 1px solid var(--sh-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.sh-root .sh-rank-row.is-me {
+  background: rgba(47, 165, 143, 0.16);
+  border-radius: var(--sh-radius-s);
+}
+
+.sh-root .sh-rank-place {
+  color: var(--sh-grey);
+  text-align: right;
+}
+
+.sh-root .sh-rank-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.sh-root .sh-rank-country {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sh-grey);
+}
+
+.sh-root .sh-rank-score {
+  min-width: 56px;
+  text-align: right;
+}

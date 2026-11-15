@@ -94,7 +94,23 @@ export class App {
   ranking(level: number | null, key: string | null): Reply {
     if (level != null && !LEVELS.some((l) => l.id === level)) return { status: 400, body: { error: 'There is no such level.' } };
     const k = key && KEY.test(key) ? key : null;
-    return { status: 200, body: level == null ? { totals: this.store.totals(50), rank: k ? this.store.rank(k) : 0 } : { level, entries: this.store.level(level, 50) } };
+    // Keys stay on the server: a row only says whether it is the asking player's own.
+    if (level == null) {
+      const totals = this.store.totals(50).map(({ key: who, name, country, total, levels, stars, badges }) => ({ name, country, total, levels, stars, badges, me: who === k }));
+      return { status: 200, body: { totals, rank: k ? this.store.rank(k) : 0 } };
+    }
+    const entries = this.store.level(level, 50).map(({ key: who, ...rest }) => ({ ...rest, me: who === k }));
+    return { status: 200, body: { level, entries } };
+  }
+
+  /** A player sets or changes the name shown in the ranking. */
+  name(input: unknown): Reply {
+    const q = (input ?? {}) as { key?: unknown; name?: unknown; country?: unknown };
+    if (typeof q.key !== 'string' || !KEY.test(q.key) || typeof q.name !== 'string') return { status: 400, body: { error: 'No player or no name.' } };
+    const name = cleanName(q.name);
+    const country = typeof q.country === 'string' ? q.country.replace(/[^a-z]/gi, '').slice(0, 3).toLowerCase() : '';
+    this.store.seen(q.key, name, country, this.o.now());
+    return { status: 200, body: { name } };
   }
 
   mine(key: string | null): Reply {

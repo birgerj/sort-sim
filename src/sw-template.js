@@ -32,6 +32,8 @@ self.addEventListener('message', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  // What the game's server answers (scores, the ranking) is never kept: it must always be fresh.
+  if (new URL(req.url).pathname.includes('/api/')) return;
   // Pages: network first (fresh), the cached app when offline.
   if (req.mode === 'navigate') {
     e.respondWith(

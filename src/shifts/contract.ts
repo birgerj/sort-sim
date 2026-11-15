@@ -91,6 +91,28 @@ export interface ScoreService {
   run(levelId: number, plan: Plan): Promise<{ result: Result; timeline: Timeline }>;
 }
 
+/** The players' ranking, where scores are kept by a server. */
+export interface RankRow {
+  name: string;
+  country: string;
+  score: number;
+  /** Totals only: levels played, stars and badges over all levels. */
+  levels?: number;
+  stars: number;
+  badges?: number;
+  badge?: boolean;
+  /** This row is the asking player's own. */
+  me?: boolean;
+}
+export interface Ranking {
+  /** Everyone's sum of best scores, and this player's own place (0 = not ranked yet). */
+  totals(): Promise<{ rows: RankRow[]; rank: number }>;
+  level(levelId: number): Promise<RankRow[]>;
+  name(): string;
+  /** Gives back the name as the server kept it. */
+  setName(name: string): Promise<string>;
+}
+
 /** Why a plan cannot be started (shown in the planner). Checking this gives nothing away: it uses
  *  only what the briefing shows. */
 export type PlanProblem =

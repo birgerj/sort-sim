@@ -1,9 +1,10 @@
 // Ten Shifts: the game's screens as one full-screen overlay over the hall, with a
 // small router between them. The score model is reached only through the score
 // service and the hall only through the director; the levels come in from outside.
-import type { Director, Level, Plan, ScoreService } from '../../shifts/contract';
+import type { Director, Level, Plan, Ranking, ScoreService } from '../../shifts/contract';
 import { h } from './dom';
 import { openSettings, type GameSettings } from './settings';
+import { rankingScreen } from './screens/ranking';
 import { DEFAULT_SPEED, type PlannerView, type ShiftHud } from './planner-seam';
 import { problemLines } from './problems';
 import { createProgress, type Progress } from './progress';
@@ -31,6 +32,8 @@ export interface ShiftsDeps {
   progress?: Progress;
   /** Look, quality, sound and country; no settings button when absent. */
   settings?: GameSettings;
+  /** The players' ranking; no ranking button when absent. */
+  ranking?: Ranking | null;
   /** Told which levels have their badge: at the start and when a result is shown. */
   onBadges?(levels: number[]): void;
 }
@@ -65,6 +68,7 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
     progress,
     go,
     free,
+    ranking: deps.ranking ?? undefined,
     // A new country gives the levels new city names: draw the screen again.
     settings: settings ? () => openSettings(root, settings, true, () => go({ name: 'levels' })) : undefined,
   });
@@ -92,6 +96,8 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
         return show(resultScreen(ctx(), route.outcome));
       case 'end':
         return show(endScreen(ctx()));
+      case 'ranking':
+        return show(deps.ranking ? rankingScreen(ctx(), deps.ranking) : levelsScreen(ctx()));
     }
   }
 

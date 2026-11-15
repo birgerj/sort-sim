@@ -72,4 +72,9 @@ test('the best per level is kept, a worse try changes nothing, and totals rank p
   expect(totals.rank).toBe(2);
   const one = app.ranking(1, null).body as { entries: { name: string; score: number }[] };
   expect(one.entries[0]).toMatchObject({ name: 'Ann', score: top });
+  // Keys never leave the server; a row only says whether it is the asker's own.
+  expect(JSON.stringify([totals, one])).not.toContain(A);
+  expect((app.ranking(null, A).body as { totals: { me: boolean }[] }).totals.map((t) => t.me)).toEqual([false, true]);
+  // A new name shows at once.
+  expect(app.name({ key: A, name: '  Ann   van <i>Dijk</i> ', country: 'nl' }).body).toEqual({ name: 'Ann van iDijki' });
 });

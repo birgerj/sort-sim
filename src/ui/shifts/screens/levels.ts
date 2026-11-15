@@ -48,7 +48,7 @@ export function levelsScreen(ctx: Ctx): HTMLElement {
     );
   });
 
-  const actions = [button('How to play', () => ctx.go({ name: 'intro', from: 'levels' })), ...(ctx.settings ? [button('Settings', ctx.settings)] : []), button('Simulation', () => ctx.free())];
+  const actions = [button('How to play', () => ctx.go({ name: 'intro', from: 'levels' })), ...(ctx.ranking ? [button('Ranking', () => ctx.go({ name: 'ranking' }))] : []), ...(ctx.settings ? [button('Settings', ctx.settings)] : []), button('Simulation', () => ctx.free())];
   if (allDone) actions.unshift(button('End score', () => ctx.go({ name: 'end' }), 'primary'));
 
   return h(

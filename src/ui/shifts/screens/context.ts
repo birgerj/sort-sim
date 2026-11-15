@@ -1,5 +1,5 @@
 // What every screen gets from the router in index.ts.
-import type { Level, Plan, Result } from '../../../shifts/contract';
+import type { Level, Plan, Ranking, Result } from '../../../shifts/contract';
 import type { Attempt, Progress } from '../progress';
 
 /** A finished shift as the result screen shows it. */
@@ -19,7 +19,8 @@ export type Route =
   | { name: 'briefing'; id: number }
   | { name: 'planner'; id: number; problems?: string[] }
   | { name: 'result'; outcome: Outcome }
-  | { name: 'end' };
+  | { name: 'end' }
+  | { name: 'ranking' };
 
 export interface Ctx {
   levels: Level[];
@@ -27,6 +28,8 @@ export interface Ctx {
   names: string[];
   progress: Progress;
   go(route: Route): void;
+  /** The players' ranking, where a server keeps the scores. */
+  ranking?: Ranking;
   /** Opens the settings panel, when the game has one. */
   settings?(): void;
   /** Leave the game for the free simulation. */

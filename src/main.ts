@@ -30,7 +30,7 @@ import { WalkControls } from './ui/walk';
 import { mountShifts } from './ui/shifts/index';
 import { plannerView, shiftHud } from './ui/shifts/planner/index';
 import { LEVELS } from './shifts/levels';
-import { createScore } from './shifts/score';
+import { createRanking, createScore } from './shifts/score';
 import { setPlayerCountry } from './shifts/player';
 import { createDirector } from './scene/director';
 import { ANTICS } from './scene/antics';
@@ -140,6 +140,7 @@ document.body.append(hud.root);
 const shifts = showUi
   ? mountShifts({
       score: createScore(),
+      ranking: createRanking(),
       director: createDirector(scene),
       levels: LEVELS,
       // City i of a level is the i-th largest town of the chosen country.

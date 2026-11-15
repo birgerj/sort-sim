@@ -93,6 +93,16 @@ const server = createServer((req, res) => {
       }, reply.wait ?? 0);
       return;
     }
+    if (path === '/api/name' && req.method === 'POST') {
+      let input: unknown;
+      try {
+        input = await readJson(req, 1024);
+      } catch {
+        return send(res, 400, { error: 'No player or no name.' });
+      }
+      const reply = app.name(input);
+      return send(res, reply.status, reply.body);
+    }
     if (path === '/api/ranking' && req.method === 'GET') {
       const level = url.searchParams.get('level');
       const reply = app.ranking(level == null ? null : Number(level), url.searchParams.get('key'));

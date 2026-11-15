@@ -2,6 +2,8 @@
 import { DatabaseSync } from 'node:sqlite';
 
 export interface Entry {
+  /** The player's key: for the server only, never sent out. */
+  key: string;
   name: string;
   country: string;
   score: number;
@@ -10,6 +12,7 @@ export interface Entry {
 }
 
 export interface TotalEntry {
+  key: string;
   name: string;
   country: string;
   total: number;
@@ -50,13 +53,13 @@ export class Store {
 
   /** The best scores on one level; an earlier result ranks above a later equal one. */
   level(level: number, limit: number): Entry[] {
-    const rows = this.db.prepare(`SELECT p.name, p.country, b.score, b.stars, b.badge FROM best b JOIN players p ON p.key = b.key WHERE b.level = ? ORDER BY b.score DESC, b.at ASC LIMIT ?`).all(level, limit) as unknown as (Omit<Entry, 'badge'> & { badge: number })[];
+    const rows = this.db.prepare(`SELECT b.key, p.name, p.country, b.score, b.stars, b.badge FROM best b JOIN players p ON p.key = b.key WHERE b.level = ? ORDER BY b.score DESC, b.at ASC LIMIT ?`).all(level, limit) as unknown as (Omit<Entry, 'badge'> & { badge: number })[];
     return rows.map((r) => ({ ...r, badge: !!r.badge }));
   }
 
   /** The sum of each player's best per level. */
   totals(limit: number): TotalEntry[] {
-    return this.db.prepare(`SELECT p.name, p.country, SUM(b.score) AS total, COUNT(*) AS levels, SUM(b.stars) AS stars, SUM(b.badge) AS badges, MAX(b.at) AS last FROM best b JOIN players p ON p.key = b.key GROUP BY b.key ORDER BY total DESC, last ASC LIMIT ?`).all(limit) as unknown as TotalEntry[];
+    return this.db.prepare(`SELECT b.key, p.name, p.country, SUM(b.score) AS total, COUNT(*) AS levels, SUM(b.stars) AS stars, SUM(b.badge) AS badges, MAX(b.at) AS last FROM best b JOIN players p ON p.key = b.key GROUP BY b.key ORDER BY total DESC, last ASC LIMIT ?`).all(limit) as unknown as TotalEntry[];
   }
 
   /** A player's own best per level, so another device with the same key gets its progress back. */
