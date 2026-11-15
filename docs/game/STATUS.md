@@ -168,6 +168,20 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
   `XMAS`). For the coordinator: call `setTrophies(levelsWithBadge)` once at start and again with the whole
   list whenever a badge is earned; nothing else. Shots in `shots/trophies/` (free simulation, day and night,
   none / levels 1 to 3 / all ten).
+- Cut-off and cleardown (round 6): a stint has `cutoff` and `end` (door down: the cleardown's `to`, or the
+  departure for the city's last doors) from `timeline.cleardowns`; without that field the 15 minutes before
+  the door comes down (`derived`; the timeline still loads then, so parcels are still sent). From the cut-off:
+  lamp, screen `CLEARDOWN · truck leaves hh:mm`, nothing more down the chute, the crew and the helper of that
+  pair of doors empty the belt and then push every cage with parcels into the trailer; the door stays up until
+  the truck's minute (late: lamp and red screen from cut-off + 15). Measured at 60 frames a second, beats from
+  cut-off to the last cage in: one person + helper, belt of 17 and six full cages: 57; belt of 14 and five
+  cages (level 1): 59; six cages, empty belt: 37 to 38. Two people + helper: belt of 4 and six cages: 43; six
+  cages, empty belt: 19 to 22 (level 3's two-person door: 49). So it fits in 60, with little to spare for one
+  person on a full belt; what is not in at the truck's minute still goes on board in one go (`closeOut`).
+  Robot cities: lines stop at the cut-off, a forklift is called for every box with parcels near their
+  stations, the south truck leaves at the departure with its lamp on from the cut-off. Also fixed: parcels of
+  a city with an open dock now come onto the loop only as fast as the dock may be sent them (strays used to
+  lap for 22 minutes and starve the west doors). Shots: `shots/cleardown/phone-{l1-one,l1-two,l3-robots}-*`.
 - Rough: robots are about 15 % under the model's pace, and full boxes wait for the three forklifts, so robot
   cities fall behind in the hall (the counts on screen are the timeline's); people still appear at their
   place; the nested stacks of empty cages stay at every door; a belt's parcels are taken away (and come round
