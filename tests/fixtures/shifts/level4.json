@@ -27,7 +27,7 @@
     ]
    },
    {
-    "volume": 89.99999999999999,
+    "volume": 90.0,
     "truck": 180,
     "arrivals": [
      {
@@ -84,17 +84,17 @@
   "robots": 0
  },
  "result": {
-  "profit": 502,
-  "score": 842,
-  "stars": 2,
+  "profit": 446,
+  "score": 748,
+  "stars": 1,
   "badge": true,
   "lines": {
    "revenue": 795,
    "bonus": 159,
    "late": 0,
    "left": 0,
-   "docks": 144,
-   "people": 285,
+   "docks": 162,
+   "people": 322,
    "robots": 0,
    "buffer": 23
   },
@@ -102,22 +102,22 @@
    {
     "city": 0,
     "loaded": 240,
-    "planned": 105,
-    "left": 105,
+    "planned": 120,
+    "left": 120,
     "status": "onTime"
    },
    {
     "city": 1,
     "loaded": 200,
-    "planned": 240,
-    "left": 240,
+    "planned": 255,
+    "left": 255,
     "status": "onTime"
    },
    {
     "city": 2,
     "loaded": 90,
-    "planned": 180,
-    "left": 180,
+    "planned": 195,
+    "left": 195,
     "status": "onTime"
    }
   ],
@@ -157,6 +157,9 @@
     32.5,
     20.0,
     7.5,
+    -0.0,
+    -0.0,
+    -0.0,
     -0.0,
     -0.0,
     -0.0,
@@ -461,6 +464,21 @@
     240.0,
     200.0,
     90.0
+   ],
+   [
+    240.0,
+    200.0,
+    90.0
+   ],
+   [
+    240.0,
+    200.0,
+    90.0
+   ],
+   [
+    240.0,
+    200.0,
+    90.0
    ]
   ],
   "buffer": [
@@ -498,6 +516,9 @@
    32.5,
    20.0,
    7.5,
+   -0.0,
+   -0.0,
+   -0.0,
    -0.0,
    -0.0,
    -0.0,
@@ -598,23 +619,46 @@
    0,
    0,
    0,
+   0,
+   0,
+   0,
    0
   ],
   "departures": [
    {
     "city": 0,
-    "at": 105,
+    "at": 120,
     "status": "onTime"
    },
    {
     "city": 1,
-    "at": 240,
+    "at": 255,
     "status": "onTime"
    },
    {
     "city": 2,
-    "at": 180,
+    "at": 195,
     "status": "onTime"
+   }
+  ],
+  "cleardowns": [
+   {
+    "city": 0,
+    "door": 0,
+    "from": 105,
+    "to": 120
+   },
+   {
+    "city": 2,
+    "door": 1,
+    "from": 180,
+    "to": 195
+   },
+   {
+    "city": 1,
+    "door": 0,
+    "from": 240,
+    "to": 255
    }
   ]
  }

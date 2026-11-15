@@ -1,6 +1,6 @@
 {
  "level": 4,
- "profit": 596.6500000000001,
+ "profit": 579.1500000000001,
  "plan": {
   "blocks": [
    {
@@ -13,8 +13,8 @@
    {
     "city": 1,
     "start": 120,
-    "end": 210,
-    "people": 2,
+    "end": 240,
+    "people": 1,
     "docks": 1
    },
    {
@@ -68,21 +68,45 @@
     596.65,
     596.65
    ]
+  },
+  {
+   "note": "rules changed: cut-off and cleardown; block ends clipped",
+   "profit": 575.4
+  },
+  {
+   "iters": 30000,
+   "restarts": [
+    579.15,
+    579.15,
+    579.15,
+    575.4
+   ]
   }
  ],
  "detail": {
-  "profit": 596.6500000000001,
+  "profit": 579.1500000000001,
   "rev": 795.0,
   "bonus": 159.0,
   "late": 0.0,
   "left": 0.0,
-  "dock": 106.25,
-  "staff": 225.0,
+  "dock": 131.25,
+  "staff": 217.5,
   "robots": 0.0,
   "store": 26.099999999999966,
   "peak": 143.99999999999977,
   "ontime": 3,
-  "refused": 0.0
+  "refused": 0.0,
+  "leave": [
+   120,
+   255,
+   195
+  ],
+  "done": [
+   120,
+   0,
+   255
+  ],
+  "nlate": 0
  },
  "peaks": [
   3,
