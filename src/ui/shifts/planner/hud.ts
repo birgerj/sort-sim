@@ -87,10 +87,10 @@ export function shiftHud(o: HudOptions): ShiftHud {
   const order = level.cities.map((_, i) => i).sort((a, b) => level.cities[a]!.truck - level.cities[b]!.truck || a - b);
   // Many cities: two narrow columns of cards, so the words are kept short.
   const compact = order.length > 8;
-  const due = (truck: number) => (compact ? clock(truck) : `truck ${clock(truck)}`);
+  const due = (truck: number) => (compact ? clock(truck) : `cut-off ${clock(truck)}`);
   const cards = order.map((c) => {
     const city = level.cities[c]!;
-    const tag = h('span', { class: 'shp-hud-tag shp-num', title: 'Truck time', text: due(city.truck) });
+    const tag = h('span', { class: 'shp-hud-tag shp-num', title: 'Cut-off', text: due(city.truck) });
     const bar = h('span');
     const line = h('div', { class: 'shp-hud-line shp-num', text: `0 of ${count(city.volume)}${compact ? '' : ' loaded'}` });
     const el = h('button', { class: 'shp-hud-card', type: 'button', style: `--c:${cityColour(c)}`, 'aria-label': `Show ${name(c)}`, onclick: () => o.onFocus?.(c) },

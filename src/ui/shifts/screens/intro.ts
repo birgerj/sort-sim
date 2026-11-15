@@ -16,16 +16,16 @@ const row = (a: string, b: string, cls = '') => h('div', { class: `sh-demo-row $
 const STEPS: Step[] = [
   {
     title: 'You run the night shift',
-    body: 'Every night the hub gets parcels for a number of cities, and every city has a truck that leaves at a set time. You are the planner: you decide which docks open, when, and with how many people.',
+    body: 'Every night the hub gets parcels for a number of cities, and every city has a cut-off: then sorting for its truck stops, the crew loads the last cages, and the truck leaves 15 minutes later. You are the planner: you decide which docks open, when, and with how many people.',
     example: (names) =>
       h(
         'div',
         { class: 'sh-demo' },
         h('div', { class: 'sh-demo-head', text: "Tonight's orders" }),
         ...[
-          [0, '240 parcels', 'truck 23:45'],
-          [1, '200 parcels', 'truck 02:00'],
-          [2, '150 parcels', 'truck 01:00'],
+          [0, '240 parcels', 'cut-off 23:45'],
+          [1, '200 parcels', 'cut-off 02:00'],
+          [2, '150 parcels', 'cut-off 01:00'],
         ].map(([i, parcels, truck]) =>
           h(
             'div',
@@ -52,7 +52,7 @@ const STEPS: Step[] = [
           h('div', { class: 'sh-demo-block', attrs: { style: `background:${cityColor(0)}` } }, h('div', { class: 'sh-demo-block-city', text: cityName(names, 0) }), h('div', { class: 'sh-demo-block-sub', text: '22:00–23:30 · 1 person' })),
           h('div', { class: 'sh-demo-truck' }),
         ),
-        h('div', { class: 'sh-demo-row' }, h('span', { text: '150 parcels' }), h('span', { text: 'truck leaves 00:00' })),
+        h('div', { class: 'sh-demo-row' }, h('span', { text: '150 parcels' }), h('span', { text: 'cut-off 00:00' })),
         h('div', { class: 'sh-demo-people' }, h('span', { text: 'People' }), h('span', { class: 'sh-demo-key sh-demo-key--on', text: '1' }), h('span', { class: 'sh-demo-key', text: '2' })),
       ),
   },

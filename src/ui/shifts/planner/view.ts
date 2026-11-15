@@ -104,9 +104,9 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     const of = (i: number) => (short ? '' : `${name(plan.blocks[i]?.city ?? 0)} ${blockRange(i)}: `);
     const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
     switch (p.kind) {
-      case 'grid': return cap(`${of(p.block)}start and end go on a half hour, the first parcel or the truck time.`);
+      case 'grid': return cap(`${of(p.block)}start and end go on a half hour, the first parcel or the cut-off.`);
       case 'tooShort': return cap(`${of(p.block)}a block lasts at least an hour.`);
-      case 'afterTruck': return cap(`${of(p.block)}ends more than 30 minutes after the truck time (${clock(level.cities[plan.blocks[p.block]!.city]!.truck)}).`);
+      case 'afterTruck': return cap(`${of(p.block)}ends too long after the cut-off (${clock(level.cities[plan.blocks[p.block]!.city]!.truck)}).`);
       case 'noDock': return cap(`${of(p.block)}no dock free. The hall has ${plural(level.docks, 'dock', 'docks')}, and a dock needs 15 minutes to switch city.`);
       case 'tooManyPeople': return `More than ${level.peopleCap} people at work from ${clock(p.at)}.`;
       case 'tooManyRobots': return `The fleet is larger than tonight's ${plural(level.robotsMax, 'robot', 'robots')}.`;
@@ -242,7 +242,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         orders.append(
           h('button', { class: `shp-order${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `--c:${cityColour(c)}`, 'data-key': `order-${c}`, 'aria-pressed': String(sel?.city === c), onclick: () => tapCity(c) },
             h('span', { class: 'shp-order-top' }, h('b', { text: name(c) }), h('span', { class: 'shp-num', text: count(city.volume) })),
-            h('span', { class: `shp-order-sub${short ? ' is-warn' : ''}` }, h('span', { class: 'shp-wide', text: `truck ${clock(city.truck)} · ${cityState(c)}` }), h('span', { class: 'shp-narrow', text: `${count(city.volume)} · ${clock(city.truck)}` }))),
+            h('span', { class: `shp-order-sub${short ? ' is-warn' : ''}` }, h('span', { class: 'shp-wide', text: `cut-off ${clock(city.truck)} · ${cityState(c)}` }), h('span', { class: 'shp-narrow', text: `${count(city.volume)} · ${clock(city.truck)}` }))),
         );
       }
       const goal = plan.blocks.length || plan.robotCities.length ? goalStanding(level, plan) : null;
@@ -258,7 +258,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
               }))
           : null,
         h('div', { class: `shp-goal${goal ? (goal.ok ? ' is-ok' : ' is-off') : ''}` }, h('b', { text: 'Extra goal: ' }), `${level.badge.text}.`, goal ? ` ${goal.text}` : ''),
-        h('div', { class: 'shp-tip' }, h('b', { text: 'Tip. ' }), 'Tap an order for a starter block from its first parcel to its truck. Then change it with the buttons, or drag its ends: steps of half an hour.'),
+        h('div', { class: 'shp-tip' }, h('b', { text: 'Tip. ' }), 'Tap an order for a starter block from its first parcel to its cut-off. Then change it with the buttons, or drag its ends: steps of half an hour.'),
       ];
       side.replaceChildren(...parts.filter((p): p is HTMLDivElement => !!p));
     }
@@ -436,7 +436,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           h('div', {}, h('div', { class: 'shp-cap', text: b ? (own.length > 1 ? `SELECTED BLOCK · ${own.findIndex((e) => e.k === i) + 1} OF ${own.length}` : 'SELECTED BLOCK') : 'SELECTED CITY' }), h('h2', { style: `--c:${cityColour(c)}`, text: name(c) })),
           cost ? h('b', { class: 'shp-num shp-insp-cost', text: money(cost.docks + cost.people) }) : null,
           h('button', { class: 'shp-btn shp-close', type: 'button', 'data-key': 'close', 'aria-label': 'Close', text: 'Close', onclick: () => select(null) })),
-        h('div', { class: 'shp-muted shp-num shp-insp-city', text: `${count(city.volume)} parcels · first ${clock(firstParcel(city))} · truck ${clock(city.truck)}` }),
+        h('div', { class: 'shp-muted shp-num shp-insp-city', text: `${count(city.volume)} parcels · first ${clock(firstParcel(city))} · cut-off ${clock(city.truck)}` }),
       );
       if (b && i !== null) {
         const go = (next: Plan) => commit(next);
