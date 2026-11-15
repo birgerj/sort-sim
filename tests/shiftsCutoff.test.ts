@@ -25,17 +25,19 @@ describe('cut-off and cleardown', () => {
 
   it('one person with a full belt at the cut-off leaves late', () => {
     const { result, timeline } = simulate(busy, plan([dock(0, C, 1)]));
-    // 40 parcels at 1.5 a minute: 27 minutes, 12 past the planned leaving time.
-    expect(timeline.cleardowns).toEqual([{ city: 0, door: 0, from: C, to: C + 27 }]);
-    expect(timeline.departures[0]!.at).toBe(C + 27);
-    expect(result.trucks[0]).toMatchObject({ planned: C + CLEARDOWN_MINUTES, left: C + 27 });
+    // 38.5 parcels on the belt at 1.5 a minute: 26 minutes, 11 past the planned leaving time.
+    expect(timeline.cleardowns).toEqual([{ city: 0, door: 0, from: C, to: C + 26 }]);
+    expect(timeline.departures[0]!.at).toBe(C + 26);
+    expect(result.trucks[0]).toMatchObject({ planned: C + CLEARDOWN_MINUTES, left: C + 26 });
+    // Late: 11 minutes at 0.03 a parcel a minute on the 188.5 parcels it carries.
+    expect(result.lines.late).toBe(62);
     expect(result.lines.late).toBeGreaterThan(0);
     expect(result.lines.bonus).toBe(0);
-    // The belt was loaded all the same: 150 in the block (100 minutes at 1.5), 40 in the cleardown.
-    expect(result.trucks[0]!.loaded).toBe(190);
-    // Dock and person are paid until the door is done: 147 minutes.
-    expect(result.lines.docks).toBe(Math.round((147 / 60) * 25));
-    expect(result.lines.people).toBe(Math.round((147 / 60) * 30));
+    // The belt was loaded all the same: 150 in the block (100 minutes at 1.5), 38.5 in the cleardown.
+    expect(result.trucks[0]!.loaded).toBe(188);
+    // Dock and person are paid until the door is done: 146 minutes.
+    expect(result.lines.docks).toBe(Math.round((146 / 60) * 25));
+    expect(result.lines.people).toBe(Math.round((146 / 60) * 30));
   });
 
   it('two people clear the same belt within the 15 minutes: on time', () => {
@@ -63,8 +65,8 @@ describe('cut-off and cleardown', () => {
     const k = C / 5;
     expect(result.buffer.series[k - 1]!).toBeGreaterThan(50);
     expect(result.buffer.series[k + 1]!).toBe(0);
-    // 300 came in, 190 left with the truck: 110 at 1.50.
-    expect(result.lines.left).toBe(165);
+    // 300 came in, 188.5 left with the truck: 111.5 at 1.50.
+    expect(result.lines.left).toBe(167);
     expect(result.buffer.refused).toBe(0);
   });
 
@@ -81,10 +83,7 @@ describe('cut-off and cleardown', () => {
     expect(early.result.lines.docks).toBe(Math.round((90 / 60) * 25));
   });
 
-  it('after 45 minutes the truck leaves anyway and the belt stays behind', () => {
-    // Two docks with one person each and a trailer swap in the cleardown cannot empty their belts... one
-    // person, 40 on the belt and a swap of 10 minutes still fits; so make the belt useless: a crew that
-    // stands at a door whose trailer swap falls in the cleardown is the slowest case there is.
+  it('a truck never leaves before cut-off + 15 nor after cut-off + 45', () => {
     const { result, timeline } = simulate(busy, plan([dock(0, C, 1)]));
     expect(timeline.departures[0]!.at).toBeLessThanOrEqual(C + 45);
     for (const lv of LEVELS) {
@@ -104,15 +103,18 @@ describe('cut-off and cleardown', () => {
     // 3 a minute against one robot line: the tables are full at the cut-off.
     const slow = simulate(busy, plan([], [0], 1));
     const fast = simulate(busy, plan([], [0], 6));
-    expect(fast.timeline.departures[0]!.at).toBeLessThan(slow.timeline.departures[0]!.at);
-    expect(slow.timeline.departures[0]!.at).toBe(C + 45); // one robot, 17 an hour: not done in 45 minutes
+    expect(fast.timeline.departures[0]!.at).toBe(C + 35); // 60 on three tables, six robots at 17 an hour
+    expect(slow.timeline.departures[0]!.at).toBe(C + 45); // one robot: not done, the truck leaves anyway
     expect(slow.result.lines.late).toBeGreaterThan(0);
+    // What is still on the tables at cut-off + 45 stays behind: one robot carried 41 all night.
+    expect(slow.result.trucks[0]!.loaded).toBe(41);
   });
 
   it('the timeline covers the last departure', () => {
     const { timeline } = simulate(busy, plan([dock(0, C, 1)]));
     expect((timeline.cityLoaded.length - 1) * timeline.stepMinutes).toBeGreaterThanOrEqual(Math.max(...timeline.departures.map((d) => d.at)));
     const row = timeline.cityLoaded[(C + 30) / 5]!;
-    expect(row[0]).toBe(190); // loading went on after the cut-off
+    expect(row[0]).toBe(188.5); // loading went on after the cut-off
+    expect(timeline.cityLoaded[C / 5]![0]).toBe(150);
   });
 });

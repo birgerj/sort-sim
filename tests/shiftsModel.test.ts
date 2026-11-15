@@ -89,15 +89,15 @@ describe('the reference model', () => {
     const { badge: _theirs, ...want } = level4.result;
     expectClose(result, want, 0.1, 'result');
     expectClose(out.timeline, level4.timeline, 0.1, 'timeline');
-    expect(out.result.score).toBe(842);
-    expect(out.result.stars).toBe(2);
+    expect(out.result.score).toBe(742);
+    expect(out.result.stars).toBe(1);
   });
 
-  it('samples every 5 minutes over the shift and half an hour after it', () => {
+  it('samples every 5 minutes over the shift and 45 minutes after it (the longest cleardown)', () => {
     for (const g of golden) {
       const lv = level(g.level);
       const { result, timeline } = simulate(lv, g.plan);
-      const samples = (lv.shiftMinutes + 30) / 5 + 1;
+      const samples = (lv.shiftMinutes + 45) / 5 + 1;
       expect(timeline.cityLoaded.length).toBe(samples);
       expect(timeline.buffer.length).toBe(samples);
       expect(timeline.robotsActive.length).toBe(samples);
@@ -149,26 +149,31 @@ describe('the shift', () => {
   it('leaves behind what nobody loads, and sends a late truck late', () => {
     const lv = level(1);
     const none = simulate(lv, plan([]));
-    expect(none.result.trucks[0]).toEqual({ city: 0, loaded: 0, planned: 120, left: 120, status: 'incomplete' });
+    // Cut-off at 120; with no door open the truck leaves at its planned time, 15 minutes later.
+    expect(none.result.trucks[0]).toEqual({ city: 0, loaded: 0, planned: 135, left: 135, status: 'incomplete' });
     expect(none.result.lines.left).toBe(225); // 150 parcels at 1.50
     expect(none.result.score).toBe(0);
     expect(none.result.stars).toBe(0);
     expect(none.result.badge).toBe(false);
 
-    const late = simulate(lv, plan([block(0, 30, 150, 2)]));
-    expect(late.result.trucks[0]).toMatchObject({ loaded: 150, left: 150, status: 'late' });
-    expect(late.timeline.departures[0]).toEqual({ city: 0, at: 150, status: 'late' });
+    // One person from 60 to the cut-off: a full belt at 120, cleared in 26 minutes, so 11 minutes late.
+    const late = simulate(lv, plan([block(0, 60, 120, 1)]));
+    expect(late.result.trucks[0]).toMatchObject({ loaded: 128, planned: 135, left: 146, status: 'incomplete' });
+    expect(late.timeline.departures[0]).toEqual({ city: 0, at: 146, status: 'incomplete' });
+    expect(late.timeline.cleardowns).toEqual([{ city: 0, door: 0, from: 120, to: 146 }]);
     expect(late.result.lines.bonus).toBe(0);
-    expect(late.result.lines.late).toBe(135); // 150 parcels, 30 minutes, 0.03 a minute
+    expect(late.result.lines.late).toBe(42); // 128.5 parcels, 11 minutes, 0.03 a minute
   });
 
   it('marks the stretches in which the buffer was full', () => {
     const lv = level(6);
     const { result } = simulate(lv, plan([]));
     expect(result.buffer.cap).toBe(lv.bufferCap);
-    expect(result.buffer.fullRanges.length).toBe(1);
-    const [from, to] = result.buffer.fullRanges[0]!;
-    expect(to).toBe(lv.shiftMinutes + 30);
+    // Nobody works: the buffer fills, and at each cut-off the places of that city come free and
+    // fill again with the others' parcels. After the last cut-off it is empty.
+    expect(result.buffer.fullRanges).toEqual([[30, 185], [190, 215], [220, 245], [260, 335]]);
+    expect(result.buffer.series.at(-1)).toBe(0);
+    const [from] = result.buffer.fullRanges[0]!;
     expect(result.buffer.series[from / 5]).toBeGreaterThanOrEqual(lv.bufferCap - 0.5);
     expect(result.buffer.series[from / 5 - 1]).toBeLessThan(lv.bufferCap - 0.5);
   });
@@ -191,7 +196,7 @@ describe('checkPlan', () => {
   it('accepts the half hour, the first parcel and the truck time', () => {
     const lv = level(4); // city 0: truck at 105
     expect(checkPlan(lv, plan([block(0, 0, 105)]))).toEqual([]);
-    expect(checkPlan(lv, plan([block(0, 30, 120)]))).toEqual([]);
+    expect(checkPlan(lv, plan([block(0, 30, 90)]))).toEqual([]);
     expect(checkPlan(level(3), plan([block(3, 30, 180)]))).toEqual([]);
     const l6 = level(6); // city 7: first parcel at 100
     expect(checkPlan(l6, plan([block(7, 100, 330)]))).toEqual([]);
@@ -208,14 +213,15 @@ describe('checkPlan', () => {
     expect(kinds(lv, plan([block(0, 0, 60, 1, 0)]))).toEqual(['grid']);
   });
 
-  it('wants at least an hour, and an end within 30 minutes of the truck', () => {
+  it('wants at least an hour, and no end after the cut-off', () => {
     const lv = level(4);
     expect(checkPlan(lv, plan([block(0, 60, 105)]))).toEqual([{ kind: 'tooShort', block: 0 }]);
     expect(checkPlan(lv, plan([block(1, 0, 30)]))).toEqual([{ kind: 'tooShort', block: 0 }]);
-    expect(checkPlan(lv, plan([block(0, 0, 120)]))).toEqual([]); // 15 minutes late is allowed
-    expect(checkPlan(lv, plan([block(0, 0, 150)]))).toEqual([{ kind: 'afterTruck', block: 0 }]);
-    expect(checkPlan(lv, plan([block(1, 180, 270)]))).toEqual([]);
-    expect(checkPlan(level(1), plan([block(0, 60, 180)]))).toEqual([{ kind: 'afterTruck', block: 0 }]);
+    expect(checkPlan(lv, plan([block(0, 0, 105)]))).toEqual([]); // up to the cut-off
+    expect(checkPlan(lv, plan([block(0, 0, 120)]))).toEqual([{ kind: 'afterTruck', block: 0 }]);
+    expect(checkPlan(lv, plan([block(1, 180, 240)]))).toEqual([]);
+    expect(checkPlan(lv, plan([block(1, 180, 270)]))).toEqual([{ kind: 'afterTruck', block: 0 }]);
+    expect(checkPlan(level(1), plan([block(0, 60, 150)]))).toEqual([{ kind: 'afterTruck', block: 0 }]);
   });
 
   it('counts docks, with 15 minutes to switch city', () => {
@@ -353,9 +359,12 @@ describe('badges', () => {
     const onTime = star(night('allOnTime'), robotsPlan(6));
     expect(onTime.trucks.map((t) => t.status)).toEqual(['onTime', 'onTime', 'onTime', 'onTime']);
     expect(onTime.badge).toBe(true);
-    const late = star(night('allOnTime'), plan([block(0, 0, 240, 2), block(3, 30, 210)], [1, 2], 6));
-    expect(late.trucks[3]!.status).toBe('late');
+    // Late: one person who starts an hour in stands with a full belt at the cut-off and needs 24 minutes.
+    const oneCity = night('allOnTime', { cities: [{ volume: 125, truck: 120, arrivals: [{ from: 0, to: 50, perMinute: 2.5 }] }] });
+    const late = star(oneCity, plan([block(0, 60, 120, 1)]));
+    expect(late.trucks[0]).toMatchObject({ loaded: 125, planned: 135, left: 144, status: 'late' });
     expect(late.badge).toBe(false);
+    expect(star(oneCity, plan([block(0, 60, 120, 2)])).badge).toBe(true); // two people clear it in time
     const short = star(night('allOnTime'), plan([block(0, 0, 240, 2)], [1, 2], 6));
     expect(short.trucks[3]!.status).toBe('incomplete');
     expect(short.badge).toBe(false);
