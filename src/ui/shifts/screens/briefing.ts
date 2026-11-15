@@ -119,7 +119,7 @@ export function briefingScreen(ctx: Ctx, id: number): HTMLElement {
     { class: 'sh-panel sh-panel--soft' },
     h('h2', { class: 'sh-h3', text: 'Profit to beat' }),
     h('ul', { class: 'sh-targets' }, ...targets.map((t, i) => h('li', null, stars(i + 1), h('b', { text: price(t) })))),
-    h('p', { class: 'sh-goal', text: `Extra goal: ${/^[A-Z][a-z]/.test(goal) ? goal[0]!.toLowerCase() + goal.slice(1) : goal}` }),
+    h('p', { class: 'sh-goal', text: `Badge: ${/^[A-Z][a-z]/.test(goal) ? goal[0]!.toLowerCase() + goal.slice(1) : goal}` }),
     trophy ? h('p', { class: 'sh-goal', text: `Trophy for the hall: ${trophy.name}` }) : null,
   );
 
@@ -131,14 +131,14 @@ export function briefingScreen(ctx: Ctx, id: number): HTMLElement {
     h(
       'div',
       { class: 'sh-briefing-grid' },
-      h('div', { class: 'sh-col' }, orders, h('div', { class: 'sh-pair' }, fresh, h('div', { class: 'sh-col' }, setForYou, openTonight))),
+      h('div', { class: 'sh-col' }, orders, h('div', { class: 'sh-pair' }, fresh, openTonight)),
       h(
         'div',
         { class: 'sh-col' },
         priceList,
         toBeat,
         best && best.attempts > 0 ? h('p', { class: 'sh-dim sh-best', text: `Your best so far: ${num(best.best)} points in ${plural(best.attempts, 'attempt')}.` }) : null,
-        h('div', { class: 'sh-sticky' }, button('Plan the shift', () => ctx.go({ name: 'planner', id: level.id }), 'primary', 'sh-btn--big')),
+        h('div', { class: 'sh-sticky' }, button('Back to the plan', () => ctx.go({ name: 'planner', id: level.id }), 'primary', 'sh-btn--big')),
       ),
     ),
   );

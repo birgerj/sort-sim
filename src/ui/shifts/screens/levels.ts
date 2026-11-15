@@ -19,7 +19,7 @@ export function levelsScreen(ctx: Ctx): HTMLElement {
     if (!open) {
       return h('li', null, h('div', { class: 'sh-tile sh-tile--locked', attrs: { 'aria-label': `Level ${level.id}, ${level.name}, locked` } }, h('div', { class: 'sh-tile-top' }, number), name, h('div', { class: 'sh-tile-sub', text: 'Locked' })));
     }
-    const play = () => ctx.go({ name: 'briefing', id: level.id });
+    const play = () => ctx.go({ name: 'planner', id: level.id });
     if (done) {
       return h(
         'li',
@@ -56,7 +56,7 @@ export function levelsScreen(ctx: Ctx): HTMLElement {
     { class: 'sh-screen sh-levels' },
     topBar(
       'Ten Shifts',
-      `${p.doneCount()} of ${LEVEL_COUNT} shifts done · ${p.starCount()} of ${LEVEL_COUNT * 3} stars · par is ${num(LEVEL_COUNT * 1000)}`,
+      `${p.starCount()} of ${LEVEL_COUNT * 3} stars`,
       h('div', { class: 'sh-total' }, h('div', { class: 'sh-total-label', text: 'Total' }), h('div', { class: 'sh-total-value', text: num(p.total()) })),
     ),
     h('ol', { class: 'sh-tiles' }, ...tiles),

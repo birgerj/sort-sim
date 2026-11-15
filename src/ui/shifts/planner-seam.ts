@@ -37,6 +37,6 @@ export type ShiftHud = (o: {
 
 /** Shift minutes per real second behind the speed buttons. */
 /** 1× is the hall's own pace: one shift hour in two and a half minutes. */
-export const SPEEDS = { pause: 0, x1: 0.4, x4: 1.6, x8: 3.2, x16: 6.4 } as const;
+export const SPEEDS = { pause: 0, x1: 0.4, x4: 1.6, x16: 6.4 } as const;
 /** The speed a shift starts at (4×). */
 export const DEFAULT_SPEED = SPEEDS.x4;

@@ -56,7 +56,6 @@ export const stubHud: ShiftHud = (o) => {
     ['Pause', SPEEDS.pause],
     ['1×', SPEEDS.x1],
     ['4×', SPEEDS.x4],
-    ['8×', SPEEDS.x8],
     ['16×', SPEEDS.x16],
   ];
   const keys: HTMLButtonElement[] = speeds.map(([label, v]) => {

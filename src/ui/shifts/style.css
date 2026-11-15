@@ -1979,3 +1979,39 @@
   justify-content: flex-end;
   margin-top: 14px;
 }
+
+/* Result: the cities, one line each, under the money. */
+.sh-root .sh-city-rows {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--sh-line);
+}
+
+.sh-root .sh-city-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.sh-root .sh-city-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sh-root .sh-city-row-load {
+  grid-column: 2 / 3;
+  grid-row: 2;
+  color: var(--sh-grey);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sh-root .sh-city-row .sh-pill {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}

@@ -39,12 +39,12 @@ export function endScreen(ctx: Ctx): HTMLElement {
           { class: 'sh-panel sh-hero' },
           h('div', null, tag('Campaign complete')),
           h('div', { class: 'sh-end-total', text: num(p.total()) }),
-          h('div', { class: 'sh-hero-sub', text: `Final score · par ${num(LEVEL_COUNT * 1000)} · ${p.starCount()} of ${LEVEL_COUNT * 3} stars · ${p.badgeCount()} of ${LEVEL_COUNT} badges` }),
+          h('div', { class: 'sh-hero-sub', text: `Final score · the best known plans make ${num(LEVEL_COUNT * 1000)} · ${p.starCount()} of ${LEVEL_COUNT * 3} stars · ${p.badgeCount()} of ${LEVEL_COUNT} badges` }),
         ),
         h('p', { class: 'sh-panel sh-panel--soft sh-note' }, h('b', { text: `Ten shifts, ${num(parcels)} parcels. ` }), `Your weakest shift is level ${weakest.id}. Replaying a level only ever raises your total: the best score per level counts.`),
         h('div', { class: 'sh-sticky' }, h('div', { class: 'sh-actions sh-actions--fill' }, button('Free simulation', () => ctx.free()), button('All levels', () => ctx.go({ name: 'levels' }), 'primary'))),
       ),
-      h('section', { class: 'sh-panel' }, h('div', { class: 'sh-panel-head' }, h('h2', { class: 'sh-h2', text: 'Best score per level' }), h('span', { class: 'sh-dim sh-small', text: 'par is 1,000 a level' })), h('ol', { class: 'sh-best-list' }, ...rows)),
+      h('section', { class: 'sh-panel' }, h('div', { class: 'sh-panel-head' }, h('h2', { class: 'sh-h2', text: 'Best score per level' }), h('span', { class: 'sh-dim sh-small', text: '1,000 is the best known plan' })), h('ol', { class: 'sh-best-list' }, ...rows)),
     ),
   );
 }

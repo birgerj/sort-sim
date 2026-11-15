@@ -32,7 +32,6 @@ const SPEEDS = [
   { label: 'Pause', value: 0 },
   { label: '1×', value: 0.4 },
   { label: '4×', value: 1.6 },
-  { label: '8×', value: 3.2 },
   { label: '16×', value: 6.4 },
 ] as const;
 const STATUS: Record<TruckStatus, string> = { onTime: 'On time', late: 'Late', incomplete: 'Not complete' };
@@ -124,7 +123,11 @@ export function shiftHud(o: HudOptions): ShiftHud {
   const spent = h('b', { class: 'shp-num', text: money(0) });
   const balance = h('b', { class: 'shp-num shp-hud-balance', text: money(0) });
   const last = h('div', { class: 'shp-hud-last', 'aria-live': 'polite' });
-  const moneyCard = h('div', { class: 'shp-hud-money' },
+  // The balance alone; a tap opens what was earned and what it cost so far.
+  const moneyCard = h('button', { class: 'shp-hud-money', type: 'button', 'aria-expanded': 'false', 'aria-label': 'Balance; tap for earned and costs', onclick: () => {
+    const open = moneyCard.classList.toggle('is-open');
+    moneyCard.setAttribute('aria-expanded', String(open));
+  } },
     h('span', { text: 'Earned so far' }), earned,
     h('span', { text: 'Costs so far' }), spent,
     h('span', { class: 'shp-hud-sum', text: 'Balance' }), balance);
@@ -194,7 +197,7 @@ export function shiftHud(o: HudOptions): ShiftHud {
     },
     setTimeline(t: Timeline) {
       timeline = t;
-      if (!over) sub.textContent = 'Plan locked · watch the shift';
+      if (!over) sub.textContent = '';
       draw();
     },
     setAuto(on: boolean) {

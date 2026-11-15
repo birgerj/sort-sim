@@ -1,4 +1,5 @@
-// How to play: four steps, each with a small example made of the game's own parts.
+// How to play: two cards, each with a small example made of the game's own parts. (The levels
+// teach the rest, one thing at a time.)
 // Shown by itself the first time; later it is replayed from the level screen.
 import { CURRENCY, PRICES, RATES } from '../../../shifts/contract';
 import { button, h, mark, stars, tag } from '../dom';
@@ -15,32 +16,8 @@ const row = (a: string, b: string, cls = '') => h('div', { class: `sh-demo-row $
 
 const STEPS: Step[] = [
   {
-    title: 'You run the night shift',
-    body: 'Every night the hub gets parcels for a number of cities, and every city has a cut-off: then sorting for its truck stops, the crew loads the last cages, and the truck leaves 15 minutes later. You are the planner: you decide which docks open, when, and with how many people.',
-    example: (names) =>
-      h(
-        'div',
-        { class: 'sh-demo' },
-        h('div', { class: 'sh-demo-head', text: "Tonight's orders" }),
-        ...[
-          [0, '240 parcels', 'cut-off 23:45'],
-          [1, '200 parcels', 'cut-off 02:00'],
-          [2, '150 parcels', 'cut-off 01:00'],
-        ].map(([i, parcels, truck]) =>
-          h(
-            'div',
-            { class: 'sh-demo-order' },
-            h('span', { class: 'sh-swatch', attrs: { style: `background:${cityColor(i as number)}` } }),
-            h('b', { text: cityName(names, i as number) }),
-            h('span', { text: String(parcels) }),
-            h('span', { text: String(truck) }),
-          ),
-        ),
-      ),
-  },
-  {
-    title: 'Give every city a dock',
-    body: `A block says from when to when a city is loaded, and with how many people. One person loads ${RATES.onePerson} parcels an hour, two load ${RATES.twoPeople}.`,
+    title: 'What you plan',
+    body: `Every city has parcels coming in and a cut-off: then sorting for its truck stops and the truck leaves 15 minutes later. You plan blocks: from when to when a city gets a dock, and with how many people. One person loads ${RATES.onePerson} parcels an hour, two load ${RATES.twoPeople}.`,
     example: (names) =>
       h(
         'div',
@@ -57,8 +34,8 @@ const STEPS: Step[] = [
       ),
   },
   {
-    title: 'Money in, money out',
-    body: `Every parcel on its truck earns ${CURRENCY} ${PRICES.parcel.toFixed(2)}, and a truck that leaves on time and complete earns a bonus. Docks, people and robots cost money for as long as you use them. Late trucks and parcels left behind cost more still. What is left is your profit, and profit is your score.`,
+    title: 'How you score',
+    body: `Every parcel on its truck earns ${CURRENCY} ${PRICES.parcel.toFixed(2)}, and a truck that leaves on time and complete earns a bonus. Docks, people and robots cost money for as long as you use them; parcels left behind cost more. Start the shift, watch the hall play your night, see where the money went, and try again for more stars.`,
     example: () =>
       h(
         'div',
@@ -70,20 +47,6 @@ const STEPS: Step[] = [
         row('Dock, an hour', price(PRICES.dockPerHour)),
         row('Person, an hour', price(PRICES.personPerHour)),
         row('Left behind', `− ${price(PRICES.leftBehind)}`, 'sh-bad'),
-      ),
-  },
-  {
-    title: 'Start the shift and watch',
-    body: 'Once you start, the plan is locked and the hall plays your night: doors open, people load, trucks leave. Speed it up or skip to the result. Then you see where the money went, adjust the plan and try again.',
-    example: () =>
-      h(
-        'div',
-        { class: 'sh-demo' },
-        h('div', { class: 'sh-demo-clock' }, h('b', { text: '00:30' }), h('span', { class: 'sh-demo-key', text: '1×' }), h('span', { class: 'sh-demo-key sh-demo-key--on', text: '4×' }), h('span', { class: 'sh-demo-key', text: '16×' })),
-        h('div', { class: 'sh-demo-progress' }, h('div', { class: 'sh-demo-progress-fill' })),
-        h('div', { class: 'sh-demo-head', text: 'Result' }),
-        h('div', { class: 'sh-demo-row' }, stars(2), h('b', { text: `${CURRENCY} 560` })),
-        row('Level score', '837'),
       ),
   },
 ];

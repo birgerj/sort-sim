@@ -26,6 +26,24 @@ interface Selection {
 
 const clonePlan = (p: Plan): Plan => ({ blocks: p.blocks.map((b) => ({ ...b })), robotCities: [...p.robotCities], robots: p.robots });
 
+const FRESH_KEY = 'sortsim.shifts.fresh';
+function freshSeen(): number[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FRESH_KEY) ?? '[]') as unknown;
+    return Array.isArray(v) ? v.filter((n): n is number => typeof n === 'number') : [];
+  } catch {
+    return [];
+  }
+}
+const seenFresh = (id: number): boolean => freshSeen().includes(id);
+function rememberFresh(id: number): void {
+  try {
+    localStorage.setItem(FRESH_KEY, JSON.stringify([...new Set([...freshSeen(), id])]));
+  } catch {
+    /* no storage: it shows again next time */
+  }
+}
+
 export function plannerView(o: PlannerOptions): HTMLElement {
   const { level, cityNames } = o;
   const name = (c: number) => cityName(cityNames, c);
@@ -51,13 +69,17 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   const fleet = h('div', { class: 'shp-fleet' });
   const legend = h('div', { class: 'shp-legend' });
   const board = h('section', { class: 'shp-board', 'aria-label': 'Plan' }, scroll, fleet, legend);
+  // Profit needed for one, two and three stars (half, three quarters and nine tenths of the level's par).
+  const targets = [0.5, 0.75, 0.9].map((f) => Math.round(level.par * f));
+  // What is new in this level: shown until the player closes it, once per level.
+  let freshOpen = !!level.notes.fresh && !seenFresh(level.id);
   const insp = h('aside', { class: 'shp-insp', 'aria-label': 'Selected block' });
   const bar = h('footer', { class: 'shp-bar' });
   const ask = h('div', { class: 'shp-ask', hidden: true });
   root.append(
     h('header', { class: 'shp-head' },
       h('div', { class: 'shp-title' }, mark(),
-        h('div', {}, h('h1', {}, h('span', { class: 'shp-wide', text: 'Level ' }), `${level.id} · ${level.name}`), h('p', {}, 'Planning · ', h('span', { class: 'shp-wide', text: 'take your time, no clock is running' }), h('span', { class: 'shp-narrow', text: 'no clock running' })))),
+        h('div', {}, h('h1', {}, h('span', { class: 'shp-wide', text: 'Level ' }), `${level.id} · ${level.name}`), h('p', { title: 'Profit to beat for one, two and three stars' }, h('span', { class: 'shp-wide', text: 'Profit to beat · ' }), targets.map((t, i) => `${'★'.repeat(i + 1)} ${money(t)}`).join(' · ')))),
       h('button', { class: 'shp-btn', type: 'button', text: 'Briefing', onclick: () => o.onBack() })),
     h('div', { class: 'shp-main' }, side, board, insp),
     bar,
@@ -247,6 +269,10 @@ export function plannerView(o: PlannerOptions): HTMLElement {
       }
       const goal = plan.blocks.length || plan.robotCities.length ? goalStanding(level, plan) : null;
       const parts = [
+        freshOpen
+          ? h('div', { class: 'shp-fresh' }, h('span', {}, h('b', { text: 'New in this level. ' }), level.notes.fresh),
+              h('button', { class: 'shp-fresh-x', type: 'button', 'aria-label': 'Close', text: '✕', onclick: () => { freshOpen = false; rememberFresh(level.id); render(); } }))
+          : null,
         h('div', { class: 'shp-cap', text: 'ORDERS · TAP TO PLAN' }),
         orders,
         list.length
@@ -257,7 +283,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
                 return h('button', { class: 'shp-problem', type: 'button', 'data-key': `problem-${i}`, text: problemText(p), onclick: () => (b !== null ? select({ city: plan.blocks[b]!.city, block: b }, true) : fleet.querySelector<HTMLElement>('input')?.focus()) });
               }))
           : null,
-        h('div', { class: `shp-goal${goal ? (goal.ok ? ' is-ok' : ' is-off') : ''}` }, h('b', { text: 'Extra goal: ' }), `${level.badge.text}.`, goal ? ` ${goal.text}` : ''),
+        h('div', { class: `shp-goal${goal ? (goal.ok ? ' is-ok' : ' is-off') : ''}` }, h('b', { text: 'Badge: ' }), `${level.badge.text}.`, goal ? ` ${goal.text}` : ''),
         h('div', { class: 'shp-tip' }, h('b', { text: 'Tip. ' }), 'Tap an order for a starter block from its first parcel to its cut-off. Then change it with the buttons, or drag its ends: steps of half an hour.'),
       ];
       side.replaceChildren(...parts.filter((p): p is HTMLDivElement => !!p));

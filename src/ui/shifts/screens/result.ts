@@ -69,7 +69,7 @@ export function resultScreen(ctx: Ctx, o: Outcome): HTMLElement {
   const lines = result.lines;
 
   // Hero: stars, profit, par, score.
-  const sub = [`Profit`, `par is ${money(level.par)}`];
+  const sub = [`Profit`, `three stars from ${money(Math.round(level.par * 0.9))}`];
   if (previous) {
     const d = Math.round(result.profit - previous.profit);
     sub.push(d === 0 ? 'the same as last time' : `${money(Math.abs(d))} ${d > 0 ? 'better' : 'worse'} than last time`);
@@ -87,7 +87,24 @@ export function resultScreen(ctx: Ctx, o: Outcome): HTMLElement {
   const trophy = TROPHIES.find((t) => t.level === level.id);
   const badge = result.badge
     ? h('p', { class: 'sh-badge sh-badge--got' }, h('b', { text: 'Badge earned. ' }), `${level.badge.text}.`, trophy ? h('span', { class: 'sh-badge-trophy', text: ` Trophy in the hall: ${trophy.name}.` }) : null)
-    : h('p', { class: 'sh-badge' }, h('b', { text: p.level(level.id)?.badge ? 'Extra goal not met this time. ' : 'Extra goal not met. ' }), `${level.badge.text}.`);
+    : h('p', { class: 'sh-badge' }, h('b', { text: p.level(level.id)?.badge ? 'Badge not earned this time. ' : 'Badge not earned. ' }), `${level.badge.text}.`);
+
+  // The cities, one line each, in the same panel as the money: what went on the truck and how it left.
+  const cityRows = result.trucks.map((t) => {
+    const volume = level.cities[t.city]?.volume ?? t.loaded;
+    const behind = Math.max(0, Math.round(volume - t.loaded));
+    const [label, cls] = STATUS[t.status] ?? [t.status, ''];
+    const lateBy = t.status === 'late' ? Math.max(0, Math.round(t.left - t.planned)) : 0;
+    return h(
+      'li',
+      { class: 'sh-city-row' },
+      h('span', { class: 'sh-swatch sh-swatch--small', attrs: { style: `background:${cityColor(t.city)}` } }),
+      h('b', { class: 'sh-city-row-name', text: cityName(ctx.names, t.city) }),
+      h('span', { class: 'sh-city-row-load', text: behind ? `${num(t.loaded)} of ${num(volume)} · ${num(behind)} left behind` : `${num(t.loaded)} of ${num(volume)}` }),
+      h('span', { class: `sh-pill ${cls}`, text: lateBy ? `${label} ${lateBy} min` : label }),
+    );
+  });
+  const cities = h('ul', { class: 'sh-city-rows', attrs: { 'aria-label': 'Cities' } }, ...cityRows);
 
   // Profit and loss.
   const shipped = result.trucks.reduce((s, t) => s + t.loaded, 0);
@@ -123,42 +140,16 @@ export function resultScreen(ctx: Ctx, o: Outcome): HTMLElement {
     const [text, cls] = change(result.profit - previous.profit);
     cells.push(h('div', { class: `sh-pl-total sh-pl-change sh-strong ${cls}`, text }));
   }
-  const pl = h('section', { class: 'sh-panel' }, h('div', { class: `sh-pl${previous ? ' sh-pl--3' : ''}` }, ...cells), previous ? null : h('p', { class: 'sh-dim sh-small sh-pl-first', text: 'Your first attempt. Next time you see here what changed.' }));
+  const pl = h('section', { class: 'sh-panel' }, h('div', { class: `sh-pl${previous ? ' sh-pl--3' : ''}` }, ...cells), cities, previous ? null : h('p', { class: 'sh-dim sh-small sh-pl-first', text: 'Your first attempt. Next time you see here what changed.' }));
 
-  // Trucks.
-  const trucks = h(
-    'section',
-    { class: 'sh-panel sh-panel--soft' },
-    h('h2', { class: 'sh-h3', text: 'Trucks' }),
-    h(
-      'table',
-      { class: 'sh-trucks' },
-      h('thead', null, h('tr', null, ...['City', 'Loaded', 'Planned', 'Left', 'Status'].map((t) => h('th', { text: t, attrs: { scope: 'col' } })))),
-      h(
-        'tbody',
-        null,
-        ...result.trucks.map((t) => {
-          const volume = level.cities[t.city]?.volume ?? t.loaded;
-          const [label, cls] = STATUS[t.status] ?? [t.status, ''];
-          return h(
-            'tr',
-            null,
-            h('th', { attrs: { scope: 'row' } }, h('span', { class: 'sh-swatch sh-swatch--small', attrs: { style: `background:${cityColor(t.city)}` } }), cityName(ctx.names, t.city)),
-            h('td', { text: `${num(t.loaded)} of ${num(volume)}` }),
-            h('td', { text: clock(t.planned) }),
-            h('td', { text: clock(t.left) }),
-            h('td', null, h('span', { class: `sh-pill ${cls}`, text: label })),
-          );
-        }),
-      ),
-    ),
-  );
+  // The buffer chart only when the buffer mattered: half full or more, full, or parcels refused.
+  const bufferMattered = Math.max(0, ...result.buffer.series) >= result.buffer.cap / 2 || result.buffer.fullRanges.length > 0 || (result.buffer.refused ?? 0) > 0;
 
   // Where to next.
   const last = level.id >= LEVEL_COUNT;
   const canGoOn = last ? p.doneCount() >= LEVEL_COUNT : p.unlocked(level.id + 1);
   const adjust = button('Adjust plan', () => ctx.go({ name: 'planner', id: level.id }), canGoOn ? 'plain' : 'primary');
-  const onward = button(last ? 'End score' : 'Next level', () => ctx.go(last ? { name: 'end' } : { name: 'briefing', id: level.id + 1 }), canGoOn ? 'primary' : 'plain');
+  const onward = button(last ? 'End score' : 'Next level', () => ctx.go(last ? { name: 'end' } : { name: 'planner', id: level.id + 1 }), canGoOn ? 'primary' : 'plain');
   onward.disabled = !canGoOn;
   const hint = canGoOn ? null : h('p', { class: 'sh-dim sh-small', text: last ? 'The end score opens when every level has a star.' : 'One star opens the next level: adjust the plan and run the shift again.' });
 
@@ -174,6 +165,6 @@ export function resultScreen(ctx: Ctx, o: Outcome): HTMLElement {
     'div',
     { class: 'sh-screen sh-result' },
     topBar(`Level ${level.id} · ${level.name}`, 'Result', button('All levels', () => ctx.go({ name: 'levels' }))),
-    h('div', { class: 'sh-result-grid' }, h('div', { class: 'sh-col' }, hero, badge, h('div', { class: 'sh-sticky sh-col' }, h('div', { class: 'sh-actions sh-actions--fill' }, adjust, onward), hint)), h('div', { class: 'sh-col' }, pl, bufferChart(result, level.shiftMinutes), trucks, total)),
+    h('div', { class: 'sh-result-grid' }, h('div', { class: 'sh-col' }, hero, badge, h('div', { class: 'sh-sticky sh-col' }, h('div', { class: 'sh-actions sh-actions--fill' }, adjust, onward), hint)), h('div', { class: 'sh-col' }, pl, bufferMattered ? bufferChart(result, level.shiftMinutes) : null, total)),
   );
 }
