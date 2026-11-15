@@ -1947,3 +1947,17 @@
     position: static;
   }
 }
+
+/* On a wide screen the camera places fit on one line, above the keys they belong to. */
+@media (min-width: 761px) {
+  .shp-hud .shp-hud-views {
+    left: auto;
+    flex-wrap: nowrap;
+  }
+  .shp-hud .shp-hud-views .shp-pick {
+    flex: none;
+    min-height: 40px;
+    padding: 0 14px;
+    white-space: nowrap;
+  }
+}

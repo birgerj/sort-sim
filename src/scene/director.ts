@@ -34,6 +34,7 @@ import {
   type ShiftSchedule,
   type Stint,
 } from '../sim/shiftSchedule';
+import { DOCK_BELT_END } from './docks';
 import type { ShiftHooks, Sorter } from './sorter';
 import type { ScreenTone } from './trucks';
 
@@ -595,6 +596,11 @@ export function createDirector(scene: Sorter): Director {
     const x = scene.shiftParts().trucks.docks[d]!.x;
     return { eye: v(x + 6, 4.6, -19.5), look: v(x + 1, 1.3, -34), name };
   };
+  /** A city picked by the player: its belt end and cages in the middle, so turning the view goes round them. */
+  const cityShot = (d: number, name: string): Shot => {
+    const x = scene.shiftParts().trucks.docks[d]!.x;
+    return { eye: v(x + 3, 6, DOCK_BELT_END + 8.5), look: v(x, 1, DOCK_BELT_END - 1.5), name };
+  };
   const rackShot = (): Shot => {
     const [x, z] = scene.shiftParts().lift;
     return { eye: v(x - 15, 6.5, z), look: v(x + 2, 4.6, z), name: 'Buffer rack' };
@@ -919,11 +925,11 @@ export function createDirector(scene: Sorter): Director {
       const other = next ?? last;
       const taken = other ? schedule.stints.some((x) => x.door === other.door && x.city !== city && openNow(x)) : false;
       const shot = open
-        ? doorShot(open.door, cityName(city))
+        ? cityShot(open.door, cityName(city))
         : n >= 0
           ? { ...robotShot(n), name: `${cityName(city)}: robots` }
           : other && !taken
-            ? doorShot(other.door, next ? `${cityName(city)}: door ${other.door + 1}, not open yet` : `${cityName(city)}: door ${other.door + 1}, truck gone`)
+            ? cityShot(other.door, next ? `${cityName(city)}: door ${other.door + 1}, not open yet` : `${cityName(city)}: door ${other.door + 1}, truck gone`)
             : next
               ? { ...rackShot(), name: `${cityName(city)}: waiting in the buffer` }
               : null;
