@@ -11,7 +11,7 @@ The TypeScript model in `src/shifts/model` must give the same profit as `evaluat
 `tests/fixtures/shifts/golden.json` (to the cent). `sim()` is the definition: one-minute steps, in this
 order per minute: arrivals, onto belts and tables, the rest into the buffer (refused when it is full),
 buffer back out (150 an hour, earliest truck first), docks load, robots load, blocks that end hand back what
-is on their belt unless the same door goes on for the same city. `par.py invariance` checks that cutting
+is on their belt unless the same door goes on for the same city or the block ends at the cut-off (cleardown). `par.py invariance` checks that cutting
 a block in two changes nothing.
 
 A plan in the app's shape (`src/shifts/contract.ts`) is turned into the solver's shape by `to_solver()`
