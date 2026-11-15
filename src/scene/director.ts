@@ -854,11 +854,26 @@ export function createDirector(scene: Sorter): Director {
 
     focusCity(city) {
       if (!active || !schedule) return;
-      // Its dock that is open now, else the one it gets next or had last; else its robot stations.
+      // Show where this city is being handled NOW, never a door that is busy with another city:
+      // its open dock; else its robots; else its next or last door when that door is free; else
+      // the buffer rack, where its parcels wait for a dock.
       const mine = schedule.stints.filter((x) => x.city === city);
-      const st = mine.find((x) => minute >= x.signFrom && minute < x.end) ?? mine.filter((x) => x.start > minute).sort((a, b) => a.start - b.start)[0] ?? [...mine].sort((a, b) => b.end - a.end)[0];
+      const openNow = (x: { signFrom: number; end: number }) => minute >= x.signFrom && minute < x.end;
+      const open = mine.find(openNow);
       const n = schedule.robotCities.findIndex((rc) => rc.city === city);
-      const shot = st ? doorShot(st.door, cityName(city)) : n >= 0 ? robotShot(n) : null;
+      const next = mine.filter((x) => x.start > minute).sort((a, b) => a.start - b.start)[0];
+      const last = [...mine].sort((a, b) => b.end - a.end)[0];
+      const other = next ?? last;
+      const taken = other ? schedule.stints.some((x) => x.door === other.door && x.city !== city && openNow(x)) : false;
+      const shot = open
+        ? doorShot(open.door, cityName(city))
+        : n >= 0
+          ? { ...robotShot(n), name: `${cityName(city)}: robots` }
+          : other && !taken
+            ? doorShot(other.door, next ? `${cityName(city)}: door ${other.door + 1}, not open yet` : `${cityName(city)}: door ${other.door + 1}, truck gone`)
+            : next
+              ? { ...rackShot(), name: `${cityName(city)}: waiting in the buffer` }
+              : null;
       if (!shot) return;
       setAuto(false);
       go(shot, false);
