@@ -181,6 +181,15 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
   stations, the south truck leaves at the departure with its lamp on from the cut-off. Also fixed: parcels of
   a city with an open dock now come onto the loop only as fast as the dock may be sent them (strays used to
   lap for 22 minutes and starve the west doors). Shots: `shots/cleardown/phone-{l1-one,l1-two,l3-robots}-*`.
+- Round 7: the schedule follows `timeline.cleardowns` (a block that ends at its city's cut-off keeps its door
+  until `to`, the truck's doors are those in cleardown, robots stop at the truck time; a block without one
+  puts its cages in during its last 5 minutes; a door opens for its next block only when it is done). In a
+  shift the cages of a dock are filled one at a time (`Docks.fillCage`); the belt always comes first, cage runs
+  (full cage in, empty fetched, the half-full one after 8 beats of empty belt) only when the belt is empty or
+  no cage has room; with two people the second runs cages until four parcels wait, then sorts too; two idle
+  people talk at the belt end. Cleardown measured on a belt that backs up all block (60 beats available): with
+  the helper, one person (belt 16, 3 cages) 53 beats, two people (belt 6, 4 cages) 30; without the helper 61
+  and 58: the helper stays. Level 1 and level 4 clear in 1 to 7 beats. Shots: `shots/waterfall/`.
 - Rough: robots are about 15 % under the model's pace, and full boxes wait for the three forklifts, so robot
   cities fall behind in the hall (the counts on screen are the timeline's); people still appear at their
   place; the nested stacks of empty cages stay at every door; a belt's parcels are taken away (and come round
