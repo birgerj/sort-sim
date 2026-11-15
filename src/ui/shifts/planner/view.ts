@@ -4,7 +4,7 @@
 // a rough buffer guess. No profit, no real buffer figures, no word on trucks being on time: those
 // come with the result. This file never touches the score service.
 import { CLEARDOWN_MINUTES, CURRENCY, PRICES, RATES, type City, type Level, type Plan, type PlanProblem } from '../../../shifts/contract';
-import { arrivalRate, arrivedBy, dockRate, firstParcel, nominalFlow, robotLines } from '../../../shifts/estimate';
+import { SWAP_MINUTES, arrivalRate, arrivedBy, dockRate, firstParcel, nominalFlow, robotLines } from '../../../shifts/estimate';
 import { cityColour, cityName, clock, count, h, mark, money, plural } from './dom';
 import { addBlock, canStep, moveBlock, removeBlock, setEnd, setPeople, setRobotCity, setRobots, setStart, stepEnd, stepStart } from './edit';
 import { assignDoors, blockCost, busyDockSteps, checkPlan, fixedCosts, goalStanding, mostToEarn, peak, peopleSteps, unservedCities, type Step, capacitySteps, influxSteps } from './rules';
@@ -136,6 +136,20 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     commit(next, { city, block: sel?.city === city ? sel.block : null });
   }
 
+  /** A small trailer: marks a trailer swap. */
+  function trailer(): SVGSVGElement {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'shp-trailer');
+    svg.setAttribute('viewBox', '0 0 16 10');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '10');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M1 1h10v6H1zM11.5 3h2.6l1.2 1.8V7h-3.8M4 9.4a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4ZM12.6 9.4a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4Z');
+    svg.append(path);
+    return svg;
+  }
+
   /** A small standing figure: one per person on a dock. */
   function figure(): SVGSVGElement {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -225,7 +239,16 @@ export function plannerView(o: PlannerOptions): HTMLElement {
 
     const problems = checkPlan(level, plan);
     const doors = assignDoors(level, plan.blocks);
-    const flow = nominalFlow(level, plan);
+    // Trailer runs: bars of one city that follow each other on the same door share a trailer.
+    const runs = plan.blocks.map((_, i) => i);
+    {
+      const byDoor = [...doors.uses].sort((p, q) => p.door - q.door || p.start - q.start);
+      byDoor.forEach((u, k) => {
+        const prev = byDoor[k - 1];
+        if (prev && prev.door === u.door && prev.city === u.city && prev.end === u.start) runs[u.block] = runs[prev.block]!;
+      });
+    }
+    const flow = nominalFlow(level, plan, runs);
     const costs = fixedCosts(level, plan);
     const badBlocks = new Map<number, string[]>();
     for (const p of problems) {
@@ -403,6 +426,18 @@ export function plannerView(o: PlannerOptions): HTMLElement {
               h('span', { class: `shp-fill${fill > 1.005 ? ' is-over' : ''}` }, h('span', { style: `width:${Math.min(100, Math.round(fill * 100))}%` }))),
           );
         }
+        // Where a trailer is expected to be full: the bar has a gap for the swap, a trailer under it.
+        for (const sw of flow.swaps) {
+          const b = plan.blocks[sw.block]!;
+          if (b.city !== c) continue;
+          const to = Math.min(b.end, sw.at + SWAP_MINUTES);
+          const top = 3 + lane.get(sw.block)! * (blockH + 4);
+          const gw = Math.max(6, x(to) - x(sw.at));
+          track.append(
+            h('div', { class: 'shp-swap', style: `left:${x(sw.at)}px;width:${gw}px;top:${top}px;height:${blockH}px`, title: `Trailer full around ${clock(sw.at)}: ${SWAP_MINUTES} minutes to swap` }),
+            h('div', { class: 'shp-swap-mark', style: `left:${x(sw.at) + gw / 2}px;top:${top + blockH - 1}px` }, trailer()),
+          );
+        }
         const isBad = mine.some((e) => badBlocks.has(e.i));
         // What this city's dock crews can load in their planned hours (a limit, not a forecast).
         const room = Math.round(mine.reduce((a, e) => a + flow.blocks[e.i]!.capacity, 0));
@@ -478,6 +513,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         h('span', {}, h('i', { class: 'shp-key-fill' }), 'how full a block is: the work that can reach it against what its crew can load'),
         h('span', {}, h('i', { class: 'shp-key-in' }), 'parcels coming in per hour'),
         h('span', {}, h('i', { class: 'shp-key-can' }), 'what docks and robots can load per hour'),
+        h('span', { class: 'shp-key-swap' }, trailer(), `gap in a bar: the trailer is full, ${SWAP_MINUTES} minutes to swap`),
         ...(level.docks <= 6 ? [h('span', {}, h('i', { class: 'shp-key-switch' }), 'a dock switching city, 15 min')] : []),
       );
     }
@@ -513,7 +549,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
       );
       if (b && i !== null) {
         const go = (next: Plan) => commit(next);
-        const f = nominalFlow(level, plan).blocks[i]!;
+        const f = flow.blocks[i]!;
         parts.push(
           h('div', { class: 'shp-controls' },
             ...stepper('Start', clock(b.start), 'start', canStep(level, plan, i, 'start', -1) ? () => go(stepStart(level, plan, i, -1)) : null, canStep(level, plan, i, 'start', 1) ? () => go(stepStart(level, plan, i, 1)) : null, 'Start earlier', 'Start later'),
@@ -526,6 +562,9 @@ export function plannerView(o: PlannerOptions): HTMLElement {
         );
         const bad = badBlocks.get(i);
         if (bad) parts.push(h('div', { class: 'shp-alert', role: 'alert', text: bad.join(' ') }));
+        for (const sw of flow.swaps.filter((q) => q.block === i)) {
+          parts.push(h('div', { class: 'shp-swap-note shp-num' }, trailer(), h('span', {}, 'Trailer full around ', h('b', { text: clock(sw.at) }), `: ${SWAP_MINUTES} minutes to swap, no loading meanwhile.`)));
+        }
         const reach = f.loaded + f.waitingAtEnd;
         parts.push(
           h('div', { class: 'shp-facts shp-num shp-wide' },

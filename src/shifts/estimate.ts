@@ -54,14 +54,22 @@ export interface NominalFlow {
   }[];
   /** Per city: parcels not loaded by the end of the night at these nominal rates. */
   left: number[];
+  /** Trailer swaps (only when `runs` is given): the block that stands still, and the minute it starts. */
+  swaps: { block: number; at: number }[];
 }
+
+/** Minutes a dock does not load while a full trailer is swapped for an empty one. */
+export const SWAP_MINUTES = 10;
 
 /**
  * Walks through the night minute by minute. Parcels of a city wait until one of its open docks
  * or the robots take them. Docks go first; the robots share the fleet between their cities by
  * what waits there, never more than 60 an hour per line.
  */
-export function nominalFlow(level: Level, plan: Plan): NominalFlow {
+export function nominalFlow(level: Level, plan: Plan, runs?: readonly number[]): NominalFlow {
+  // `runs`: per block, which trailer run it belongs to (the same door and city without a break).
+  // With it a run stands still for the swap each time its trailer is full, and what the block
+  // can load shrinks by that.
   const minutes = level.shiftMinutes + RATES.maxLateMinutes;
   const n = level.cities.length;
   const wait = new Array<number>(n).fill(0);
@@ -71,6 +79,14 @@ export function nominalFlow(level: Level, plan: Plan): NominalFlow {
   const lines = level.cities.map(robotLines);
   const firsts = level.cities.map(firstParcel);
   const outage = level.robotOutage;
+  const rates = blocks.map((x, i) => x.capacity / Math.max(1, plan.blocks[i]!.end - plan.blocks[i]!.start));
+  const inTrailer = new Map<number, number>();
+  const stillUntil = new Map<number, number>();
+  const swaps: { block: number; at: number }[] = [];
+  const rate = (i: number, m: number): number => {
+    if (runs && (stillUntil.get(runs[i]!) ?? 0) > m) return 0;
+    return rates[i]!;
+  };
 
   for (let m = 0; m < minutes; m++) {
     for (let c = 0; c < n; c++) wait[c] = wait[c]! + arrivalRate(level.cities[c]!, m);
@@ -78,14 +94,27 @@ export function nominalFlow(level: Level, plan: Plan): NominalFlow {
     // Docks: a city's open blocks share its waiting parcels in proportion to their crews.
     const open = new Array<number>(n).fill(0);
     plan.blocks.forEach((b, i) => {
-      if (b.start <= m && m < b.end && b.city >= 0 && b.city < n) open[b.city] = open[b.city]! + blocks[i]!.capacity / Math.max(1, b.end - b.start);
+      if (b.start <= m && m < b.end && b.city >= 0 && b.city < n) open[b.city] = open[b.city]! + rate(i, m);
     });
     const share = open.map((cap, c) => (cap > 0 ? Math.min(1, wait[c]! / cap) : 0));
     plan.blocks.forEach((b, i) => {
       if (b.start <= m && m < b.end && b.city >= 0 && b.city < n) {
-        const took = (blocks[i]!.capacity / Math.max(1, b.end - b.start)) * share[b.city]!;
+        const r = rate(i, m);
+        if (r === 0 && rates[i]! > 0) blocks[i]!.capacity -= rates[i]!; // a minute of the swap
+        const took = r * share[b.city]!;
         blocks[i]!.loaded += took;
         wait[b.city] = Math.max(0, wait[b.city]! - took);
+        if (runs && took > 0) {
+          const run = runs[i]!;
+          const had = inTrailer.get(run) ?? 0;
+          const has = had + took;
+          inTrailer.set(run, has);
+          // The trailer is full: the next minutes go to the swap (not when the block ends right here).
+          if (Math.floor(has / RATES.trailer + 1e-9) > Math.floor(had / RATES.trailer + 1e-9) && m + 1 < b.end) {
+            stillUntil.set(run, m + 1 + SWAP_MINUTES);
+            swaps.push({ block: i, at: m + 1 });
+          }
+        }
       }
     });
 
@@ -108,7 +137,7 @@ export function nominalFlow(level: Level, plan: Plan): NominalFlow {
     for (const w of wait) sum += w;
     waiting.push(sum);
   }
-  return { waiting, blocks, left: wait.slice() };
+  return { waiting, blocks, left: wait.slice(), swaps };
 }
 
 /**

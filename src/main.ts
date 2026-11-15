@@ -254,7 +254,8 @@ function frame(now: number): void {
   const f = music.frame();
   // The game's screens cover the hall except while a shift plays: nothing to draw until then
   // (the scene re-phases by itself when the beats have moved on).
-  if (shifts && !shifts.root.hidden && !shifts.root.classList.contains('sh-root--live')) {
+  // (Behind the result the hall is in view and the camera flies on: that one is drawn.)
+  if (shifts && !shifts.root.hidden && !shifts.root.classList.contains('sh-root--live') && !shifts.root.classList.contains('sh-root--hall')) {
     f.notes.length = 0;
     requestAnimationFrame(frame);
     return;

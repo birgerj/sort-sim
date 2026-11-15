@@ -1970,3 +1970,41 @@
 .shp-hours-row .shp-label span {
   font-size: 11px;
 }
+
+/* ---- planner: the trailer swap ---- */
+.shp-swap {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  background: var(--bg);
+  border-left: 1px dashed var(--grey);
+  border-right: 1px dashed var(--grey);
+  pointer-events: none;
+}
+.shp-swap-mark {
+  position: absolute;
+  z-index: 1;
+  transform: translateX(-50%);
+  line-height: 0;
+  pointer-events: none;
+}
+.shp-trailer {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+}
+.shp-swap-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(128, 132, 150, 0.14);
+  font-size: 13px;
+}
+.shp-key-swap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

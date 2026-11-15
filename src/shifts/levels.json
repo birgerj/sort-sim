@@ -67,7 +67,7 @@
   "bufferCap": 800,
   "wageFactor": 1.0,
   "notes": {
-   "fresh": "A city too big for one trailer. Give it a second dock, or lose ten minutes at each trailer swap.",
+   "fresh": "A city too big for one trailer. A full trailer takes ten minutes to swap; a second dock avoids the wait, at a price.",
    "setForYou": [
     "Unloading",
     "Robots are off",

@@ -10,7 +10,7 @@ import solve
 
 NAMES = ['First door', 'Two cities', 'Robots', 'One door, two trucks', 'Staggered wave', 'Tight store', 'Robots down', 'Peak night', 'Holiday rates', 'Full house']
 FRESH = ['Plan one dock: start, end, and 1 or 2 people.',
-         'A city too big for one trailer. Give it a second dock, or lose ten minutes at each trailer swap.',
+         'A city too big for one trailer. A full trailer takes ten minutes to swap; a second dock avoids the wait, at a price.',
          'Put a city on robots and choose the fleet size. One price per robot for the whole shift.',
          'More cities than docks. A dock can switch city in 15 minutes; waiting parcels go to the buffer.',
          'Parcels come in peaks. Start blocks later and change the crew size during the night.',

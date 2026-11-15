@@ -102,6 +102,10 @@ const VIEWS: { id: string; name: string; stop: string | null }[] = [
   { id: 'top', name: 'From above', stop: 'top down' },
 ];
 
+/** The closing flight: seconds before its first leg, and from one place to the next. */
+const TOUR_FIRST = 2;
+const TOUR_HOLD = 9;
+
 export function createDirector(scene: Sorter): Director {
   let active = false;
   let level: Level | null = null;
@@ -150,6 +154,11 @@ export function createDirector(scene: Sorter): Director {
   let lastDoors: { d: number; until: number }[] = [];
   /** The closing shot has been played. */
   let closed = false;
+  // After the shift, behind the result: a slow flight from place to place through the hall.
+  let touring = false;
+  let tourNext = 0;
+  let tourAt = 0;
+  let partyShot: Shot | null = null;
   /** The closing shot being played: the hall beat it began on, whether the party follows, where, and whom to tell when it is over. */
   let closing: { from: number; party: boolean; cx: number; done: () => void } | null = null;
   const now = () => performance.now() / 1000;
@@ -211,12 +220,25 @@ export function createDirector(scene: Sorter): Director {
       if (closing) {
         const t = beat - closing.from;
         if (closing.party) hooks.night = Math.min(1, Math.max(0, (t - NIGHT_FROM) / NIGHT_BEATS));
-        if (closing.party && t >= PARTY_AT && shotName !== 'Party') go({ eye: v(closing.cx - 9, 3.4, 5.5), look: v(closing.cx + 6, 1.3, -3.5), name: 'Party' }, true);
+        if (closing.party && t >= PARTY_AT && shotName !== 'Party') {
+          partyShot = { eye: v(closing.cx - 9, 3.4, 5.5), look: v(closing.cx + 6, 1.3, -3.5), name: 'Party' };
+          go(partyShot, true);
+        }
         if (t >= FINALE_BEATS) {
           const { done } = closing;
           closing = null;
           closed = true;
           done();
+        }
+      }
+      // The shift is over and the result is up: fly on through the hall, a new place every few seconds.
+      if (active && touring && !playing && !closing) {
+        const t = now();
+        if (!tourNext) tourNext = t + TOUR_FIRST;
+        else if (t >= tourNext) {
+          tourNext = t + TOUR_HOLD;
+          const shots = tourShots();
+          go(shots[tourAt++ % shots.length]!, false);
         }
       }
       // (Paused, no beat comes: a cut still ends, back to the overview.)
@@ -563,6 +585,10 @@ export function createDirector(scene: Sorter): Director {
     hooks.warp = 1;
     hooks.night = 0;
     closed = false;
+    touring = false;
+    tourNext = 0;
+    tourAt = 0;
+    partyShot = null;
     lastDoors = [];
     closing = null;
   }
@@ -613,6 +639,21 @@ export function createDirector(scene: Sorter): Director {
     const st = floor.stations[Math.max(0, k)] ?? floor.stations[0]!;
     return { eye: v(st.x - 9, 7.5, st.z + 17), look: v(st.x + 1, 0.6, st.z + 5), name: 'Robots' };
   };
+
+  /** The places of the closing flight, all under the roof (so every leg is a flight, never a cut). */
+  function tourShots(): Shot[] {
+    const list: Shot[] = [];
+    for (const id of ['sorter', 'docks', 'robots', 'inbound']) {
+      const w = VIEWS.find((x) => x.id === id)!;
+      const stop = w.stop === null ? null : scene.shiftStop(w.stop);
+      if (stop && !stop.free) list.push({ eye: stop.eye, look: stop.look, name: w.name });
+    }
+    list.splice(2, 0, rackShot());
+    const o = overview();
+    if (!o.free) list.push(o);
+    if (partyShot) list.push(partyShot);
+    return list;
+  }
 
   function go(shot: Shot, cut: boolean): void {
     // (Between a place above the roof or in the yard and one in the hall there is no flight: it would go through the roof or a wall.)
@@ -782,6 +823,7 @@ export function createDirector(scene: Sorter): Director {
 
   return {
     enter(lv, cityNames) {
+      touring = false;
       level = lv;
       names = cityNames.slice();
       factor = parcelFactor(lv);
@@ -824,6 +866,7 @@ export function createDirector(scene: Sorter): Director {
 
     play(tl: Timeline, clock, done) {
       if (!active || !level) return;
+      touring = false;
       // (Again from the start: a second attempt, or the same shift once more.)
       restoreSouth();
       if (schedule) bare(true);
@@ -966,6 +1009,14 @@ export function createDirector(scene: Sorter): Director {
 
     onAutoCamera(cb) {
       autoCb = cb;
+    },
+
+    tour() {
+      if (!active || touring) return;
+      touring = true;
+      tourNext = 0;
+      tourAt = 0;
+      setAuto(false);
     },
 
     finale(stars, done) {

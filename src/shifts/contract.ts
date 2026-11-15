@@ -135,6 +135,8 @@ export interface Director {
   onAutoCamera?(cb: (on: boolean) => void): void;
   /** The closing shot after the last truck (a party at three stars); calls done when it is over. */
   finale?(stars: number, done: () => void): void;
+  /** Behind the result: a slow flight from place to place through the hall, until the next shift or the exit. */
+  tour?(): void;
 }
 
 /** Prices and rates the briefing may show. The model has its own copy; these are for the screens. */

@@ -72,6 +72,7 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
   function show(el: HTMLElement, live = false): void {
     // While a shift plays, the overlay lets the hall show through and only its panel takes clicks.
     root.classList.toggle('sh-root--live', live);
+    root.classList.remove('sh-root--hall');
     root.replaceChildren(el);
     root.scrollTop = 0;
     el.querySelector<HTMLElement>('h1[tabindex="-1"]')?.focus({ preventScroll: true });
@@ -136,6 +137,9 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
       // Only now, so a new trophy does not give the result away while the shift still plays.
       tellBadges();
       go({ name: 'result', outcome });
+      // The hall stays alive behind the result: the camera flies on from place to place.
+      root.classList.add('sh-root--hall');
+      deps.director.tour?.();
     };
 
     const hud = v.shiftHud({
