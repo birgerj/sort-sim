@@ -22,7 +22,6 @@ import { CITY_COLOURS, cityHex } from '../shifts/colours';
 import type { Director, Level, Timeline } from '../shifts/contract';
 import { CITIES, areas, split } from '../sim/postcodes';
 import {
-  CLEARDOWN_MINUTES,
   arrivedAt,
   buildSchedule,
   doorAt,
@@ -84,6 +83,8 @@ interface DoorRun {
   state: DoorState | null;
   /** The belt was seen backed up in this block already (one camera cut per block). */
   seenFull: boolean;
+  /** The camera has been to this block's cleardown. */
+  seenClear: boolean;
   /** Parcels sent down this door's chute in this block. */
   sent: number;
 }
@@ -170,15 +171,15 @@ export function createDirector(scene: Sorter): Director {
     const per = Math.max(1, Math.min(4, Math.floor(all.length / Math.max(1, s.robotCities.length))));
     return Array.from({ length: per }, (_, k) => all[all.length - 1 - ((n * per + k) % all.length)]!);
   };
-  /** Is robot city `n`'s line open at `t` (from its first parcel until the robots have loaded their last for it)? */
+  /** Is robot city `n`'s line open at `t` (from its first parcel until its cut-off, or until the robots have loaded their last for it)? */
   const lineOpen = (n: number, t: number): boolean => {
     const s = schedule!;
     const rc = s.robotCities[n]!;
     const last = rc.loaded[rc.loaded.length - 1] ?? 0;
-    return arrivedAt(level!, rc.city, t + 1) > 0 && sample(rc.loaded, t, s.stepMinutes) < last - 1e-6;
+    return t < rc.cutoff && arrivedAt(level!, rc.city, t + 1) > 0 && sample(rc.loaded, t, s.stepMinutes) < last - 1e-6;
   };
   /** Has city `c` a dock or robot line taking parcels at `t`? */
-  const hasEnd = (c: number, t: number): boolean => doors.some((r) => r.open && r.state?.city === c) || schedule!.robotCities.some((rc, n) => rc.city === c && lineOpen(n, t));
+  const hasEnd = (c: number, t: number): boolean => doors.some((r) => r.open && r.state?.city === c && !(r.state.clearing && r.stint && !r.stint.derived)) || schedule!.robotCities.some((rc, n) => rc.city === c && lineOpen(n, t));
 
   const hooks: ShiftHooks = {
     inflow: 0,
@@ -243,9 +244,9 @@ export function createDirector(scene: Sorter): Director {
       }
       return null;
     },
-    sent(chute) {
+    sent(chute, n = 1) {
       const r = doors[scene.shiftChutes().doors.indexOf(chute)];
-      if (r) r.sent++;
+      if (r) r.sent = Math.max(0, r.sent + n);
     },
   };
 
@@ -260,7 +261,11 @@ export function createDirector(scene: Sorter): Director {
     let most = 0;
     for (let i = 0; i < lv.cities.length; i++) {
       // (A city with enough riding the loop already waits upstream: its parcels must not keep the others' out.)
-      if ((waiting[i] ?? 0) >= CITY_STOCK) continue;
+      if ((waiting[i] ?? 0) >= CITY_STOCK && !hasDock(i)) continue;
+      // A city with an open dock comes in only as fast as that dock may be sent parcels: what
+      // must wait, waits in the lanes, not on the loop (a lap is over twenty minutes). Unless
+      // the rack still has to fill: those parcels come in for it.
+      if (rackShort <= 0 && !mayCome(i)) continue;
       const lead = scene.shiftLead(chuteFor(i)) * MIN_PER_BEAT;
       const n = inHall(arrivedAt(lv, i, minute + lead - late), factor) - (out[i] ?? 0);
       if (n > most) {
@@ -275,7 +280,7 @@ export function createDirector(scene: Sorter): Director {
   function chuteFor(i: number): number {
     const s = schedule!;
     const chutes = scene.shiftChutes().doors;
-    const st = s.stints.filter((x) => x.city === i && x.end > minute).sort((a, b) => a.start - b.start)[0];
+    const st = s.stints.filter((x) => x.city === i && (x.derived ? x.end : x.cutoff) > minute).sort((a, b) => a.start - b.start)[0];
     if (st && st.start <= minute + 30) return chutes[st.door] ?? -1;
     const n = s.robotCities.findIndex((rc) => rc.city === i);
     return n >= 0 ? (stationsOf(n)[0] ?? -1) : -1;
@@ -285,7 +290,7 @@ export function createDirector(scene: Sorter): Director {
   function show(jump: boolean): void {
     const s = schedule;
     if (!s || !level) return;
-    const { docks, trucks, fleet, northDoors } = scene.shiftParts();
+    const { docks, trucks, fleet, floor, northDoors } = scene.shiftParts();
     const chutes = scene.shiftChutes().doors;
     for (let d = 0; d < northDoors; d++) {
       const st = doorAt(s, d, minute);
@@ -295,7 +300,7 @@ export function createDirector(scene: Sorter): Director {
       // A block ends: the last of it goes on board, the door comes down.
       if (r.open && (!st.open || st.stint !== r.stint)) {
         const was = r.stint!;
-        const again = s.stints.some((x) => x.door === d && x.start >= was.end && x !== was);
+        const again = s.stints.some((x) => x.door === d && x.start >= was.blockEnd && x !== was);
         const { short, cleared } = docks.closeOut(d, !again);
         // Loaded by the timeline but not at the dock yet: those on the chute or the belt, then
         // those still riding the loop, are on board too; any that never came in will not come.
@@ -316,6 +321,7 @@ export function createDirector(scene: Sorter): Director {
         r.open = true;
         r.swaps = st.swaps;
         r.seenFull = false;
+        r.seenClear = false;
         r.sent = 0;
         trucks.want(d, true);
       }
@@ -336,7 +342,7 @@ export function createDirector(scene: Sorter): Director {
         // (The cards carry the city's own postcodes when the country has that town.)
         ranges: city && city.name === name ? split(city, 6) : null,
         allow: st.open && st.stint ? inHall(sample(st.stint.loaded, minute, s.stepMinutes), factor) : 0,
-        clearing: st.open && !!st.stint && minute >= st.stint.end - CLEARDOWN_MINUTES,
+        clearing: st.clearing,
         fresh,
       });
       const [main, sub, tone] = screenText(s, d, st, name);
@@ -346,10 +352,16 @@ export function createDirector(scene: Sorter): Director {
     fleet.limit = robotsAt(s, minute);
     s.robotCities.forEach((rc, n) => {
       const dep = rc.departure;
+      // From its cut-off the boxes it filled go to the trucks (a forklift comes for each, full or not).
+      if (minute >= rc.cutoff && minute < (dep?.at ?? rc.cutoff + 15) && Math.floor(bt) % 8 === 0) {
+        const xs = stationsOf(n).map((c) => floor.stations[scene.shiftChutes().stations.indexOf(c)]?.x ?? 0);
+        floor.shipBins(Math.min(...xs) - 5, Math.max(...xs) + 5);
+      }
       if (!dep) return;
       const k = southDoor(n);
       const left = minute >= dep.at;
-      trucks.warn(k, !left && dep.lateFrom !== null && minute >= dep.lateFrom);
+      // (The lamp at its south door: through the cleardown, and while it is late.)
+      trucks.warn(k, !left && minute >= rc.cutoff);
       if (left && !gone.has(n)) {
         gone.add(n);
         trucks.cleardown([k], bt);
@@ -361,10 +373,10 @@ export function createDirector(scene: Sorter): Director {
   function screenText(s: ShiftSchedule, d: number, st: DoorState, name: string): [string, string, ScreenTone] {
     const no = String(d + 1);
     if (st.open && st.stint) {
-      const truck = `truck ${hhmm(level!.cities[st.city]?.truck ?? st.stint.end)}`;
-      if (st.late) return [`${no} · ${name}`, `LATE · ${truck}`, 'bad'];
-      if (st.lamp) return [`${no} · ${name}`, `LAST CAGES · ${truck}`, 'warn'];
-      return [`${no} · ${name}`, `loading · ${st.people === 2 ? '2 people' : '1 person'} · ${truck}`, 'ok'];
+      const goes = st.stint.departs ? `truck leaves ${hhmm(st.stint.end)}` : `door closes ${hhmm(st.stint.end)}`;
+      if (st.late) return [`${no} · ${name}`, `LATE · ${goes}`, 'bad'];
+      if (st.clearing) return [`${no} · ${name}`, `CLEARDOWN · ${goes}`, 'warn'];
+      return [`${no} · ${name}`, `loading · ${st.people === 2 ? '2 people' : '1 person'} · cut-off ${hhmm(st.stint.cutoff)}`, 'ok'];
     }
     // Only a door with an open block shows a city. Any other is dark: closed, with at most when
     // it opens next or what its last truck left standing.
@@ -374,10 +386,30 @@ export function createDirector(scene: Sorter): Director {
     return [no, 'closed', 'off'];
   }
 
+  const hasDock = (i: number) => doors.some((r) => r.open && r.state?.city === i);
+  /** Parcels the rack should hold by the timeline and neither holds nor has riding the loop towards it. */
+  let rackShort = 0;
+  /** May another parcel of city `i` come onto the loop: has it no open dock (robots, rack, a dock about to open), or one that can still be sent parcels? */
+  function mayCome(i: number): boolean {
+    const chutes = scene.shiftChutes().doors;
+    let docks = 0;
+    let room = 0;
+    doors.forEach((r, d) => {
+      if (!r.open || r.state?.city !== i || chutes[d] === undefined) return;
+      docks++;
+      room += mayHave(d, chutes[d]!) - r.sent;
+    });
+    return !docks || room > scene.shiftComing(i);
+  }
+
   /** Parcels door `d` may have been sent in its block by now (see `flow`). */
   function mayHave(d: number, chute: number): number {
     const st = doors[d]?.state;
     if (!st?.open || !st.stint || !schedule) return 0;
+    // Past the cut-off nothing more goes down the chute. (A timeline without cleardowns still
+    // loads in its last 15 minutes: what it loads then is sent, so it can be seen going in.)
+    if (st.clearing && !st.stint.derived) return doors[d]!.sent;
+    if (st.clearing) return inHall(st.stint.loaded[st.stint.loaded.length - 1] ?? 0, factor);
     return inHall(sample(st.stint.loaded, minute + scene.shiftLead(chute) * MIN_PER_BEAT + SEND_AHEAD, schedule.stepMinutes), factor);
   }
 
@@ -435,6 +467,7 @@ export function createDirector(scene: Sorter): Director {
     // (Out a little early: a parcel from the rack rides most of the loop to a dock at the west end.)
     const held = sample(tl.buffer, minute, s.stepMinutes);
     const want = inHall(Math.min(held, sample(tl.buffer, minute + RACK_AHEAD, s.stepMinutes)), factor);
+    rackShort = want - racked - total;
     for (let n = 0; n < 3 && racked < want; n++) {
       const c = scene.shiftStore((city) => !hasEnd(city, minute));
       if (c < 0) break;
@@ -489,10 +522,11 @@ export function createDirector(scene: Sorter): Director {
   function bare(jump: boolean): void {
     const { docks, trucks, fleet, floor, northDoors } = scene.shiftParts();
     docks.setDirected(true, Math.max(2, Math.round(CAGE / factor)));
-    doors = Array.from({ length: northDoors }, () => ({ open: false, swaps: 0, stint: null, state: null, seenFull: false, sent: 0 }));
+    doors = Array.from({ length: northDoors }, () => ({ open: false, swaps: 0, stint: null, state: null, seenFull: false, seenClear: false, sent: 0 }));
     out = [];
     stored = [];
     racked = 0;
+    rackShort = 0;
     sentRobots = [];
     gone = new Set();
     robotsWere = -1;
@@ -629,7 +663,11 @@ export function createDirector(scene: Sorter): Director {
       const st = r.state;
       if (!st) return;
       // A truck about to leave, a dock being made ready for another city, a belt backed up.
-      if (r.open && r.stint?.departs && minute >= r.stint.end - 2 && minute < r.stint.end) cutTo(doorShot(d, `${cityName(st.city)}: the truck leaves`));
+      // (The last cage of the cleardown going in, then the door coming down.)
+      if (r.open && r.stint?.departs && st.clearing && !r.seenClear && (docks.cagesLeft(d) <= 1 || minute >= r.stint.end - 2) && minute < r.stint.end) {
+        r.seenClear = true;
+        cutTo(doorShot(d, `${cityName(st.city)}: the truck leaves`));
+      }
       else if (!r.open && st.city >= 0 && st.stint && minute < st.stint.start && st.stint.signFrom < st.stint.start && minute - st.stint.signFrom < 2) cutTo(doorShot(d, `Door ${d + 1}: now for ${cityName(st.city)}`));
       else if (r.open && !r.seenFull && docks.directCount(d).waiting >= 9) {
         r.seenFull = true;
@@ -782,6 +820,12 @@ export function createDirector(scene: Sorter): Director {
         trucks.label(k, cityName(rc.city), `robots · truck ${hhmm(level!.cities[rc.city]?.truck ?? rc.departure.at)}`);
       });
       minute = 0;
+      skipped = false;
+      onClock = clock;
+      onDone = done;
+      playing = true;
+      hooks.warp = speed >= OWN_SPEED ? Math.max(1, Math.round(speed / OWN_SPEED)) : 0;
+      show(false);
       // The parcels that would be on their way round the loop already, had the hall been
       // running: set where they would be now, so the first of each city is at its dock (or
       // its robot station) when the level says it comes in.
@@ -791,17 +835,13 @@ export function createDirector(scene: Sorter): Director {
         const n = inHall(arrivedAt(level, i, lead), factor);
         const ride = scene.shiftLoopBeats(chute);
         for (let k = 0; k < n; k++) {
+          // (No more than its dock may be sent by now: the rest waits in the lanes.)
+          if (hasDock(i) && !mayCome(i)) break;
           // (Evenly along the way they have come; none further than the infeeds.)
           if (!scene.shiftPlace(i, { chute, beats: Math.min(ride, (ride * (k + 0.5)) / n) })) break;
           out[i] = (out[i] ?? 0) + 1;
         }
       }
-      skipped = false;
-      onClock = clock;
-      onDone = done;
-      playing = true;
-      hooks.warp = speed >= OWN_SPEED ? Math.max(1, Math.round(speed / OWN_SPEED)) : 0;
-      show(false);
       onClock(0);
     },
 

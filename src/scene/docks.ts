@@ -488,6 +488,38 @@ export class Docks {
       this.tick(d.worker, d, b, day, () => this.plan(d));
       this.tick(d.loader, d, b, day, () => this.planLoad(d, d.loader));
     }
+    // A shift: the helper of a pair of doors comes over for a cleardown (the belt first, then the cages), and goes again.
+    for (const h of this.runs ? this.helpers : []) {
+      const d = h.pair.find((x) => {
+        const r = this.runs![this.docks.indexOf(x)]!;
+        return r.clearing && r.people > 0 && (x.queue.length > 0 || this.cagesLeft(this.docks.indexOf(x)) > 0);
+      });
+      const busy = !!h.w.step || h.w.steps.length > 0;
+      if (!d && !busy) {
+        if (h.w.root.visible) {
+          h.w.root.visible = false;
+          h.w.root.position.copy(h.w.home);
+        }
+        continue;
+      }
+      h.w.root.visible = true;
+      if (d) h.w.job = d;
+      const at = h.w.job ?? h.pair[0]!;
+      this.tick(h.w, at, b, false, () => {
+        if (d) void (this.planLoad(d, h.w) || this.plan(d, h.w));
+      });
+    }
+    for (const [i, d] of this.runs ? this.docks.entries() : []) {
+      // (For the measurements: how long a cleardown took, from the cut-off until the belt and the cages were empty.)
+      const run = this.runs![i]!;
+      const c = this.clears[i];
+      if (run.clearing && run.people > 0 && !c) this.clears[i] = { from: b, belt: d.queue.length, cages: this.cagesLeft(i), people: run.people, beats: -1 };
+      else if (c && c.beats < 0 && d.queue.length === 0 && this.cagesLeft(i) === 0 && !this.crewOf(d).some((w) => w.step?.cage)) {
+        c.beats = b - c.from;
+        this.cleared.push({ dock: i, ...c });
+      }
+      if (!run.clearing && c) this.clears[i] = undefined;
+    }
     for (const h of this.runs ? [] : this.helpers) {
       this.tick(h.w, h.w.job ?? h.pair[0]!, b, day, () => {
         // A door in cleardown first, then whichever has work.
@@ -509,6 +541,20 @@ export class Docks {
   private runClearing(d: Dock, run: Run): boolean {
     return run.clearing && d.queue.length === 0;
   }
+
+  /** A shift: cages of this dock that still have to go into the trailer (with parcels in their place, or on their way). */
+  cagesLeft(i: number): number {
+    const d = this.docks[i];
+    return d ? d.cages.filter((c) => (c.state === 'home' && c.n > 0) || c.state === 'moving').length : 0;
+  }
+
+  /** A shift: the cleardown at this dock (the beat it began, parcels on the belt and cages to go then, people, beats it took or −1 while it runs). */
+  clearStat(i: number): { from: number; belt: number; cages: number; people: number; beats: number } | undefined {
+    return this.clears[i];
+  }
+  /** Every cleardown finished in this shift (for the measurements). */
+  readonly cleared: { dock: number; from: number; belt: number; cages: number; people: number; beats: number }[] = [];
+  private clears: ({ from: number; belt: number; cages: number; people: number; beats: number } | undefined)[] = [];
 
   /** Is a cage standing by the door of this dock (waiting for a truck)? For the checks of a played shift. */
   stagedAt(i: number): number {
@@ -724,7 +770,8 @@ export class Docks {
   private plan(d: Dock, w: Worker = d.worker): void {
     const run = this.runs?.[this.docks.indexOf(d)];
     // Where this one stands to take parcels off the belt (during a shift the loader picks too, beside the picker).
-    const at = w === d.worker ? w.home : v(d.x + SECOND_AT[0], 0, DOCK_BELT_END + SECOND_AT[1]);
+    const helper = w !== d.worker && w !== d.loader;
+    const at = w === d.worker ? w.home : v(d.x + (helper ? -SECOND_AT[0] : SECOND_AT[0]), 0, DOCK_BELT_END + SECOND_AT[1]);
     if (run) {
       // A shift: alone, the cages are this one's job too; and at the end of the block everyone pushes.
       if ((run.people === 1 || this.runClearing(d, run)) && this.planLoad(d, w)) return;
@@ -1425,6 +1472,8 @@ export class Docks {
     this.clearAll();
     this.idle = [];
     this.idleNow = [];
+    this.clears = [];
+    this.cleared.length = 0;
     this.runCap = clamp(Math.round(cap), 1, RUN_CAGE);
     this.runs = on ? this.docks.map(() => ({ cages: false, people: 0, allow: 0, taken: 0, clearing: false, name: '' })) : null;
     this.docks.forEach((d, n) => {
@@ -1504,6 +1553,7 @@ export class Docks {
     const T = this.handlers.truck;
     this.sendOff(d.worker);
     this.sendOff(d.loader);
+    for (const h of this.helpers) if (h.pair.includes(d) && h.w.job === d) this.sendOff(h.w);
     let short = Math.max(0, r.allow - r.taken);
     while (short > 0 && d.queue.length) {
       const p = d.queue.shift()!;
