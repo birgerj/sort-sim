@@ -136,6 +136,6 @@ export interface Director {
 
 /** Prices and rates the briefing may show. The model has its own copy; these are for the screens. */
 export const PRICES = { parcel: 1.5, onTime: 0.3, latePer10Min: 0.3, leftBehind: 1.5, dockPerHour: 25, personPerHour: 30, robotPerShiftHour: 11, bufferPerParcel: 0.15 } as const;
-export const RATES = { onePerson: 90, twoPeople: 170, robot: 17, trailer: 220, switchMinutes: 15, stepMinutes: 30, minBlockMinutes: 60, maxLateMinutes: 30 } as const;
+export const RATES = { onePerson: 90, twoPeople: 170, robot: 17, trailer: 220, switchMinutes: 15, stepMinutes: 30, minBlockMinutes: 60, maxLateMinutes: 0 } as const;
 export const STARS = { one: 500, two: 750, three: 900 } as const;
 export const CURRENCY = '§';

@@ -38,3 +38,8 @@
 - 2026-11-14 Level 3: small cities' trucks at 00:30, 00:30, 01:00. Level 4: third city 90 parcels. Level 8: 14 docks.
   Level 10: volume × 2.2. Badges: level 6 lean6, level 9 lean16, level 10 allOnTime.
 - 2026-11-14 Par under these rules: 177, 621, 779, 596, 1601, 2398, 7577, 12570, 13029, 19342 (level 10 not settled).
+- 2026-11-15 A city's truck time is its cut-off; no block ends after it. Doors open at the cut-off clear their belt
+  (cleardown); the truck leaves when they are done, on time up to 15 minutes after the cut-off, at 45 at the latest.
+- 2026-11-15 Model: equal blocks (same city, start, end, crew) are one block with their docks added up.
+- 2026-11-15 Level 3: small cities 80, 90, 70 parcels. Level 4: third city 60. Level 8: volume × 2.7.
+- 2026-11-15 Par under these rules: 177, 611, 856, 530, 1606, 2408, 7566, 12300, 13084, 19424.

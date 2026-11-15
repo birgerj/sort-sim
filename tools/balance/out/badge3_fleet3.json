@@ -1,19 +1,26 @@
 {
  "level": 3,
  "badge": "fleet3",
- "par": 779.0,
+ "par": 856.6846236908185,
  "parPlanEarns": false,
  "plainEarns": false,
- "plainProfit": 620.0,
+ "plainProfit": 561.0,
  "found": true,
- "profit": 764.9785815684219,
+ "profit": 828.25,
  "plan": {
   "blocks": [
    {
     "city": 0,
     "start": 0,
-    "end": 150,
+    "end": 120,
     "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 120,
+    "end": 180,
+    "people": 1,
     "docks": 1
    },
    {
@@ -24,19 +31,25 @@
     "docks": 1
    },
    {
-    "city": 1,
+    "city": 2,
     "start": 60,
     "end": 120,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 90,
+    "end": 150,
     "people": 1,
     "docks": 1
    }
   ],
   "robotCities": [
    0,
-   2,
-   3
+   1
   ],
-  "robots": 3
+  "robots": 2
  },
  "closest": null,
  "closestPlan": null

@@ -6,8 +6,8 @@ import { assignDoors, firstParcel, robotCities } from './doors';
 export const STEP_MINUTES = 30;
 /** ...last at least an hour... */
 export const MIN_BLOCK_MINUTES = 60;
-/** ...and end at most this long after the city's truck time. */
-export const MAX_LATE_MINUTES = 30;
+/** ...and never end after the city's cut-off (its truck time): what happens after it is the cleardown. */
+export const MAX_LATE_MINUTES = 0;
 
 const whole = (x: number): boolean => Number.isInteger(x);
 
@@ -28,7 +28,7 @@ export function checkPlan(level: Level, plan: Plan): PlanProblem[] {
       sound.push(false);
       return;
     }
-    // Two moments are allowed off the half hour: starting with the first parcel, ending with the truck.
+    // Two moments are allowed off the half hour: starting with the first parcel, ending at the cut-off.
     const startOk = b.start >= 0 && (b.start % STEP_MINUTES === 0 || b.start === firstParcel(level, b.city));
     const endOk = b.end % STEP_MINUTES === 0 || b.end === city.truck;
     if (!startOk || !endOk) problems.push({ kind: 'grid', block });
