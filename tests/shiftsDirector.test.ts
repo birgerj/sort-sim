@@ -91,8 +91,10 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
     expect(doorAt(s, 0, 200).pressure).toBeLessThan(0.5);
   });
 
-  it('flashes the lamp in the last minutes of a block only', () => {
-    expect(doorAt(s, 0, 90).lamp).toBe(false);
+  it('flashes the lamp in the cleardown only (without one in the timeline: the last 15 minutes)', () => {
+    expect(doorAt(s, 0, 85).lamp).toBe(false);
+    expect(doorAt(s, 0, 85).clearing).toBe(false);
+    expect(doorAt(s, 0, 92)).toMatchObject({ lamp: true, clearing: true, open: true });
     expect(doorAt(s, 0, 102).lamp).toBe(true);
     expect(doorAt(s, 0, 102).late).toBe(false);
   });
@@ -206,6 +208,43 @@ describe('shift schedule: late, incomplete, robots, several doors', () => {
     expect(robotsAt(s, 10)).toBe(5);
     expect(robotsAt(s, 45)).toBe(8);
     expect(s.end).toBe(70);
+  });
+
+  it('follows the timeline\'s cleardowns: cut-off, door up until the truck leaves, late after cut-off plus 15', () => {
+    const { level: lv, timeline: tl } = made({
+      cities: [{ volume: 150, truck: 60 }, { volume: 100, truck: 60 }, { volume: 60, truck: 60 }],
+      steps: 20,
+      shift: 60,
+      loaded: (k) => [Math.min(150, k * 12.5), Math.min(100, k * 8.4), Math.min(60, k * 5)],
+      blocks: [
+        { city: 0, door: 0, start: 0, end: 60, people: 2 },
+        { city: 1, door: 2, start: 0, end: 60, people: 1 },
+      ],
+      departures: [{ city: 0, at: 75, status: 'onTime' }, { city: 1, at: 88, status: 'late' }, { city: 2, at: 75, status: 'onTime' }],
+    });
+    tl.cleardowns = [
+      { city: 0, door: 0, from: 60, to: 71 },
+      { city: 1, door: 2, from: 60, to: 88 },
+      { city: 2, door: -1, from: 60, to: 75 },
+    ];
+    const s = buildSchedule(lv, tl);
+    const a = s.stints.find((x) => x.door === 0)!;
+    expect(a).toMatchObject({ blockEnd: 60, cutoff: 60, end: 75, derived: false, departs: true, lateFrom: null });
+    // Loading at the people's pace until the cut-off, then the cleardown with the door still up.
+    expect(doorAt(s, 0, 59)).toMatchObject({ open: true, clearing: false, lamp: false });
+    expect(doorAt(s, 0, 61)).toMatchObject({ open: true, clearing: true, lamp: true, late: false, people: 2 });
+    expect(doorAt(s, 0, 74.9).open).toBe(true);
+    expect(doorAt(s, 0, 75).open).toBe(false);
+    // The late one waits with its lamp on from cut-off + 15 until it goes.
+    const b = s.stints.find((x) => x.door === 2)!;
+    expect(b).toMatchObject({ cutoff: 60, end: 88, lateFrom: 75 });
+    expect(doorAt(s, 2, 70)).toMatchObject({ open: true, clearing: true, late: false });
+    expect(doorAt(s, 2, 80)).toMatchObject({ open: true, clearing: true, late: true, lamp: true });
+    expect(doorAt(s, 2, 88).open).toBe(false);
+    // The robots' city stops at its cut-off and leaves at its departure.
+    expect(s.robotCities.map((r) => [r.city, r.cutoff, r.departure?.at])).toEqual([[2, 60, 75]]);
+    expect(s.end).toBe(88);
+    expect(s.events).toContainEqual({ at: 75, kind: 'depart', city: 0, status: 'onTime', doors: [0] });
   });
 
   it('reads a series between its samples and holds its ends', () => {
