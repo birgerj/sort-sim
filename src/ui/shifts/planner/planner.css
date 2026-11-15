@@ -1961,3 +1961,12 @@
     white-space: nowrap;
   }
 }
+
+.shp-room em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--ink, inherit);
+}
+.shp-hours-row .shp-label span {
+  font-size: 11px;
+}

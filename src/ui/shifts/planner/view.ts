@@ -91,7 +91,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   );
 
   const isPhone = () => root.clientWidth > 0 && root.clientWidth <= 760;
-  const labelWidth = () => (isPhone() ? 88 : 140);
+  const labelWidth = () => (isPhone() ? 92 : 140);
 
   /** Takes a changed plan: remember it, tell the owner, draw again. */
   function commit(next: Plan, select?: Selection | null): void {
@@ -338,7 +338,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
       // Hour marks.
       const hours = h('div', { class: 'shp-track shp-hours', style: `width:${trackW}px` });
       for (let t = 0; t <= span; t += 60) hours.append(h('span', { style: `left:${x(t)}px`, text: clock(t) }));
-      rows.push(h('div', { class: 'shp-row shp-hours-row' }, h('div', { class: 'shp-label', style: `width:${labelW}px` }), hours));
+      rows.push(h('div', { class: 'shp-row shp-hours-row' }, h('div', { class: 'shp-label', style: `width:${labelW}px`, title: 'What the planned crews can load, against the parcels for the city' }, h('span', { text: 'capacity / total' })), hours));
 
       for (const c of order) {
         const city = level.cities[c]!;
@@ -404,12 +404,14 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           );
         }
         const isBad = mine.some((e) => badBlocks.has(e.i));
+        // What this city's dock crews can load in their planned hours (a limit, not a forecast).
+        const room = Math.round(mine.reduce((a, e) => a + flow.blocks[e.i]!.capacity, 0));
         const open = sel?.city === c;
         rows.push(
           h('div', { class: 'shp-row', 'data-key': `row-${c}` },
-            h('button', { class: `shp-label shp-city-label${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `width:${labelW}px;--c:${cityColour(c)}`, 'data-key': `label-${c}`, onclick: () => tapCity(c), title: `${name(c)} · ${count(city.volume)} parcels · cut-off ${clock(city.truck)}`, 'aria-expanded': String(open) },
-              h('b', {}, name(c), h('i', { class: 'shp-chev', 'aria-hidden': 'true', text: open ? '▾' : '▸' })), h('span', { class: 'shp-num', text: phone ? `${count(city.volume)} · ${clock(city.truck)}` : `${count(city.volume)} · cut-off ${clock(city.truck)}` }),
-              onRobots && !phone ? h('i', { class: 'shp-tag', text: mine.length ? 'docks + robots' : 'robots' }) : null),
+            h('button', { class: `shp-label shp-city-label${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `width:${labelW}px;--c:${cityColour(c)}`, 'data-key': `label-${c}`, onclick: () => tapCity(c), title: `${name(c)} · room for ${count(room)}${onRobots ? ' and robots' : ''} · ${count(city.volume)} parcels · cut-off ${clock(city.truck)}`, 'aria-expanded': String(open) },
+              h('b', {}, name(c), h('i', { class: 'shp-chev', 'aria-hidden': 'true', text: open ? '▾' : '▸' })), h('span', { class: 'shp-num shp-room' }, ...(onRobots && !mine.length ? ['robots'] : [h('em', { text: count(room) }), onRobots ? (phone ? ' + R' : ' + robots') : '']), ` / ${count(city.volume)}`),
+            ),
             h('div', { class: 'shp-cell' }, track, notes.length ? h('div', { class: `shp-note${isBad ? ' is-bad' : ''}`, style: `width:${trackW}px`, text: notes.join(' ') }) : null)),
         );
         // On a phone the details open right under the city's own line.
