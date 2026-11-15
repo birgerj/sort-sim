@@ -1,7 +1,8 @@
 // The game's own server: it serves the built site and scores plans. One process, one database
 // file. Settings come from the environment: PORT (8080), DATA (./data), SITE (./dist),
-// WAIT_MS (5000), TRUST_PROXY (1 when behind a reverse proxy that sets X-Forwarded-For).
-import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
+// WAIT_MS (5000), TRUST_PROXY (1 when behind a reverse proxy that sets X-Forwarded-For),
+// RUN_AS (uid:gid to go on as when started as root, as the container does).
+import { chownSync, createReadStream, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { App } from './app';
@@ -14,6 +15,15 @@ const WAIT_MS = Number(process.env.WAIT_MS ?? 5000);
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 
 mkdirSync(DATA, { recursive: true });
+// In a container the process starts as root so it can take over a data folder that the host
+// made (a mounted folder is often owned by someone else), then goes on as an ordinary user.
+const RUN_AS = /^(\d+):(\d+)$/.exec(process.env.RUN_AS ?? '');
+if (RUN_AS && process.getuid?.() === 0) {
+  const [uid, gid] = [Number(RUN_AS[1]), Number(RUN_AS[2])];
+  for (const f of [DATA, ...readdirSync(DATA).map((n) => join(DATA, n))]) chownSync(f, uid, gid);
+  process.setgid!(gid);
+  process.setuid!(uid);
+}
 const store = new Store(join(DATA, 'scores.db'));
 const app = new App(store, { waitMs: WAIT_MS, atOnce: 2, now: () => Date.now() });
 
