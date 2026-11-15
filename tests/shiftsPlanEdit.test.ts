@@ -88,20 +88,20 @@ describe('plan rules', () => {
 
   it('adds up the fixed costs like the result does', () => {
     const c = fixedCosts(FIX.level, FIX.plan);
-    // The result also pays the cleardowns (a door that works until its city's cut-off goes on for at
-    // least 15 minutes); the planner's fixed costs are the planned blocks only.
+    // The planner's fixed costs hold the planned blocks and their 15 minutes of cleardown; the
+    // result pays more only where a cleardown ran longer (a late truck).
     const cleardown = (lv: Level, tl: Timeline): { docks: number; people: number } => {
       let docks = 0;
       let people = 0;
       for (const c of tl.cleardowns ?? []) {
         const crew = tl.blocks.find((b) => b.door === c.door && b.city === c.city && b.end === c.from)!.people;
-        docks += ((c.to - c.from) / 60) * 25;
-        people += ((c.to - c.from) / 60) * crew * 30 * lv.wageFactor;
+        docks += ((c.to - c.from - 15) / 60) * 25;
+        people += ((c.to - c.from - 15) / 60) * crew * 30 * lv.wageFactor;
       }
       return { docks, people };
     };
     const extra = cleardown(FIX.level, FIX.timeline);
-    expect(extra.docks).toBeCloseTo(3 * 6.25, 5); // three doors, 15 minutes each
+    expect(extra.docks).toBeCloseTo(0, 5); // three doors, each done in its 15 minutes: nothing extra
     // (The fixture rounds halves to even, so compare within half a Sorty.)
     expect(Math.abs(c.docks + extra.docks - FIX.result.lines.docks)).toBeLessThanOrEqual(0.5);
     expect(Math.abs(c.people + extra.people - FIX.result.lines.people)).toBeLessThanOrEqual(0.5);

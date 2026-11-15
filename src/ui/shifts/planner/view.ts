@@ -106,7 +106,7 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     switch (p.kind) {
       case 'grid': return cap(`${of(p.block)}start and end go on a half hour, the first parcel or the cut-off.`);
       case 'tooShort': return cap(`${of(p.block)}a block lasts at least an hour.`);
-      case 'afterTruck': return cap(`${of(p.block)}ends too long after the cut-off (${clock(level.cities[plan.blocks[p.block]!.city]!.truck)}).`);
+      case 'afterTruck': return cap(`${of(p.block)}ends after the cut-off (${clock(level.cities[plan.blocks[p.block]!.city]!.truck)}).`);
       case 'noDock': return cap(`${of(p.block)}no dock free. The hall has ${plural(level.docks, 'dock', 'docks')}, and a dock needs 15 minutes to switch city.`);
       case 'tooManyPeople': return `More than ${level.peopleCap} people at work from ${clock(p.at)}.`;
       case 'tooManyRobots': return `The fleet is larger than tonight's ${plural(level.robotsMax, 'robot', 'robots')}.`;

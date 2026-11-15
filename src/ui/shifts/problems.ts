@@ -22,7 +22,7 @@ export function describeProblem(p: PlanProblem, level: Level, plan: Plan, names:
     case 'tooShort':
       return `${block(p.block)}: a block lasts at least ${RATES.minBlockMinutes / 60 === 1 ? 'an hour' : `${RATES.minBlockMinutes} minutes`}.`;
     case 'afterTruck':
-      return `${block(p.block)}: it ends more than ${RATES.maxLateMinutes} minutes after the cut-off.`;
+      return `${block(p.block)}: it ends after the city's cut-off.`;
     case 'noDock':
       return `${block(p.block)}: no dock is free then. Tonight ${level.docks === 1 ? 'one dock is' : `${level.docks} docks are`} open, and a dock needs ${RATES.switchMinutes} minutes to switch city.`;
     case 'tooManyPeople':
