@@ -799,7 +799,7 @@
   position: relative;
   width: 40px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(128, 132, 150, 0.4);
   border: 1px solid var(--edge);
   border-radius: 12px;
 }
@@ -1117,10 +1117,7 @@
     flex: 1;
   }
   .shp-insp-city,
-  .shp-switch-btn small,
-  .shp-has-sel .shp-goal,
-  .shp-has-sel .shp-problems,
-  .shp-has-sel .shp-fleet {
+  .shp-switch-btn small {
     display: none;
   }
   .shp-insp-foot {
@@ -1913,5 +1910,40 @@
   }
   .shp-count b {
     font-size: 16px;
+  }
+}
+
+/* ---- planner: details open under the city's line (phone) ---- */
+.shp-chev {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--grey);
+}
+@media (max-width: 760px) {
+  .shp-planner .shp-insp.is-inline {
+    position: sticky;
+    left: 0;
+    flex: none;
+    max-height: none;
+    overflow: visible;
+    box-sizing: border-box;
+    border-left: 4px solid var(--c, var(--edge));
+  }
+  .shp-label b {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 760px) {
+  /* While a city is open its line and its details get the room: the rest scrolls away or waits. */
+  .shp-has-sel .shp-fleet,
+  .shp-has-sel .shp-fresh {
+    display: none;
+  }
+  .shp-has-sel .shp-strips {
+    position: static;
   }
 }

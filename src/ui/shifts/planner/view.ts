@@ -76,12 +76,13 @@ export function plannerView(o: PlannerOptions): HTMLElement {
   const insp = h('aside', { class: 'shp-insp', 'aria-label': 'Selected city or block' });
   const bar = h('footer', { class: 'shp-bar' });
   const ask = h('div', { class: 'shp-ask', hidden: true });
+  const main = h('div', { class: 'shp-main' }, side, board, insp);
   root.append(
     h('header', { class: 'shp-head' },
       h('div', { class: 'shp-title' }, mark(),
         h('div', {}, h('h1', {}, h('span', { class: 'shp-wide', text: 'Level ' }), `${level.id} · ${level.name}`), h('p', { title: 'Profit to beat for one, two and three stars' }, h('span', { class: 'shp-wide', text: 'Profit to beat · ' }), targets.map((t, i) => `${'★'.repeat(i + 1)} ${money(t)}`).join(' · ')))),
       h('button', { class: 'shp-btn', type: 'button', text: 'Briefing', onclick: () => o.onBack() })),
-    h('div', { class: 'shp-main' }, side, board, insp),
+    main,
     bar,
     ask,
   );
@@ -104,12 +105,17 @@ export function plannerView(o: PlannerOptions): HTMLElement {
       const el = sel.block !== null ? grid.querySelector(`[data-key="block-${sel.block}"]`) : grid.querySelector(`[data-key="row-${sel.city}"]`);
       el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
+    if (sel && insp.classList.contains('is-inline')) {
+      // The city's line to the top, its details right under it.
+      scroll.style.scrollPaddingBottom = '6px';
+      grid.querySelector(`[data-key="row-${sel.city}"]`)?.scrollIntoView({ block: 'start', inline: 'nearest' });
+    }
   }
 
-  /** A tap on a city's label or its empty line: the city is selected, its sheet opens. */
+  /** A tap on a city's label or its empty line: its details open, or close when they were open. */
   function tapCity(city: number): void {
-    const first = plan.blocks.findIndex((b) => b.city === city);
-    select({ city, block: sel?.city === city && sel.block !== null ? sel.block : first >= 0 ? first : null }, true);
+    if (sel?.city === city && sel.block === null) select(null);
+    else select({ city, block: null }, true);
   }
 
   /** A first (or another) dock block for a city, selected so it can be changed at once. */
@@ -257,8 +263,13 @@ export function plannerView(o: PlannerOptions): HTMLElement {
     };
     root.classList.toggle('shp-has-sel', !!sel);
 
+    if (!phone || !sel) {
+      insp.classList.remove('is-inline');
+      insp.style.width = '';
+    }
     drawSide(problems, flow.left);
     drawGrid();
+    if (!insp.isConnected || (!insp.classList.contains('is-inline') && insp.parentElement !== main)) main.append(insp);
     drawFleet();
     drawInspector();
     drawBar();
@@ -390,13 +401,21 @@ export function plannerView(o: PlannerOptions): HTMLElement {
           );
         }
         const isBad = mine.some((e) => badBlocks.has(e.i));
+        const open = sel?.city === c;
         rows.push(
           h('div', { class: 'shp-row', 'data-key': `row-${c}` },
-            h('button', { class: `shp-label shp-city-label${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `width:${labelW}px;--c:${cityColour(c)}`, 'data-key': `label-${c}`, onclick: () => tapCity(c), title: `${name(c)} · ${count(city.volume)} parcels · cut-off ${clock(city.truck)}` },
-              h('b', { text: name(c) }), h('span', { class: 'shp-num', text: phone ? `${count(city.volume)} · ${clock(city.truck)}` : `${count(city.volume)} · cut-off ${clock(city.truck)}` }),
+            h('button', { class: `shp-label shp-city-label${sel?.city === c ? ' is-sel' : ''}`, type: 'button', style: `width:${labelW}px;--c:${cityColour(c)}`, 'data-key': `label-${c}`, onclick: () => tapCity(c), title: `${name(c)} · ${count(city.volume)} parcels · cut-off ${clock(city.truck)}`, 'aria-expanded': String(open) },
+              h('b', {}, name(c), h('i', { class: 'shp-chev', 'aria-hidden': 'true', text: open ? '▾' : '▸' })), h('span', { class: 'shp-num', text: phone ? `${count(city.volume)} · ${clock(city.truck)}` : `${count(city.volume)} · cut-off ${clock(city.truck)}` }),
               onRobots && !phone ? h('i', { class: 'shp-tag', text: mine.length ? 'docks + robots' : 'robots' }) : null),
             h('div', { class: 'shp-cell' }, track, notes.length ? h('div', { class: `shp-note${isBad ? ' is-bad' : ''}`, style: `width:${trackW}px`, text: notes.join(' ') }) : null)),
         );
+        // On a phone the details open right under the city's own line.
+        if (open && phone) {
+          insp.classList.add('is-inline');
+          insp.style.width = `${Math.max(240, scroll.clientWidth - 2)}px`;
+          insp.style.setProperty('--c', cityColour(c));
+          rows.push(insp);
+        }
       }
 
       // Docks: door by door in a small hall, as a count in a large one.

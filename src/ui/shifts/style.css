@@ -1126,7 +1126,13 @@
 .sh-planner-host {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  /* Exactly the screen: the planner scrolls inside itself, its bar stays in view. */
+  height: 100%;
+  min-height: 0;
+}
+
+.sh-planner-host > :last-child {
+  min-height: 0;
 }
 
 .sh-planner-host > :last-child {
