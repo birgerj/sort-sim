@@ -2,37 +2,23 @@
  "blocks": [
   {
    "city": 0,
-   "start": 30,
-   "end": 90,
+   "start": 60,
+   "end": 180,
    "people": 2,
    "docks": 1
   },
   {
    "city": 0,
-   "start": 90,
-   "end": 150,
-   "people": 1,
-   "docks": 1
-  },
-  {
-   "city": 0,
-   "start": 180,
-   "end": 240,
+   "start": 210,
+   "end": 300,
    "people": 2,
-   "docks": 1
-  },
-  {
-   "city": 0,
-   "start": 240,
-   "end": 330,
-   "people": 1,
    "docks": 1
   },
   {
    "city": 1,
    "start": 30,
-   "end": 90,
-   "people": 2,
+   "end": 120,
+   "people": 1,
    "docks": 1
   },
   {

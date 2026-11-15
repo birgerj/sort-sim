@@ -4,14 +4,14 @@
  "par": 177.5,
  "parPlanEarns": false,
  "plainEarns": false,
- "plainProfit": 100.0,
+ "plainProfit": 78.75,
  "found": true,
- "profit": 160.0,
+ "profit": 165.12500000000003,
  "plan": {
   "blocks": [
    {
     "city": 0,
-    "start": 0,
+    "start": 30,
     "end": 120,
     "people": 1,
     "docks": 1

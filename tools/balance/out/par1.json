@@ -45,6 +45,17 @@
     177.5,
     177.5
    ]
+  },
+  {
+   "note": "rules changed: cut-off and cleardown; block ends clipped",
+   "profit": 177.5
+  },
+  {
+   "iters": 10000,
+   "restarts": [
+    177.5,
+    177.5
+   ]
   }
  ],
  "detail": {
@@ -59,7 +70,14 @@
   "store": 7.499999999999997,
   "peak": 49.999999999999986,
   "ontime": 1,
-  "refused": 0.0
+  "refused": 0.0,
+  "leave": [
+   135
+  ],
+  "done": [
+   0
+  ],
+  "nlate": 0
  },
  "peaks": [
   2,

@@ -1,42 +1,42 @@
 {
  "level": 7,
- "profit": 7577.017502950701,
+ "profit": 7566.575484504652,
  "plan": {
   "blocks": [
    {
     "city": 0,
     "start": 30,
     "end": 150,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 0,
-    "start": 30,
-    "end": 210,
     "people": 2,
     "docks": 1
    },
    {
     "city": 0,
-    "start": 120,
-    "end": 180,
-    "people": 1,
-    "docks": 1
-   },
-   {
-    "city": 0,
-    "start": 180,
-    "end": 240,
+    "start": 90,
+    "end": 150,
     "people": 2,
     "docks": 1
    },
    {
     "city": 0,
-    "start": 240,
+    "start": 150,
+    "end": 270,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 150,
+    "end": 300,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 270,
     "end": 330,
     "people": 2,
-    "docks": 2
+    "docks": 1
    },
    {
     "city": 1,
@@ -48,7 +48,7 @@
    {
     "city": 1,
     "start": 0,
-    "end": 180,
+    "end": 90,
     "people": 2,
     "docks": 1
    },
@@ -68,14 +68,21 @@
    },
    {
     "city": 1,
-    "start": 180,
-    "end": 250,
+    "start": 90,
+    "end": 210,
     "people": 2,
     "docks": 1
    },
    {
+    "city": 1,
+    "start": 180,
+    "end": 250,
+    "people": 1,
+    "docks": 1
+   },
+   {
     "city": 2,
-    "start": 90,
+    "start": 60,
     "end": 150,
     "people": 2,
     "docks": 1
@@ -90,35 +97,28 @@
    {
     "city": 2,
     "start": 210,
-    "end": 330,
+    "end": 270,
     "people": 2,
     "docks": 1
    },
    {
     "city": 2,
-    "start": 240,
+    "start": 270,
     "end": 330,
     "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 2,
-    "start": 300,
-    "end": 360,
-    "people": 2,
-    "docks": 1
+    "docks": 2
    },
    {
     "city": 3,
     "start": 0,
-    "end": 90,
+    "end": 120,
     "people": 2,
     "docks": 1
    },
    {
     "city": 3,
     "start": 30,
-    "end": 90,
+    "end": 150,
     "people": 2,
     "docks": 1
    },
@@ -126,21 +126,21 @@
     "city": 3,
     "start": 60,
     "end": 150,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 3,
-    "start": 90,
-    "end": 150,
-    "people": 2,
+    "people": 1,
     "docks": 1
    },
    {
     "city": 4,
-    "start": 180,
+    "start": 60,
     "end": 300,
     "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 5,
+    "start": 180,
+    "end": 330,
+    "people": 1,
     "docks": 1
    },
    {
@@ -148,18 +148,18 @@
     "start": 270,
     "end": 330,
     "people": 2,
-    "docks": 2
+    "docks": 1
    },
    {
-    "city": 6,
-    "start": 0,
-    "end": 180,
-    "people": 1,
+    "city": 5,
+    "start": 300,
+    "end": 360,
+    "people": 2,
     "docks": 1
    },
    {
     "city": 6,
-    "start": 180,
+    "start": 150,
     "end": 240,
     "people": 2,
     "docks": 1
@@ -173,13 +173,6 @@
    },
    {
     "city": 7,
-    "start": 150,
-    "end": 210,
-    "people": 2,
-    "docks": 1
-   },
-   {
-    "city": 8,
     "start": 120,
     "end": 210,
     "people": 1,
@@ -187,18 +180,20 @@
    },
    {
     "city": 8,
-    "start": 240,
-    "end": 350,
+    "start": 270,
+    "end": 330,
     "people": 1,
     "docks": 1
    }
   ],
   "robotCities": [
    0,
+   2,
    4,
-   5
+   6,
+   8
   ],
-  "robots": 10
+  "robots": 11
  },
  "runs": [
   {
@@ -261,24 +256,83 @@
    "polish": [
     7577.02
    ]
+  },
+  {
+   "note": "rules changed: cut-off and cleardown; block ends clipped",
+   "profit": 7457.02
+  },
+  {
+   "iters": 120000,
+   "restarts": [
+    7481.45,
+    7415.19
+   ]
+  },
+  {
+   "iters": 100000,
+   "T0": 40,
+   "polish": [
+    7566.58
+   ]
   }
  ],
  "detail": {
-  "profit": 7577.017502950701,
+  "profit": 7566.575484504652,
   "rev": 9660.0,
   "bonus": 1932.0,
   "late": 0.0,
   "left": 0.0,
-  "dock": 1050.0,
-  "staff": 2210.0,
-  "robots": 660.0,
-  "store": 94.98249704929948,
-  "peak": 135.18758248926514,
+  "dock": 1047.9166666666665,
+  "staff": 2172.5,
+  "robots": 726.0,
+  "store": 79.00784882868159,
+  "peak": 164.36264122400559,
   "ontime": 9,
-  "refused": 0.0
+  "refused": 0.0,
+  "leave": [
+   355,
+   265,
+   375,
+   165,
+   345,
+   375,
+   285,
+   225,
+   365
+  ],
+  "done": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   165,
+   0,
+   0,
+   165,
+   0,
+   0,
+   0,
+   225,
+   0,
+   0,
+   0,
+   0,
+   265,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   375
+  ],
+  "nlate": 0
  },
  "peaks": [
-  16,
+  17,
   9
  ]
 }

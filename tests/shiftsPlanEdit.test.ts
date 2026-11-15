@@ -3,6 +3,7 @@ import fixtureText from './fixtures/shifts/level4.json?raw';
 import goldenText from './fixtures/shifts/golden.json?raw';
 import { describe, expect, it } from 'vitest';
 import type { Level, Plan, Timeline } from '../src/shifts/contract';
+import { simulate } from '../src/shifts/model';
 import { addBlock, canStep, moveBlock, removeBlock, setDocks, setEnd, setPeople, setRobotCity, setRobots, setStart, snap, starterBlock, stepEnd, stepStart } from '../src/ui/shifts/planner/edit';
 import { allowedTimes, assignDoors, busyDockSteps, checkPlan, fixedCosts, goalStanding, mostToEarn, peak, peopleSteps, unservedCities } from '../src/ui/shifts/planner/rules';
 
@@ -14,9 +15,9 @@ const empty = (): Plan => ({ blocks: [], robotCities: [], robots: 0 });
 
 describe('plan rules', () => {
   it('allows the half hours, the first parcel and the truck time', () => {
-    // Level 4, city 0: truck at 105, so 105 is allowed and nothing after 135.
-    expect(allowedTimes(level(4), 0)).toEqual([0, 30, 60, 90, 105, 120]);
-    expect(allowedTimes(level(1), 0).at(-1)).toBe(150);
+    // Level 4, city 0: cut-off at 105, so 105 is allowed and nothing after it.
+    expect(allowedTimes(level(4), 0)).toEqual([0, 30, 60, 90, 105]);
+    expect(allowedTimes(level(1), 0).at(-1)).toBe(120);
   });
 
   it('accepts every plan the score model accepts', () => {
@@ -58,12 +59,12 @@ describe('plan rules', () => {
     expect(checkPlan(level(3), { ...empty(), robots: 7 })).toEqual([{ kind: 'tooManyRobots' }]);
     // Two docks, three cities: the third finds a door only 15 minutes after another city left.
     const tight: Plan = { ...empty(), blocks: [
-      { city: 0, start: 0, end: 120, people: 1, docks: 1 },
+      { city: 0, start: 0, end: 90, people: 1, docks: 1 },
       { city: 2, start: 0, end: 180, people: 1, docks: 1 },
-      { city: 1, start: 120, end: 240, people: 1, docks: 1 },
+      { city: 1, start: 90, end: 240, people: 1, docks: 1 },
     ] };
     expect(checkPlan(l, tight)).toEqual([{ kind: 'noDock', block: 2 }]);
-    tight.blocks[2]!.start = 150;
+    tight.blocks[2]!.start = 120;
     expect(checkPlan(l, tight)).toEqual([]);
   });
 
@@ -87,16 +88,32 @@ describe('plan rules', () => {
 
   it('adds up the fixed costs like the result does', () => {
     const c = fixedCosts(FIX.level, FIX.plan);
-    expect(Math.round(c.docks)).toBe(FIX.result.lines.docks);
-    expect(Math.round(c.people)).toBe(FIX.result.lines.people);
+    // The result also pays the cleardowns (a door that works until its city's cut-off goes on for at
+    // least 15 minutes); the planner's fixed costs are the planned blocks only.
+    const cleardown = (lv: Level, tl: Timeline): { docks: number; people: number } => {
+      let docks = 0;
+      let people = 0;
+      for (const c of tl.cleardowns ?? []) {
+        const crew = tl.blocks.find((b) => b.door === c.door && b.city === c.city && b.end === c.from)!.people;
+        docks += ((c.to - c.from) / 60) * 25;
+        people += ((c.to - c.from) / 60) * crew * 30 * lv.wageFactor;
+      }
+      return { docks, people };
+    };
+    const extra = cleardown(FIX.level, FIX.timeline);
+    expect(extra.docks).toBeCloseTo(3 * 6.25, 5); // three doors, 15 minutes each
+    // (The fixture rounds halves to even, so compare within half a Sorty.)
+    expect(Math.abs(c.docks + extra.docks - FIX.result.lines.docks)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(c.people + extra.people - FIX.result.lines.people)).toBeLessThanOrEqual(0.5);
     for (const g of GOLDEN) {
       const x = fixedCosts(level(g.level), g.plan);
+      const more = cleardown(level(g.level), simulate(level(g.level), g.plan).timeline);
       // (The fixture rounds halves to even, so compare within half a Sorty.)
-      expect(Math.abs(x.docks - g.lines.docks), `docks ${g.level} ${g.name}`).toBeLessThanOrEqual(0.5);
-      expect(Math.abs(x.people - g.lines.people), `people ${g.level} ${g.name}`).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(x.docks + more.docks - g.lines.docks), `docks ${g.level} ${g.name}`).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(x.people + more.people - g.lines.people), `people ${g.level} ${g.name}`).toBeLessThanOrEqual(0.5);
       expect(Math.abs(x.robots - g.lines.robots), `robots ${g.level} ${g.name}`).toBeLessThanOrEqual(0.5);
     }
-    expect(Math.round(mostToEarn(FIX.level))).toBe(954);
+    expect(Math.round(mostToEarn(FIX.level))).toBe(900);
     // Half way through the first block: half its cost, and the robots' share of the night.
     expect(fixedCosts(level(3), { blocks: [{ city: 0, start: 0, end: 240, people: 1, docks: 1 }], robotCities: [1], robots: 2 }, 120)).toEqual({ docks: 50, people: 60, robots: 44, total: 154 });
   });
@@ -139,12 +156,12 @@ describe('plan editing', () => {
 
   it('steps over the half hours and the truck time', () => {
     let p = addBlock(l, empty(), 0).plan; // 0–105
+    expect(canStep(l, p, 0, 'end', 1)).toBe(false); // 105 is the cut-off: nothing after it
     p = stepEnd(l, p, 0, 1);
-    expect(p.blocks[0]!.end).toBe(120);
-    p = stepEnd(l, p, 0, 1);
-    expect(p.blocks[0]!.end).toBe(135 > 120 ? 120 : 0); // 135 is not on the grid: 120 is the last
-    expect(canStep(l, p, 0, 'end', 1)).toBe(false);
+    expect(p.blocks[0]!.end).toBe(105);
     p = stepEnd(l, p, 0, -1);
+    expect(p.blocks[0]!.end).toBe(90);
+    p = stepEnd(l, p, 0, 1);
     expect(p.blocks[0]!.end).toBe(105);
     p = stepEnd(l, p, 0, -1);
     expect(p.blocks[0]!.end).toBe(90);
@@ -172,11 +189,11 @@ describe('plan editing', () => {
     p = setStart(l, p, 0, 233);
     expect(p.blocks[0]).toMatchObject({ start: 180, end: 240 });
     p = setEnd(l, p, 0, 999);
-    expect(p.blocks[0]!.end).toBe(270);
+    expect(p.blocks[0]!.end).toBe(240);
     p = moveBlock(l, p, 0, -50);
-    expect(p.blocks[0]).toMatchObject({ start: 0, end: 90 });
+    expect(p.blocks[0]).toMatchObject({ start: 0, end: 60 });
     p = moveBlock(l, p, 0, 400);
-    expect(p.blocks[0]).toMatchObject({ start: 180, end: 270 });
+    expect(p.blocks[0]).toMatchObject({ start: 180, end: 240 }); // never past the cut-off
     expect(checkPlan(l, p)).toEqual([]);
   });
 
