@@ -126,6 +126,9 @@ export interface Director {
   exit(): void;
   /** Fly the camera to this city's dock or robot lines and stay there; ends the automatic direction. */
   focusCity?(city: number): void;
+  /** Fixed places to look from (the docks, the robots, the buffer...), and going to one: ends the automatic direction. */
+  views?(): { id: string; name: string }[];
+  view?(id: string): void;
   /** Automatic direction on (overview, cutting to events) or off (the player looks around). */
   setAutoCamera?(on: boolean): void;
   /** Called whenever the automatic direction goes on or off, also when the player moved the camera. */

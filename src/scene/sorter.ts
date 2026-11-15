@@ -7281,6 +7281,16 @@ export class Sorter implements Scene3D {
    * The camera for a played shift: from `eye` towards `look`, flying there or (`cut`) at
    * once; `free` lets it stand outside the hall's walls.
    */
+  /** Where one of the free simulation's stops puts the camera, for the game's own view buttons. */
+  shiftStop(name: string): { eye: V3; look: V3; free: boolean } | null {
+    const p = this.pois.find((x) => x.name === name);
+    if (!p) return null;
+    const eye = new THREE.Vector3();
+    const look = new THREE.Vector3();
+    p.at(eye, look, 0);
+    return { eye, look, free: p.free === true };
+  }
+
   shiftView(eye: V3, look: V3, name: string, cut: boolean, free = false): void {
     this.spotEye.copy(eye);
     this.spotLook.copy(look);

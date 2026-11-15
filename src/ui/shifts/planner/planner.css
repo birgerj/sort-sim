@@ -1739,3 +1739,39 @@
     font-size: 12.5px;
   }
 }
+
+/* The camera's places: a row of keys that opens above the bottom bar. */
+.shp-hud .shp-hud-bottom {
+  position: relative;
+}
+.shp-hud .shp-hud-views {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  pointer-events: auto;
+}
+.shp-hud .shp-hud-views[hidden] {
+  display: none;
+}
+.shp-hud .shp-hud-views .shp-pick {
+  flex: 1 1 28%;
+  min-height: 44px;
+}
+.shp-hud .shp-hud-views .shp-pick[aria-pressed='true'] {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: #ffffff;
+}
+/* The View key shows a dot while the camera is not on Auto. */
+.shp-hud .shp-hud-view.is-off {
+  border-color: var(--acc);
+  box-shadow: inset 0 -3px 0 var(--acc);
+}

@@ -91,6 +91,16 @@ interface DoorRun {
 
 type Shot = { eye: THREE.Vector3; look: THREE.Vector3; name: string; free?: boolean };
 
+/** Fixed places the player can look from during a shift: stops of the free simulation, and the buffer rack (null). */
+const VIEWS: { id: string; name: string; stop: string | null }[] = [
+  { id: 'docks', name: 'Docks', stop: 'docks' },
+  { id: 'robots', name: 'Robots', stop: 'pickup stations' },
+  { id: 'buffer', name: 'Buffer', stop: null },
+  { id: 'sorter', name: 'Sorter', stop: 'loop' },
+  { id: 'inbound', name: 'Inbound', stop: 'inbound' },
+  { id: 'top', name: 'From above', stop: 'top down' },
+];
+
 export function createDirector(scene: Sorter): Director {
   let active = false;
   let level: Level | null = null;
@@ -914,6 +924,21 @@ export function createDirector(scene: Sorter): Director {
             : next
               ? { ...rackShot(), name: `${cityName(city)}: waiting in the buffer` }
               : null;
+      if (!shot) return;
+      setAuto(false);
+      go(shot, false);
+    },
+
+    views() {
+      return VIEWS.filter((w) => w.stop === null || scene.shiftStop(w.stop) !== null).map(({ id, name }) => ({ id, name }));
+    },
+
+    view(id) {
+      if (!active) return;
+      const w = VIEWS.find((x) => x.id === id);
+      if (!w) return;
+      const stop = w.stop === null ? null : scene.shiftStop(w.stop);
+      const shot: Shot | null = w.stop === null ? rackShot() : stop ? { eye: stop.eye, look: stop.look, name: w.name, free: stop.free || undefined } : null;
       if (!shot) return;
       setAuto(false);
       go(shot, false);
