@@ -419,7 +419,10 @@ export function createDirector(scene: Sorter): Director {
     // Past the cut-off nothing more goes down the chute. (A timeline without cleardowns still
     // loads in its last 15 minutes: what it loads then is sent, so it can be seen going in.)
     if (st.clearing && !st.stint.derived) return doors[d]!.sent;
-    if (st.clearing) return inHall(st.stint.loaded[st.stint.loaded.length - 1] ?? 0, factor);
+    const all = inHall(st.stint.loaded[st.stint.loaded.length - 1] ?? 0, factor);
+    if (st.clearing) return all;
+    // (Just before a cut-off: everything this door will still load is on its way to the belt by then.)
+    if (!st.stint.derived && minute + scene.shiftLead(chute) * MIN_PER_BEAT + SEND_AHEAD >= st.stint.cutoff) return all;
     return inHall(sample(st.stint.loaded, minute + scene.shiftLead(chute) * MIN_PER_BEAT + SEND_AHEAD, schedule.stepMinutes), factor);
   }
 

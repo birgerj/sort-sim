@@ -149,14 +149,26 @@ export function buildSchedule(level: Level, timeline: Timeline): ShiftSchedule {
     }))
     .sort((a, b) => a.start - b.start || a.door - b.door);
 
+  // Cleardowns from the timeline: the door of a block that ends at its city's cut-off goes on
+  // (belt, cages) until `to`, and loads until then.
+  const loadEnd = new Map<Stint, number>();
+  for (const s of stints) {
+    const given = (timeline.cleardowns ?? []).filter((c) => c.city === s.city && c.door === s.door && Math.abs(c.from - s.blockEnd) < 0.01)[0];
+    if (!given) continue;
+    s.derived = false;
+    s.cutoff = given.from;
+    s.end = Math.max(s.end, given.to);
+    loadEnd.set(s, s.end);
+  }
+
   // A door that comes from another city shows the new one during the switch.
   for (const s of stints) {
     const before = stints.filter((x) => x.door === s.door && x !== s && x.end <= s.start).sort((a, b) => b.end - a.end)[0];
-    if (before && before.city !== s.city) s.signFrom = Math.max(before.end, s.start - SWITCH_MINUTES);
+    if (before && before.city !== s.city) s.signFrom = Math.min(s.start, Math.max(before.end, s.start - SWITCH_MINUTES));
   }
 
   // What a door can load in a step: the minutes it is open in it, times its people's pace.
-  const cap = (s: Stint, k: number) => (Math.max(0, Math.min(s.blockEnd, (k + 1) * step) - Math.max(s.start, k * step)) * PER_HOUR[s.people]) / 60;
+  const cap = (s: Stint, k: number) => (Math.max(0, Math.min(loadEnd.get(s) ?? s.blockEnd, (k + 1) * step) - Math.max(s.start, k * step)) * PER_HOUR[s.people]) / 60;
   // A city that loads while none of its doors is open is (also) a robot city.
   const robotLoaded: number[][] = Array.from({ length: cities }, () => Array.from({ length: steps + 1 }, () => 0));
   const isRobot: boolean[] = Array.from({ length: cities }, () => false);
@@ -190,7 +202,8 @@ export function buildSchedule(level: Level, timeline: Timeline): ShiftSchedule {
     const mine = stints.filter((s) => s.city === d.city);
     // The city's last doors (those whose block ends last) are the ones its truck waits for.
     const latest = Math.max(-Infinity, ...mine.map((s) => s.blockEnd));
-    const last = mine.filter((s) => s.blockEnd >= Math.min(latest, d.at) - 0.01);
+    // (With cleardowns in the timeline: the doors that are in cleardown for it.)
+    const last = timeline.cleardowns ? mine.filter((s) => !s.derived) : mine.filter((s) => s.blockEnd >= Math.min(latest, d.at) - 0.01);
     for (const s of last) {
       s.departs = true;
       s.status = d.status;
@@ -202,22 +215,22 @@ export function buildSchedule(level: Level, timeline: Timeline): ShiftSchedule {
     const robots = robotCities.find((r) => r.city === d.city);
     if (robots) {
       // The robots' cut-off: a cleardown of the city that is not at one of its doors, else 15 minutes before the truck goes.
-      const own = (timeline.cleardowns ?? []).filter((c) => c.city === d.city && !mine.some((s) => s.door === c.door)).sort((a, b) => a.from - b.from)[0];
-      robots.cutoff = own ? own.from : Math.max(0, d.at - CLEARDOWN_MINUTES);
+      // The robots' cut-off: the city's truck time (its lines have no entry among the cleardowns);
+      // for a timeline without cleardowns, 15 minutes before the truck goes.
+      robots.cutoff = timeline.cleardowns ? truck : Math.max(0, d.at - CLEARDOWN_MINUTES);
       if (!last.length) robots.departure = { at: d.at, status: d.status, lateFrom: d.status === 'late' && d.at > planned ? planned : null };
     }
   }
   // Cleardowns: per door from the timeline; else the last 15 minutes before the door comes down.
+  // A block without a cleardown of its own still has its cages to put in before the door comes
+  // down: the last minutes of the block (15 for a timeline without cleardowns, else 5).
+  for (const s of stints) if (s.derived) s.cutoff = Math.max(s.start, s.end - (timeline.cleardowns ? 5 : CLEARDOWN_MINUTES));
+  // A door is not there for its next block until it is done with this one: the next opens later if it must.
   for (const s of stints) {
-    const given = (timeline.cleardowns ?? []).filter((c) => c.city === s.city && c.door === s.door && c.from >= s.start && c.from <= s.blockEnd + 0.01).sort((a, b) => b.from - a.from)[0];
-    if (given) {
-      s.derived = false;
-      s.cutoff = given.from;
-      s.end = Math.max(s.end, given.to);
-    } else s.cutoff = Math.max(s.start, s.end - CLEARDOWN_MINUTES);
-    // (Never into the next block on the same door.)
-    const next = stints.filter((x) => x.door === s.door && x !== s && x.start >= s.blockEnd).sort((a, b) => a.start - b.start)[0];
-    if (next) s.end = Math.max(s.blockEnd, Math.min(s.end, next.start));
+    const before = stints.filter((x) => x.door === s.door && x !== s && x.blockEnd <= s.blockEnd && (x.start < s.start || x.blockEnd < s.blockEnd)).sort((a, b) => b.end - a.end)[0];
+    if (!before || before.end <= s.start) continue;
+    s.start = Math.min(before.end, s.blockEnd);
+    s.signFrom = Math.max(s.signFrom, s.start);
   }
 
   // What was left behind stands at the doors whose truck was the city's last (shared by what they loaded).

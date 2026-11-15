@@ -46,18 +46,20 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
     expect(doorAt(s, 1, 30).city).toBe(-1);
     expect(doorAt(s, 1, 60).open).toBe(true);
     expect(doorAt(s, 1, 60).people).toBe(1);
-    expect(doorAt(s, 1, 180).open).toBe(false);
+    // Its block ends at the cut-off (180): the door stays up for the cleardown, until 195.
+    expect(doorAt(s, 1, 180)).toMatchObject({ open: true, clearing: true });
+    expect(doorAt(s, 1, 195).open).toBe(false);
     // A door that is not in the plan stays bare all night.
     for (const m of [0, 100, 239]) expect(doorAt(s, 5, m)).toMatchObject({ open: false, city: -1, people: 0 });
   });
 
-  it('changes the signs during the 15-minute switch to another city', () => {
-    // Door 1 (index 0): city 0 until 105, city 1 from 120.
+  it('keeps a door for its city through the cleardown, then gives it to the next', () => {
+    // Door 1 (index 0): city 0 until its cut-off at 105 and its cleardown until 120, city 1 from 120.
     expect(doorAt(s, 0, 104).city).toBe(0);
-    const during = doorAt(s, 0, 110);
-    expect(during).toMatchObject({ open: false, city: 1, people: 0 });
-    expect(doorAt(s, 0, 120)).toMatchObject({ open: true, city: 1, people: 2 });
-    expect(s.events.filter((e) => e.kind === 'ready')).toEqual([{ at: 105, kind: 'ready', door: 0, city: 1 }]);
+    expect(doorAt(s, 0, 110)).toMatchObject({ open: true, clearing: true, city: 0, people: 2 });
+    expect(doorAt(s, 0, 120)).toMatchObject({ open: true, clearing: false, city: 1, people: 2 });
+    // (The cleardown takes the place of the switch: the signs change when the door is done.)
+    expect(s.events.filter((e) => e.kind === 'ready')).toEqual([]);
   });
 
   it('gives every door the parcels of its city', () => {
@@ -91,17 +93,22 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
     expect(doorAt(s, 0, 200).pressure).toBeLessThan(0.5);
   });
 
-  it('flashes the lamp in the cleardown only (without one in the timeline: the last 15 minutes)', () => {
+  it('flashes the lamp in the cleardown only (from the cut-off until the truck leaves)', () => {
     expect(doorAt(s, 0, 85).lamp).toBe(false);
-    expect(doorAt(s, 0, 85).clearing).toBe(false);
-    expect(doorAt(s, 0, 92)).toMatchObject({ lamp: true, clearing: true, open: true });
-    expect(doorAt(s, 0, 102).lamp).toBe(true);
-    expect(doorAt(s, 0, 102).late).toBe(false);
+    expect(doorAt(s, 0, 104).clearing).toBe(false);
+    expect(doorAt(s, 0, 106)).toMatchObject({ lamp: true, clearing: true, open: true });
+    expect(doorAt(s, 0, 119).lamp).toBe(true);
+    expect(doorAt(s, 0, 119).late).toBe(false);
   });
 
   // The hall still looks for a truck's doors among the blocks that end when it leaves; since the cut-off
   // rule a truck leaves after its cleardown, so the doors must come from timeline.cleardowns.
-  it.todo('names the doors a truck leaves from (hall: read timeline.cleardowns)');
+  it('names the doors a truck leaves from: those in cleardown for its city', () => {
+    const dep = s.events.filter((e) => e.kind === 'depart');
+    expect(dep.map((e) => (e.kind === 'depart' ? [e.city, e.doors] : []))).toEqual([[0, [0]], [2, [1]], [1, [0]]]);
+    expect(s.stints.map((x) => [x.city, x.door, x.cutoff, x.end, x.derived])).toEqual([[0, 0, 105, 120, false], [2, 1, 180, 195, false], [1, 0, 240, 255, false]]);
+    expect(s.end).toBe(255);
+  });
 
   it('lists the trucks leaving on time from their doors', () => {
     const dep = s.events.filter((e) => e.kind === 'depart');
