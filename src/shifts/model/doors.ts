@@ -47,7 +47,14 @@ export function robotCities(plan: Plan): number[] {
  * `unplaced` lists the blocks (plan indices) that found no door for one of their docks.
  */
 export function assignDoors(level: Level, plan: Plan): { placed: DoorBlock[]; unplaced: number[] } {
-  const order = plan.blocks.map((b, block) => ({ b, block }));
+  // Equal blocks (same city, start, end and crew) are one block with their docks added up: two
+  // blocks side by side and one block with two docks are the same plan. `block` is the first of them.
+  const order: { b: Plan['blocks'][number]; block: number }[] = [];
+  plan.blocks.forEach((b, block) => {
+    const twin = order.find((o) => o.b.city === b.city && o.b.start === b.start && o.b.end === b.end && o.b.people === b.people);
+    if (twin) twin.b = { ...twin.b, docks: twin.b.docks + b.docks };
+    else order.push({ b: { ...b }, block });
+  });
   order.sort((x, y) => x.b.start - y.b.start || x.b.city - y.b.city || x.b.people - y.b.people || x.b.docks - y.b.docks || x.b.end - y.b.end || x.block - y.block);
   const freeFrom: number[] = new Array<number>(level.docks).fill(-999);
   const lastCity: number[] = new Array<number>(level.docks).fill(-1);

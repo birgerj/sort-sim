@@ -25,7 +25,7 @@ BADGE = [('lean', 'One person is enough'), ('lean3', 'Never more than 3 people a
          ('smallFleet', 'At most 6 robots'), ('lean6', 'Never more than 6 people at work'), ('allOnTime', 'Every truck on time'), ('onTime9', 'At least 9 trucks on time'),
          ('lean16', 'Never more than 16 people at work'), ('allOnTime', 'Every truck on time')]
 # Best profit found per level with plans in the game's shape (par.py; see REPORT.md).
-PAR = [177, 621, 779, 596, 1601, 2398, 7577, 12655, 13066, 19584]  # rounded down, so the best known plan scores at least 1000
+PAR = [177, 611, 856, 530, 1606, 2408, 7566, 12359, 13084, 19593]  # rounded down, so the best known plan scores at least 1000
 
 
 def level_json(L):
@@ -67,7 +67,14 @@ def to_solver(L, plan):
     fixed order first: blocks by start, city, people, docks, end; robot cities by number. (Blocks of one city that start
     together are served in that order: the belt of the first fills first.)"""
     L['lines'] = 999
-    blocks = sorted(plan['blocks'], key=lambda b: (b['start'], b['city'], b['people'], b['docks'], b['end']))  # the end last: cutting a block must not change its turn
+    # Equal blocks (same city, start, end and crew) are one block with their docks added up: two blocks side by
+    # side and one block with two docks are the same plan.
+    same = {}
+    for b in plan['blocks']:
+        k = (b['city'], b['start'], b['end'], b['people'])
+        same[k] = same.get(k, 0) + b['docks']
+    blocks = [{'city': c, 'start': s0, 'end': e, 'people': q, 'docks': n} for (c, s0, e, q), n in same.items()]
+    blocks.sort(key=lambda b: (b['start'], b['city'], b['people'], b['docks'], b['end']))  # the end last: cutting a block must not change its turn
     doors = [(-999, -1, 0)] * L['docks']  # (free from, last city, people of its last block)
     out = []
     # Blocks that start together for the same city are placed in two rounds. First every dock that can goes on

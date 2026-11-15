@@ -1,13 +1,20 @@
 {
  "level": 3,
- "profit": 793.0,
+ "profit": 856.6846236908185,
  "plan": {
   "blocks": [
    {
     "city": 0,
     "start": 0,
-    "end": 180,
+    "end": 90,
     "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 90,
+    "end": 180,
+    "people": 1,
     "docks": 1
    }
   ],
@@ -17,7 +24,7 @@
    2,
    3
   ],
-  "robots": 4
+  "robots": 6
  },
  "runs": [
   {
@@ -65,19 +72,28 @@
     793.0,
     793.0
    ]
+  },
+  {
+   "iters": 30000,
+   "restarts": [
+    856.68,
+    856.68,
+    855.5,
+    840.2
+   ]
   }
  ],
  "detail": {
-  "profit": 793.0,
-  "rev": 1020.0,
-  "bonus": 204.0,
+  "profit": 856.6846236908185,
+  "rev": 1110.0,
+  "bonus": 222.0,
   "late": 0.0,
   "left": 0.0,
   "dock": 75.0,
-  "staff": 180.0,
-  "robots": 176.0,
-  "store": 0.0,
-  "peak": 0.0,
+  "staff": 135.0,
+  "robots": 264.0,
+  "store": 1.3153763091815138,
+  "peak": 8.769175394543426,
   "ontime": 4,
   "refused": 0.0,
   "leave": [
@@ -87,6 +103,7 @@
    195
   ],
   "done": [
+   0,
    0
   ],
   "nlate": 0
