@@ -4,7 +4,7 @@
 // checking a plan gives nothing away about the score. The door assignment follows the score
 // model's own (tools/balance/fixture.py, to_solver) step by step, so "no dock free" means the
 // same thing here as there.
-import { PRICES, RATES, type Block, type Level, type Plan, type PlanProblem } from '../../../shifts/contract';
+import { CLEARDOWN_MINUTES, PRICES, RATES, type Block, type Level, type Plan, type PlanProblem } from '../../../shifts/contract';
 import { arrivalRate, dockRate, firstParcel, robotLines } from '../../../shifts/estimate';
 
 /** The latest moment a block of this city may end. */
@@ -220,7 +220,9 @@ export interface Costs {
 }
 
 export function blockCost(level: Level, b: Block, until = Infinity): { docks: number; people: number } {
-  const hours = Math.max(0, Math.min(b.end, until) - b.start) / 60;
+  // A block that ends at its city's cut-off keeps its dock and crew for the cleardown.
+  const end = b.end === level.cities[b.city]?.truck ? b.end + CLEARDOWN_MINUTES : b.end;
+  const hours = Math.max(0, Math.min(end, until) - b.start) / 60;
   return { docks: PRICES.dockPerHour * b.docks * hours, people: PRICES.personPerHour * level.wageFactor * b.people * b.docks * hours };
 }
 

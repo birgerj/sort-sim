@@ -1047,7 +1047,7 @@ export interface ShiftHooks {
   took(city: number): void;
   /** A parcel of this city has just come onto the loop: the chute of a dock that may take it now, and its postcode (null: none); and: it was sent there. */
   route(city: number): { chute: number; pc: number } | null;
-  sent(chute: number): void;
+  sent(chute: number, n?: number): void;
   /** 0…1: how far the night look is on whatever the time of day (the closing party). */
   night: number;
   /** Parcels per beat to bring in from the inbound docks. */
@@ -3516,6 +3516,8 @@ export class Sorter implements Scene3D {
     if (this.shift && !p.noread && !p.toRack && (p.dest < 0 || this.room(p.dest, p.d + GAP) <= 0)) {
       // A shift of the planning game: its door closed or its belt filled up meanwhile. Round
       // again, until the director sends it somewhere (no store, no manual sorting).
+      // (It was counted as sent there: not any more.)
+      if (!p.spare && p.dest >= 0) this.shift.sent(p.dest, -1);
       p.dest = Math.max(0, p.dest);
       p.spare = true;
       this.retarget(p);
@@ -7279,6 +7281,16 @@ export class Sorter implements Scene3D {
    * The camera for a played shift: from `eye` towards `look`, flying there or (`cut`) at
    * once; `free` lets it stand outside the hall's walls.
    */
+  /** Where one of the free simulation's stops puts the camera, for the game's own view buttons. */
+  shiftStop(name: string): { eye: V3; look: V3; free: boolean } | null {
+    const p = this.pois.find((x) => x.name === name);
+    if (!p) return null;
+    const eye = new THREE.Vector3();
+    const look = new THREE.Vector3();
+    p.at(eye, look, 0);
+    return { eye, look, free: p.free === true };
+  }
+
   shiftView(eye: V3, look: V3, name: string, cut: boolean, free = false): void {
     this.spotEye.copy(eye);
     this.spotLook.copy(look);
@@ -7483,6 +7495,13 @@ export class Sorter implements Scene3D {
       out[p.city] = (out[p.city] ?? 0) + 1;
       n++;
     }
+    return n;
+  }
+
+  /** A shift's parcels of city `city` that a lane has let go and that are not on the loop yet. */
+  shiftComing(city: number): number {
+    let n = 0;
+    for (const p of this.parcels) if (p.city === city && p.mode === 'path' && p.pathKind === 'lane') n++;
     return n;
   }
 

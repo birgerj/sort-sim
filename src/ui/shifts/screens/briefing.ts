@@ -1,7 +1,7 @@
 // The briefing of one level: the orders on a small time line, what is open
 // tonight, the prices that matter, the profit needed per star and the extra goal.
 import { TROPHIES } from '../../../shifts/trophies';
-import { PRICES, type City, type Level } from '../../../shifts/contract';
+import { PRICES, type City, type Level, CLEARDOWN_MINUTES } from '../../../shifts/contract';
 import { button, h, stars, tag, topBar } from '../dom';
 import { cityColor, cityName, clock, firstParcel, hours, lastParcel, num, plural, price, robotForShift, starTargets, totalParcels, wage } from '../format';
 import { levelById, type Ctx } from './context';
@@ -40,7 +40,7 @@ function lane(level: Level, city: City, i: number): HTMLElement {
     { class: 'sh-lane', attrs: { 'aria-hidden': 'true' } },
     ...bars,
     h('div', { class: 'sh-lane-truck', attrs: { style: `left:${pct(city.truck)}` } }),
-    h('div', { class: `sh-lane-label${at < 0.3 ? ' sh-lane-label--after' : ''}`, text: `truck ${clock(city.truck)}`, attrs: { style: `left:${pct(city.truck)}` } }),
+    h('div', { class: `sh-lane-label${at < 0.3 ? ' sh-lane-label--after' : ''}`, text: `cut-off ${clock(city.truck)}`, attrs: { style: `left:${pct(city.truck)}` } }),
   );
 }
 
@@ -64,12 +64,12 @@ export function briefingScreen(ctx: Ctx, id: number): HTMLElement {
           'li',
           { class: 'sh-order' },
           h('div', { class: 'sh-order-city' }, h('span', { class: 'sh-swatch', attrs: { style: `background:${cityColor(i)}` } }), h('div', null, h('b', { text: cityName(ctx.names, i) }), h('div', { class: 'sh-order-sub', text: `arrives ${clock(firstParcel(c))}–${clock(lastParcel(c))}` }))),
-          h('div', { class: 'sh-order-n' }, h('b', { text: num(c.volume) }), h('div', { class: 'sh-order-sub', text: `truck ${clock(c.truck)}` })),
+          h('div', { class: 'sh-order-n' }, h('b', { text: num(c.volume) }), h('div', { class: 'sh-order-sub', text: `cut-off ${clock(c.truck)}` })),
           lane(level, c, i),
         ),
       ),
     ),
-    h('p', { class: 'sh-dim sh-orders-key', text: `The coloured bar is when a city's parcels arrive${peaks ? ' (taller where more arrive)' : ''}; the dark line is when its truck leaves.` }),
+    h('p', { class: 'sh-dim sh-orders-key', text: `The coloured bar is when a city's parcels arrive${peaks ? ' (taller where more arrive)' : ''}; the dark line is its cut-off: sorting for its truck stops then, and the truck leaves ${CLEARDOWN_MINUTES} minutes later.` }),
   );
 
   const fresh = h('section', { class: 'sh-panel sh-fresh' }, h('div', null, tag('New in this level')), h('p', { class: 'sh-fresh-text', text: level.notes.fresh }));

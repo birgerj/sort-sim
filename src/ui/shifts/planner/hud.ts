@@ -14,6 +14,9 @@ export interface HudOptions {
   onFocus?(city: number): void;
   onAuto?(): void;
   onSettings?(): void;
+  /** Fixed places to look from, and going to one. */
+  views?: { id: string; name: string }[];
+  onView?(id: string): void;
 }
 
 export interface ShiftHud {
@@ -78,19 +81,37 @@ export function shiftHud(o: HudOptions): ShiftHud {
       o.onSpeed(s.value);
     } }));
   const skip = h('button', { class: 'shp-pick shp-hud-skip', type: 'button', 'aria-label': 'Skip to result', onclick: () => o.onSkip() }, h('span', { class: 'shp-wide', text: 'Skip to result' }), h('span', { class: 'shp-narrow', text: 'Skip' }));
-  // Shown only while the player has taken the camera: one tap gives it back to the direction.
-  const auto = h('button', { class: 'shp-pick shp-hud-auto', type: 'button', text: 'Auto', 'aria-label': 'Automatic camera', onclick: () => o.onAuto?.() });
-  auto.hidden = true;
-  const controls = h('div', { class: 'shp-hud-speed', role: 'group', 'aria-label': 'Speed' }, ...speedButtons, auto, skip);
+  // View: where the camera looks from. Auto is the direction (it follows the shift by itself);
+  // the others are fixed places. The list opens above the bar and closes on a choice.
+  let isAuto = true;
+  let chosen = '';
+  const places = o.views ?? [];
+  const viewList = h('div', { class: 'shp-hud-views', role: 'group', 'aria-label': 'Camera' });
+  viewList.hidden = true;
+  const viewKeys = [
+    h('button', { class: 'shp-pick', type: 'button', text: 'Auto', 'data-view': '', onclick: () => { viewList.hidden = true; chosen = ''; o.onAuto?.(); } }),
+    ...places.map((w) => h('button', { class: 'shp-pick', type: 'button', text: w.name, 'data-view': w.id, onclick: () => { viewList.hidden = true; chosen = w.id; o.onView?.(w.id); markViews(); } })),
+  ];
+  viewList.append(...viewKeys);
+  const markViews = (): void => {
+    for (const k of viewKeys) k.setAttribute('aria-pressed', String(isAuto ? k.dataset.view === '' : k.dataset.view === chosen && chosen !== ''));
+    view.classList.toggle('is-off', !isAuto);
+  };
+  const view = h('button', { class: 'shp-pick shp-hud-view', type: 'button', text: 'View', 'aria-label': 'Camera views', 'aria-expanded': 'false', onclick: () => {
+    viewList.hidden = !viewList.hidden;
+    view.setAttribute('aria-expanded', String(!viewList.hidden));
+  } });
+  markViews();
+  const controls = h('div', { class: 'shp-hud-speed', role: 'group', 'aria-label': 'Speed' }, ...speedButtons, view, skip);
 
   // Cards in the order the trucks are due.
   const order = level.cities.map((_, i) => i).sort((a, b) => level.cities[a]!.truck - level.cities[b]!.truck || a - b);
   // Many cities: two narrow columns of cards, so the words are kept short.
   const compact = order.length > 8;
-  const due = (truck: number) => (compact ? clock(truck) : `truck ${clock(truck)}`);
+  const due = (truck: number) => (compact ? clock(truck) : `cut-off ${clock(truck)}`);
   const cards = order.map((c) => {
     const city = level.cities[c]!;
-    const tag = h('span', { class: 'shp-hud-tag shp-num', title: 'Truck time', text: due(city.truck) });
+    const tag = h('span', { class: 'shp-hud-tag shp-num', title: 'Cut-off', text: due(city.truck) });
     const bar = h('span');
     const line = h('div', { class: 'shp-hud-line shp-num', text: `0 of ${count(city.volume)}${compact ? '' : ' loaded'}` });
     const el = h('button', { class: 'shp-hud-card', type: 'button', style: `--c:${cityColour(c)}`, 'aria-label': `Show ${name(c)}`, onclick: () => o.onFocus?.(c) },
@@ -118,7 +139,7 @@ export function shiftHud(o: HudOptions): ShiftHud {
       h('div', { class: 'shp-hud-right' }, time, progress, o.onSettings ? h('button', { class: 'shp-pick shp-hud-gear', type: 'button', text: '⚙', 'aria-label': 'Settings', onclick: () => o.onSettings?.() }) : null)),
     gone,
     h('aside', { class: 'shp-hud-side', 'aria-label': 'Cities still loading' }, list),
-    h('footer', { class: 'shp-hud-bottom' }, moneyCard, controls),
+    h('footer', { class: 'shp-hud-bottom' }, viewList, moneyCard, controls),
   );
 
   function draw(): void {
@@ -177,7 +198,10 @@ export function shiftHud(o: HudOptions): ShiftHud {
       draw();
     },
     setAuto(on: boolean) {
-      auto.hidden = on;
+      isAuto = on;
+      // (Auto went off without a place chosen here: a city was tapped or the player looked around.)
+      if (on) chosen = '';
+      markViews();
     },
     done() {
       over = true;

@@ -834,6 +834,18 @@ export class RobotFloor {
     });
   }
 
+  /**
+   * A shift's cleardown for the robots: every box between x0 and x1 that holds parcels and
+   * that no robot is on its way to is closed and a forklift is called for it, full or not.
+   */
+  shipBins(x0: number, x1: number): void {
+    this.bins.forEach((bin, b) => {
+      if (b === this.tableBin || !bin.open || bin.n <= 0 || bin.x < x0 || bin.x > x1 || this.fleet.binBusy(b)) return;
+      bin.open = false;
+      this.handlers.full(b);
+    });
+  }
+
   private buildRobots(): void {
     const k = this.kit;
     const black = k.std(0x141519, 0.5, 0.3, 0x1b1c20);

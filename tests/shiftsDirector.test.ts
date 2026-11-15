@@ -33,7 +33,7 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
   const s = buildSchedule(level, timeline);
 
   it('plays the whole shift and uses two doors', () => {
-    expect(s.end).toBe(240);
+    expect(s.end).toBe(255); // the last truck leaves 15 minutes after its cut-off
     expect(doorsUsed(s)).toBe(2);
     expect(s.robotCities).toEqual([]);
   });
@@ -46,18 +46,20 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
     expect(doorAt(s, 1, 30).city).toBe(-1);
     expect(doorAt(s, 1, 60).open).toBe(true);
     expect(doorAt(s, 1, 60).people).toBe(1);
-    expect(doorAt(s, 1, 180).open).toBe(false);
+    // Its block ends at the cut-off (180): the door stays up for the cleardown, until 195.
+    expect(doorAt(s, 1, 180)).toMatchObject({ open: true, clearing: true });
+    expect(doorAt(s, 1, 195).open).toBe(false);
     // A door that is not in the plan stays bare all night.
     for (const m of [0, 100, 239]) expect(doorAt(s, 5, m)).toMatchObject({ open: false, city: -1, people: 0 });
   });
 
-  it('changes the signs during the 15-minute switch to another city', () => {
-    // Door 1 (index 0): city 0 until 105, city 1 from 120.
+  it('keeps a door for its city through the cleardown, then gives it to the next', () => {
+    // Door 1 (index 0): city 0 until its cut-off at 105 and its cleardown until 120, city 1 from 120.
     expect(doorAt(s, 0, 104).city).toBe(0);
-    const during = doorAt(s, 0, 110);
-    expect(during).toMatchObject({ open: false, city: 1, people: 0 });
-    expect(doorAt(s, 0, 120)).toMatchObject({ open: true, city: 1, people: 2 });
-    expect(s.events.filter((e) => e.kind === 'ready')).toEqual([{ at: 105, kind: 'ready', door: 0, city: 1 }]);
+    expect(doorAt(s, 0, 110)).toMatchObject({ open: true, clearing: true, city: 0, people: 2 });
+    expect(doorAt(s, 0, 120)).toMatchObject({ open: true, clearing: false, city: 1, people: 2 });
+    // (The cleardown takes the place of the switch: the signs change when the door is done.)
+    expect(s.events.filter((e) => e.kind === 'ready')).toEqual([]);
   });
 
   it('gives every door the parcels of its city', () => {
@@ -85,24 +87,36 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
   });
 
   it('knows how hard a door works', () => {
-    // Two people at 160 an hour against 170; one person flat out; city 1 tails off at the end.
+    // Two people at 160 an hour against 170; one person with 24 an hour against 90; city 1 tails off at the end.
     expect(doorAt(s, 0, 30).pressure).toBeGreaterThan(0.9);
-    expect(doorAt(s, 1, 90).pressure).toBeGreaterThan(0.95);
+    expect(doorAt(s, 1, 90).pressure).toBeCloseTo(24 / 90, 2);
     expect(doorAt(s, 0, 200).pressure).toBeLessThan(0.5);
   });
 
-  it('flashes the lamp in the last minutes of a block only', () => {
-    expect(doorAt(s, 0, 90).lamp).toBe(false);
-    expect(doorAt(s, 0, 102).lamp).toBe(true);
-    expect(doorAt(s, 0, 102).late).toBe(false);
+  it('flashes the lamp in the cleardown only (from the cut-off until the truck leaves)', () => {
+    expect(doorAt(s, 0, 85).lamp).toBe(false);
+    expect(doorAt(s, 0, 104).clearing).toBe(false);
+    expect(doorAt(s, 0, 106)).toMatchObject({ lamp: true, clearing: true, open: true });
+    expect(doorAt(s, 0, 119).lamp).toBe(true);
+    expect(doorAt(s, 0, 119).late).toBe(false);
+  });
+
+  // The hall still looks for a truck's doors among the blocks that end when it leaves; since the cut-off
+  // rule a truck leaves after its cleardown, so the doors must come from timeline.cleardowns.
+  it('names the doors a truck leaves from: those in cleardown for its city', () => {
+    const dep = s.events.filter((e) => e.kind === 'depart');
+    expect(dep.map((e) => (e.kind === 'depart' ? [e.city, e.doors] : []))).toEqual([[0, [0]], [2, [1]], [1, [0]]]);
+    expect(s.stints.map((x) => [x.city, x.door, x.cutoff, x.end, x.derived])).toEqual([[0, 0, 105, 120, false], [2, 1, 180, 195, false], [1, 0, 240, 255, false]]);
+    expect(s.end).toBe(255);
   });
 
   it('lists the trucks leaving on time from their doors', () => {
     const dep = s.events.filter((e) => e.kind === 'depart');
-    expect(dep).toEqual([
-      { at: 105, kind: 'depart', city: 0, status: 'onTime', doors: [0] },
-      { at: 180, kind: 'depart', city: 2, status: 'onTime', doors: [1] },
-      { at: 240, kind: 'depart', city: 1, status: 'onTime', doors: [0] },
+    // Each truck leaves 15 minutes after its cut-off (105, 180, 240): the cleardown.
+    expect(dep.map(({ at, kind, city, status }) => ({ at, kind, city, status }))).toEqual([
+      { at: 120, kind: 'depart', city: 0, status: 'onTime' },
+      { at: 195, kind: 'depart', city: 2, status: 'onTime' },
+      { at: 255, kind: 'depart', city: 1, status: 'onTime' },
     ]);
     // In order of time.
     for (let i = 1; i < s.events.length; i++) expect(s.events[i]!.at).toBeGreaterThanOrEqual(s.events[i - 1]!.at);
@@ -110,8 +124,8 @@ describe('shift schedule: the fixture (level 4, one door for two trucks)', () =>
 
   it('follows the buffer against the rack size', () => {
     expect(bufferAt(s, 0)).toBe(0);
-    expect(bufferAt(s, 60)).toBeCloseTo(96.0 / 800, 5);
-    expect(bufferAt(s, 62.5)).toBeCloseTo(92.25 / 800, 5);
+    expect(bufferAt(s, 60)).toBeCloseTo(84.0 / 800, 5);
+    expect(bufferAt(s, 62.5)).toBeCloseTo(80.25 / 800, 5);
     expect(bufferAt(s, 1000)).toBe(0);
     expect(robotsAt(s, 100)).toBe(0);
   });
@@ -208,6 +222,43 @@ describe('shift schedule: late, incomplete, robots, several doors', () => {
     expect(s.end).toBe(70);
   });
 
+  it('follows the timeline\'s cleardowns: cut-off, door up until the truck leaves, late after cut-off plus 15', () => {
+    const { level: lv, timeline: tl } = made({
+      cities: [{ volume: 150, truck: 60 }, { volume: 100, truck: 60 }, { volume: 60, truck: 60 }],
+      steps: 20,
+      shift: 60,
+      loaded: (k) => [Math.min(150, k * 12.5), Math.min(100, k * 8.4), Math.min(60, k * 5)],
+      blocks: [
+        { city: 0, door: 0, start: 0, end: 60, people: 2 },
+        { city: 1, door: 2, start: 0, end: 60, people: 1 },
+      ],
+      departures: [{ city: 0, at: 75, status: 'onTime' }, { city: 1, at: 88, status: 'late' }, { city: 2, at: 75, status: 'onTime' }],
+    });
+    tl.cleardowns = [
+      { city: 0, door: 0, from: 60, to: 71 },
+      { city: 1, door: 2, from: 60, to: 88 },
+      { city: 2, door: -1, from: 60, to: 75 },
+    ];
+    const s = buildSchedule(lv, tl);
+    const a = s.stints.find((x) => x.door === 0)!;
+    expect(a).toMatchObject({ blockEnd: 60, cutoff: 60, end: 75, derived: false, departs: true, lateFrom: null });
+    // Loading at the people's pace until the cut-off, then the cleardown with the door still up.
+    expect(doorAt(s, 0, 59)).toMatchObject({ open: true, clearing: false, lamp: false });
+    expect(doorAt(s, 0, 61)).toMatchObject({ open: true, clearing: true, lamp: true, late: false, people: 2 });
+    expect(doorAt(s, 0, 74.9).open).toBe(true);
+    expect(doorAt(s, 0, 75).open).toBe(false);
+    // The late one waits with its lamp on from cut-off + 15 until it goes.
+    const b = s.stints.find((x) => x.door === 2)!;
+    expect(b).toMatchObject({ cutoff: 60, end: 88, lateFrom: 75 });
+    expect(doorAt(s, 2, 70)).toMatchObject({ open: true, clearing: true, late: false });
+    expect(doorAt(s, 2, 80)).toMatchObject({ open: true, clearing: true, late: true, lamp: true });
+    expect(doorAt(s, 2, 88).open).toBe(false);
+    // The robots' city stops at its cut-off and leaves at its departure.
+    expect(s.robotCities.map((r) => [r.city, r.cutoff, r.departure?.at])).toEqual([[2, 60, 75]]);
+    expect(s.end).toBe(88);
+    expect(s.events).toContainEqual({ at: 75, kind: 'depart', city: 0, status: 'onTime', doors: [0] });
+  });
+
   it('reads a series between its samples and holds its ends', () => {
     expect(sample([0, 10, 30], -5)).toBe(0);
     expect(sample([0, 10, 30], 2.5)).toBe(5);
@@ -288,7 +339,7 @@ describe('the plan\'s parcels in the hall', () => {
     expect(arrivedAt(level, 0, 45)).toBeCloseTo(120, 2);
     expect(arrivedAt(level, 0, 500)).toBe(240);
     expect(arrivedAt(level, 9, 60)).toBe(0);
-    expect(peakPerMinute(level)).toBeCloseTo(4.27, 1);
+    expect(peakPerMinute(level)).toBeCloseTo(4.07, 1);
   });
 
   it('shows every parcel in levels 1 to 6 and one for a fixed few after that', () => {

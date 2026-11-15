@@ -22,7 +22,7 @@ No drop shadows, no illustrations, no emoji.
 5. **Planner.** One row per city on a time line. A block = start, end, people per dock (1 or 2), number
    of docks. Robots: switch a city to robots (a city may have both) and set the fleet size. Steps of
    half an hour; a block may also start exactly on the city's first parcel and end exactly on its truck
-   time; at least an hour long; at most 30 minutes past the truck time. Tapping an order makes a starter
+   time (its cut-off); at least an hour long; never past the cut-off. Tapping an order makes a starter
    block (first parcel to truck time, 1 person). No clock runs here.
    The planner shows: the fixed costs (docks, people, robots; they open into a breakdown), how full
    each block is from public numbers, docks in use, and one diagram of the parcels coming in per hour
@@ -59,8 +59,20 @@ The definition is `tools/balance/solve.py` (`sim`, `evaluate`) with `tools/balan
   its block ends (and the door does not go on for that city) looks for a place again the next minute,
   like a parcel that has just arrived, and is refused too when there is none.
 - A dock that switches city is idle for 15 minutes.
-- A city's truck leaves when its last block or line ends. After its truck time that is late; whatever
-  is not loaded by then is left behind.
+- A city's truck time is its **cut-off**. No block may end after it. At the cut-off sorting for that
+  city stops: its parcels in the buffer or still to arrive are left behind and its buffer places come
+  free.
+- **Cleardown.** Every door whose block for the city ends exactly at the cut-off keeps its crew and
+  loads what is on its belt at the crew's pace (a trailer swap still costs ten minutes); the door is
+  done when the belt is empty. Robot lines do the same with what is on their tables, at the fleet's
+  pace. The truck leaves when its last door or line is done and never before cut-off + 15: by then it
+  is on time, later it is late (counted from cut-off + 15). At cut-off + 45 it leaves anyway and what
+  is still on a belt or table stays behind. With no door or line open at the cut-off the truck leaves
+  at cut-off + 15, on time, with what it has. A door in cleardown pays its dock and crew until it is
+  done, at least 15 minutes. A block that ends before the cut-off hands its belt back and pays nothing more.
+- Limits on people and the people goals count planned blocks only, not crews in cleardown. Doors are
+  handed out from the planned blocks; a cleardown that runs past 15 minutes does not hold up the next city.
+- Equal blocks (same city, start, end and crew) are one block with their docks added up.
 - Money: + § 1.50 per parcel shipped; + § 0.30 per parcel when the truck is on time and complete;
   − § 0.30 per parcel per 10 minutes late; − § 1.50 per parcel left behind; docks § 25 an hour per
   block; people § 30 an hour per block (× the level's wage factor); robots § 11 × shift hours each, for

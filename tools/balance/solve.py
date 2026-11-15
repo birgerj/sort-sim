@@ -17,7 +17,7 @@ def allowed(L, d):
     c = L.setdefault('_al', {})
     if d not in c:
         D = L['dests'][d]['d']
-        c[d] = sorted(set(range(0, D + 31, GRID)) | {L['first'][d], D})
+        c[d] = sorted(set(range(0, D + 1, GRID)) | {L['first'][d], D})  # no block ends after the cut-off
     return c[d]
 
 
@@ -27,11 +27,19 @@ def step_time(L, d, t, k):
     return a[max(0, min(len(a) - 1, i + k))]
 
 
+CLEAR = 15   # minutes after a city's cut-off that its truck is planned to leave
+CLEAR_MAX = 45  # minutes after the cut-off that it leaves whatever is still on a belt
+
+
 @nb.njit(cache=True)
-def sim(arr, bd, bk, b0, b1, bs, br, bh, ld, l0, l1, N, store_cap, maint, out0, out1):
+def sim(arr, cut, bd, bk, b0, b1, bs, br, bh, bc, ld, l0, l1, N, store_cap, maint, out0, out1):
+    # cut[i]: city i's cut-off (its truck time). From that minute nothing more is sorted for it: what is in the
+    #   buffer or still to arrive is left behind, and its buffer places come free.
     # br[b]: the run a block belongs to (one door serving one city, block after block); the belt, the trailer and
-    # its swap belong to the run, not to the block. bh[b]: the block hands back its belt when it ends (false when
-    # the next block of the run starts that same minute).
+    #   its swap belong to the run, not to the block. bh[b]: the block hands back its belt when it ends (false when
+    #   the next block of the run starts that same minute, and false for a block that ends at the cut-off).
+    # bc[b]: the block ends at its city's cut-off: its door goes into cleardown, the crew loads what is on the belt.
+    # Returns per block and per line the minute its cleardown was done (-1: none; cut-off + 45 when it never was).
     TT = arr.shape[0]
     n = arr.shape[1]
     nbk = len(bd)
@@ -42,6 +50,8 @@ def sim(arr, bd, bk, b0, b1, bs, br, bh, ld, l0, l1, N, store_cap, maint, out0, 
     bbuf = np.zeros(nbk)
     btr = np.zeros(nbk)
     swap_until = np.zeros(nbk)
+    bdone = np.full(nbk, -1.0)
+    ldone = np.full(nl, -1.0)
     refused = 0.0
     lbuf = np.zeros(nl)
     lx = np.zeros(nl)
@@ -50,7 +60,18 @@ def sim(arr, bd, bk, b0, b1, bs, br, bh, ld, l0, l1, N, store_cap, maint, out0, 
     peak = 0.0
     for t in range(TT):
         for i in range(n):
-            up[i] += arr[t, i]
+            if t == cut[i]:
+                stot -= store[i]
+                store[i] = 0.0
+            if t < cut[i]:
+                up[i] += arr[t, i]
+        # Doors and lines in cleardown: done the minute their belt or table is found empty.
+        for b in range(nbk):
+            if bc[b] and bdone[b] < 0 and t >= b1[b] and bbuf[br[b]] <= 1e-9:
+                bdone[b] = t
+        for l in range(nl):
+            if ldone[l] < 0 and t >= l1[l] and lbuf[l] <= 1e-9:
+                ldone[l] = t
         for b in range(nbk):
             if b0[b] <= t < b1[b]:
                 i = bd[b]
@@ -102,7 +123,8 @@ def sim(arr, bd, bk, b0, b1, bs, br, bh, ld, l0, l1, N, store_cap, maint, out0, 
                     stot -= x
                     bud -= x
         for b in range(nbk):
-            if b0[b] <= t < b1[b]:
+            # At work: during the block, and after a block that ends at the cut-off for at most 45 minutes more.
+            if b0[b] <= t < b1[b] or (bc[b] and b1[b] <= t < b1[b] + 45):
                 if maint[bk[b], t]:
                     continue
                 r = br[b]
@@ -121,12 +143,12 @@ def sim(arr, bd, bk, b0, b1, bs, br, bh, ld, l0, l1, N, store_cap, maint, out0, 
             tot = 0.0
             for l in range(nl):
                 lx[l] = 0.0
-                if l0[l] <= t < l1[l]:
+                if l0[l] <= t < l1[l] + 45:
                     tot += lbuf[l]
             if tot > 0:
                 rem = fc
                 for l in range(nl):
-                    if l0[l] <= t < l1[l]:
+                    if l0[l] <= t < l1[l] + 45:
                         x = min(lbuf[l], fc * lbuf[l] / tot, 1.0)
                         lbuf[l] -= x
                         loaded[ld[l]] += x
@@ -134,7 +156,7 @@ def sim(arr, bd, bk, b0, b1, bs, br, bh, ld, l0, l1, N, store_cap, maint, out0, 
                         rem -= x
                 if rem > 1e-9:
                     for l in range(nl):
-                        if l0[l] <= t < l1[l]:
+                        if l0[l] <= t < l1[l] + 45:
                             x = min(lbuf[l], rem, 1.0 - lx[l])
                             if x > 0:
                                 lbuf[l] -= x
@@ -144,13 +166,15 @@ def sim(arr, bd, bk, b0, b1, bs, br, bh, ld, l0, l1, N, store_cap, maint, out0, 
             if t == b1[b] - 1 and bh[b]:
                 up[bd[b]] += bbuf[br[b]]
                 bbuf[br[b]] = 0.0
-        for l in range(nl):
-            if t == l1[l] - 1:
-                up[ld[l]] += lbuf[l]
-                lbuf[l] = 0.0
         if stot > peak:
             peak = stot
-    return loaded, fee, peak, stot, refused
+    for b in range(nbk):
+        if bc[b] and bdone[b] < 0:
+            bdone[b] = b1[b] + 45 if bbuf[br[b]] > 1e-9 or TT < b1[b] + 45 else TT
+    for l in range(nl):
+        if ldone[l] < 0:
+            ldone[l] = l1[l] + 45 if lbuf[l] > 1e-9 or TT < l1[l] + 45 else TT
+    return loaded, fee, peak, stot, refused, bdone, ldone
 
 
 def dest(v, a0, a1, d, prof='flat'):
@@ -159,7 +183,7 @@ def dest(v, a0, a1, d, prof='flat'):
 
 def level(n, T, dests, docks, lines=0, robots=0, store=800, maint=(), outage=(0, 0), cap=99, wage=1.0, batch=(), late=None):
     L = dict(n=n, T=T, dests=dests, docks=docks, lines=lines, robots=robots, store=store, maint=maint, outage=outage, cap=cap, wage=wage)
-    TT = T + 30
+    TT = T + CLEAR_MAX
     nd = len(dests)
     arr = np.zeros((TT, nd))
     for i, d in enumerate(dests):
@@ -209,7 +233,7 @@ def levels():
             c = cfg.get(L['n'])
             if c:
                 L.update(c)
-                mt = np.zeros((L['docks'], L['T'] + 30), dtype=np.bool_)
+                mt = np.zeros((L['docks'], L['T'] + CLEAR_MAX), dtype=np.bool_)
                 for (k, t0, t1) in L['maint']:
                     mt[k, t0:t1] = True
                 L['mt'] = mt
@@ -221,8 +245,8 @@ def levels0():
     Ls = []
     Ls.append(level(1, 120, [D(150, 0, 90, 120)], 2))
     Ls.append(level(2, 180, [D(400, 0, 150, 180), D(120, 0, 90, 120)], 4))
-    Ls.append(level(3, 240, [D(500, 0, 210, 240), D(60, 0, 120, 150), D(70, 0, 120, 150), D(50, 30, 150, 180)], 4, 4, 6))
-    Ls.append(level(4, 240, [D(240, 0, 90, 105), D(200, 0, 200, 240), D(90, 0, 150, 180)], 2))
+    Ls.append(level(3, 240, [D(500, 0, 210, 240), D(80, 0, 120, 150), D(90, 0, 120, 150), D(70, 30, 150, 180)], 4, 4, 6))
+    Ls.append(level(4, 240, [D(240, 0, 90, 105), D(200, 0, 200, 240), D(60, 0, 150, 180)], 2))
     Ls.append(level(5, 300, [D(420, 0, 240, 270), D(300, 0, 180, 210, 'early'), D(260, 60, 270, 300, 'late'), D(180, 0, 150, 180), D(140, 30, 240, 270), D(100, 90, 280, 300, 'late')], 6, 6, 10))
     Ls.append(level(6, 360, [D(520, 0, 300, 330), D(380, 0, 200, 240, 'early'), D(320, 90, 330, 360, 'late'), D(260, 0, 180, 210), D(220, 60, 300, 330), D(160, 0, 150, 180, 'early'), D(140, 120, 330, 360), D(100, 100, 300, 330, 'late')], 8, 8, 14, store=250))
     Ls.append(level(7, 360, [D(600, 0, 310, 340), D(480, 0, 220, 250, 'early'), D(400, 60, 330, 360, 'late'), D(340, 0, 130, 150), D(300, 30, 300, 330), D(240, 120, 340, 360, 'late'), D(180, 0, 240, 270), D(140, 0, 180, 210, 'early'), D(120, 100, 320, 350)], 10, 10, 12, outage=(180, 240)))
@@ -243,7 +267,7 @@ def levels0():
         vb = [1500, 1300, 1300, 1100] + [230] * 10
         ds = [D(vb[i], a10[i], d10[i] - 30, d10[i], p10[i]) for i in range(14)]
         Ls[9] = level(10, 480, ds, 20, 20, 30, store=400, cap=20)
-    vs = os.environ.get('VSCALE', '7:2.3,8:2.8,9:2.5,10:2.2')
+    vs = os.environ.get('VSCALE', '7:2.3,8:2.7,9:2.5,10:2.2')
     if vs:
         fs = {int(a.split(':')[0]): float(a.split(':')[1]) for a in vs.split(',')}
         for L in Ls:
@@ -261,12 +285,12 @@ def levels0():
 
 # ---- plan: {'b': [[dest,dock,t0,t1,staff],...], 'l': [[dest,t0,t1],...], 'N': int}
 def valid(L, p):
-    TT = L['T'] + 30
+    TT = L['T'] + CLEAR_MAX
     ds = L['dests']
     by = {}
     for b in p['b']:
         d, k, t0, t1, s = b
-        if not (0 <= t0 < t1 <= min(TT, ds[d]['d'] + 30)) or t1 - t0 < MINBLK or not (0 <= k < L['docks']) or s not in (1, 2):
+        if not (0 <= t0 < t1 <= ds[d]['d']) or t1 - t0 < MINBLK or not (0 <= k < L['docks']) or s not in (1, 2):
             return False
         by.setdefault(k, []).append(b)
     for k, bl in by.items():
@@ -279,7 +303,7 @@ def valid(L, p):
             return False
         ev = []
         for d, t0, t1 in p['l']:
-            if not (0 <= t0 < t1 <= min(TT, ds[d]['d'] + 30)) or t1 - t0 < MINBLK:
+            if not (0 <= t0 < t1 <= ds[d]['d']) or t1 - t0 < MINBLK:
                 return False
             ev.append((t0, 1))
             ev.append((t1, -1))
@@ -334,51 +358,70 @@ def block_order(L, B):
     return sorted(B, key=lambda b: (ds[b[0]]['d'], b[0], b[1], b[2]))
 
 
-def evaluate(L, p, detail=False):
+def sim_args(L, p):
+    """A solver plan as the arrays sim() takes (after the arrivals), with the blocks in serving order.
+    Also returns that order (indices into p['b']), the blocks and lines in it, and which blocks end in a cleardown."""
     ds = L['dests']
-    B = block_order(L, p['b'])
+    order = sorted(range(len(p['b'])), key=lambda j: (ds[p['b'][j][0]]['d'], p['b'][j][0], p['b'][j][1], p['b'][j][2]))
+    B = [p['b'][j] for j in order]
     run, hand = runs(B)
+    # A block that ends at its city's cut-off keeps its belt: the door goes into cleardown.
+    clear = [b[3] == ds[b[0]]['d'] for b in B]
+    hand = [h and not c for h, c in zip(hand, clear)]
     lo = sorted(range(len(p['l'])), key=lambda j: ds[p['l'][j][0]]['d'])
     Lr = [p['l'][j] for j in lo]
     i64 = np.int64
-    bd = np.array([b[0] for b in B], dtype=i64)
-    bk = np.array([b[1] for b in B], dtype=i64)
-    b0 = np.array([b[2] for b in B], dtype=i64)
-    b1 = np.array([b[3] for b in B], dtype=i64)
-    bs = np.array([b[4] for b in B], dtype=i64)
-    br = np.array(run, dtype=i64)
-    bh = np.array(hand, dtype=np.bool_)
-    ld = np.array([l[0] for l in Lr], dtype=i64)
-    l0 = np.array([l[1] for l in Lr], dtype=i64)
-    l1 = np.array([l[2] for l in Lr], dtype=i64)
-    loaded, fee, peak, _stot, refused = sim(L['arr'], bd, bk, b0, b1, bs, br, bh, ld, l0, l1, p['N'], float(L['store']), L['mt'], L['outage'][0], L['outage'][1])
-    end = [0] * len(ds)
-    for b in p['b']:
-        end[b[0]] = max(end[b[0]], b[3])
-    for l in p['l']:
-        end[l[0]] = max(end[l[0]], l[2])
+    col = lambda rows, k: np.array([r[k] for r in rows], dtype=i64)
+    args = (np.array([d['d'] for d in ds], dtype=i64), col(B, 0), col(B, 1), col(B, 2), col(B, 3), col(B, 4), np.array(run, dtype=i64),
+            np.array(hand, dtype=np.bool_), np.array(clear, dtype=np.bool_), col(Lr, 0), col(Lr, 1), col(Lr, 2),
+            p['N'], float(L['store']), L['mt'], L['outage'][0], L['outage'][1])
+    return args, order, B, Lr, clear
+
+
+def evaluate(L, p, detail=False):
+    ds = L['dests']
+    args, order, B, Lr, clear = sim_args(L, p)
+    loaded, fee, peak, _stot, refused, bdone, ldone = sim(L['arr'], *args)
+    # The truck leaves when its last door or line is done, never before cut-off + 15 and at cut-off + 45 at the latest.
+    leave = [d['d'] + CLEAR for d in ds]
+    done = [0] * len(B)  # per block of p['b']: when its door was done (0: no cleardown)
+    for k, j in enumerate(order):
+        if clear[k]:
+            done[j] = max(int(bdone[k]), B[k][3] + CLEAR)
+            leave[B[k][0]] = max(leave[B[k][0]], done[j])
+    for k, l in enumerate(Lr):
+        leave[l[0]] = max(leave[l[0]], int(ldone[k]))
     rev = bon = late = left = 0.0
     ontime = 0
+    nlate = 0
     for i, d in enumerate(ds):
         ld_ = min(d['v'], loaded[i])
         miss = d['v'] - ld_
         if miss < 0.5:
             ld_ = d['v']
             miss = 0
-        lm = max(0, end[i] - d['d'])
+        lm = leave[i] - (d['d'] + CLEAR)
         rev += ld_ * PR['rev']
         if miss == 0 and lm == 0:
             bon += ld_ * PR['bonus']
             ontime += 1
+        if lm > 0:
+            nlate += 1
         late += lm * PR['late'] * ld_
         left += miss * PR['left']
     cd = sum((b[3] - b[2]) / 60 * PR['dock'] for b in p['b'])
     cs = sum((b[3] - b[2]) / 60 * b[4] * PR['person'] * L['wage'] for b in p['b'])
+    # A door in cleardown pays its dock and crew until it is done, at least 15 minutes.
+    for j, b in enumerate(p['b']):
+        if done[j]:
+            cd += (done[j] - b[3]) / 60 * PR['dock']
+            cs += (done[j] - b[3]) / 60 * b[4] * PR['person'] * L['wage']
     cr = p['N'] * PR['robot'] * L['T'] / 60 + sum((l[2] - l[1]) / 60 * PR['line'] for l in p['l'])
     cf = fee * PR['store']
     prof = rev + bon - late - left - cd - cs - cr - cf
     if detail:
-        return dict(profit=prof, rev=rev, bonus=bon, late=late, left=left, dock=cd, staff=cs, robots=cr, store=cf, peak=peak, ontime=ontime, refused=refused)
+        return dict(profit=prof, rev=rev, bonus=bon, late=late, left=left, dock=cd, staff=cs, robots=cr, store=cf, peak=peak, ontime=ontime, refused=refused,
+                    leave=leave, done=done, nlate=nlate)
     return prof
 
 

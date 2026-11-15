@@ -28,20 +28,19 @@ Each agent keeps its own section up to date in its own branch: done, doing, bloc
 
 
 ## B · balance
-- Done (round 5): both models fixed. The trailer, its swap and the belt belong to the door and city (a
-  block cut in two is the same plan; `tests/shiftsCuts.test.ts`, `par.py invariance`). A full buffer
-  refuses parcels (`Result.buffer.refused`). DESIGN.md says both in words.
-- Done: level 3 small cities' trucks earlier, level 4 third city 90 parcels, level 8 14 docks, level 10
-  volume × 2.2. Par 177, 621, 779, 596, 1601, 2398, 7577, 12655, 13066, 19584.
-- Done: badges lean, lean3, fleet3, lean3, smallFleet, lean6, allOnTime, onTime9, lean16, allOnTime.
+- Done (round 7): cut-off and cleardown in both models (DESIGN.md has the rules; REPORT.md what was decided
+  while building). `Timeline.cleardowns` filled, departures at the real leaving time, 45 minutes played
+  after the shift. `RATES.maxLateMinutes` is 0. Equal blocks are one block in both models.
+- Done: level 3 small cities 80, 90, 70 parcels; level 4 third city 60; level 8 volume × 2.7.
+  Par 177, 611, 856, 530, 1606, 2408, 7566, 12300, 13084, 19424.
+- Badges unchanged: lean, lean3, fleet3, lean3, smallFleet, lean6, allOnTime, onTime9, lean16, allOnTime.
 - Fixtures regenerated: `src/shifts/levels.json`, `tests/fixtures/shifts/golden.json`,
-  `tests/fixtures/shifts/level4.json` (example now profit 502, score 842, two stars, badge true).
-- Tests changed to follow the numbers: shiftsModel, shiftsPlanEdit, shiftsProgress, shiftsEstimate,
-  shiftsDirector (level 4's third city, level 3's truck times, level 10's volume). New: shiftsCuts.
-- Done (round 6): longer par search for levels 8, 9, 10: par 12655, 13066, 19584 (was 12570, 13029, 19342);
-  plain plan 522, 573, 536; no level changed. `levels.json` and the fixtures regenerated (only `par` moved).
-- Open: level 8 was still creeping (under 0.2% a run). Best plans of levels 7–10
-  have 25 to 50 blocks; what a plan of two blocks a city can reach has not been searched.
+  `tests/fixtures/shifts/level4.json` (example: profit 393, score 742, one star, badge true, three cleardowns).
+- Tests: new `tests/shiftsCutoff.test.ts`; expectations that follow from the rule updated in shiftsModel,
+  shiftsPlanEdit, shiftsEstimate, shiftsProgress, shiftsDirector. One hall expectation is parked as a todo
+  (see Requests).
+- Open: docks of one city fill in door order, so which dock has a full belt at the cut-off depends on door
+  numbers a player cannot steer. Level 1's two-person plan scores 446. Par of levels 7–10 had six minutes.
 
 ## C1 · screens
 - Done: `mountShifts` in `src/ui/shifts/index.ts` (overlay + router), Start, How to play (4 steps), Levels, Briefing,
@@ -168,6 +167,29 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
   `XMAS`). For the coordinator: call `setTrophies(levelsWithBadge)` once at start and again with the whole
   list whenever a badge is earned; nothing else. Shots in `shots/trophies/` (free simulation, day and night,
   none / levels 1 to 3 / all ten).
+- Cut-off and cleardown (round 6): a stint has `cutoff` and `end` (door down: the cleardown's `to`, or the
+  departure for the city's last doors) from `timeline.cleardowns`; without that field the 15 minutes before
+  the door comes down (`derived`; the timeline still loads then, so parcels are still sent). From the cut-off:
+  lamp, screen `CLEARDOWN · truck leaves hh:mm`, nothing more down the chute, the crew and the helper of that
+  pair of doors empty the belt and then push every cage with parcels into the trailer; the door stays up until
+  the truck's minute (late: lamp and red screen from cut-off + 15). Measured at 60 frames a second, beats from
+  cut-off to the last cage in: one person + helper, belt of 17 and six full cages: 57; belt of 14 and five
+  cages (level 1): 59; six cages, empty belt: 37 to 38. Two people + helper: belt of 4 and six cages: 43; six
+  cages, empty belt: 19 to 22 (level 3's two-person door: 49). So it fits in 60, with little to spare for one
+  person on a full belt; what is not in at the truck's minute still goes on board in one go (`closeOut`).
+  Robot cities: lines stop at the cut-off, a forklift is called for every box with parcels near their
+  stations, the south truck leaves at the departure with its lamp on from the cut-off. Also fixed: parcels of
+  a city with an open dock now come onto the loop only as fast as the dock may be sent them (strays used to
+  lap for 22 minutes and starve the west doors). Shots: `shots/cleardown/phone-{l1-one,l1-two,l3-robots}-*`.
+- Round 7: the schedule follows `timeline.cleardowns` (a block that ends at its city's cut-off keeps its door
+  until `to`, the truck's doors are those in cleardown, robots stop at the truck time; a block without one
+  puts its cages in during its last 5 minutes; a door opens for its next block only when it is done). In a
+  shift the cages of a dock are filled one at a time (`Docks.fillCage`); the belt always comes first, cage runs
+  (full cage in, empty fetched, the half-full one after 8 beats of empty belt) only when the belt is empty or
+  no cage has room; with two people the second runs cages until four parcels wait, then sorts too; two idle
+  people talk at the belt end. Cleardown measured on a belt that backs up all block (60 beats available): with
+  the helper, one person (belt 16, 3 cages) 53 beats, two people (belt 6, 4 cages) 30; without the helper 61
+  and 58: the helper stays. Level 1 and level 4 clear in 1 to 7 beats. Shots: `shots/waterfall/`.
 - Rough: robots are about 15 % under the model's pace, and full boxes wait for the three forklifts, so robot
   cities fall behind in the hall (the counts on screen are the timeline's); people still appear at their
   place; the nested stacks of empty cages stay at every door; a belt's parcels are taken away (and come round
@@ -196,6 +218,18 @@ Round 2 (speed, real parcels, camera). Round 1 (schedule, doors, signs, departur
 
 ## Requests
 (agent · what you need from whom)
+- B · D (hall): a truck's doors at departure. `buildSchedule` finds them among blocks that end when the
+  truck leaves; trucks now leave after the cleardown, so depart events have `doors: []`. Read
+  `timeline.cleardowns` (city, door, from = cut-off, to = door done) and keep the crew loading until `to`;
+  doors of a city with no cleardown are simply closed at the block's end. The test for it is a `todo` in
+  `tests/shiftsDirector.test.ts`. The timeline now runs 45 minutes past the shift.
+- B · C2 (planner): blocks may not end after the cut-off (the planner follows `RATES.maxLateMinutes`, now 0;
+  the text "ends more than 0 minutes after the truck time" in `src/ui/shifts/problems.ts` needs rewording).
+  Fixed costs should add 15 minutes of dock and crew for every dock of a block that ends at its city's
+  cut-off. The time line should show the cut-off and the 15 minutes after it.
+- B · C1 (screens): `trucks[].planned` is now cut-off + 15 and `left` the real leaving time; say "cut-off"
+  in the briefing and explain the cleardown in How to play. The result could show the cleardown cost.
+
 - B · C1 (screens): show `result.buffer.refused` in the result (for example "Refused at a full buffer, N
   parcels" under Left behind; they are part of the left-behind amount, not extra) and say "full is full"
   in How to play and where the briefing explains the buffer.

@@ -83,7 +83,16 @@ export interface Timeline {
   blocks: { city: number; door: number; start: number; end: number; people: number }[];
   robotsActive: number[];
   departures: { city: number; at: number; status: TruckStatus }[];
+  /**
+   * Cleardowns: from a city's cut-off (its truck time), the crew of each door still open for it
+   * loads what is on the belt and pushes the cages in; `to` is when that door is done. The truck
+   * leaves when its last door is done: on time within CLEARDOWN_MINUTES, late after.
+   */
+  cleardowns?: { city: number; door: number; from: number; to: number }[];
 }
+
+/** Minutes after the cut-off that a truck is planned to leave. */
+export const CLEARDOWN_MINUTES = 15;
 
 /** The only way the screens reach the score model. In phase 2 this becomes a call to a server
  *  that answers after 5 seconds, so nothing in the screens may depend on it being instant. */
@@ -139,6 +148,9 @@ export interface Director {
   exit(): void;
   /** Fly the camera to this city's dock or robot lines and stay there; ends the automatic direction. */
   focusCity?(city: number): void;
+  /** Fixed places to look from (the docks, the robots, the buffer...), and going to one: ends the automatic direction. */
+  views?(): { id: string; name: string }[];
+  view?(id: string): void;
   /** Automatic direction on (overview, cutting to events) or off (the player looks around). */
   setAutoCamera?(on: boolean): void;
   /** Called whenever the automatic direction goes on or off, also when the player moved the camera. */
@@ -149,6 +161,6 @@ export interface Director {
 
 /** Prices and rates the briefing may show. The model has its own copy; these are for the screens. */
 export const PRICES = { parcel: 1.5, onTime: 0.3, latePer10Min: 0.3, leftBehind: 1.5, dockPerHour: 25, personPerHour: 30, robotPerShiftHour: 11, bufferPerParcel: 0.15 } as const;
-export const RATES = { onePerson: 90, twoPeople: 170, robot: 17, trailer: 220, switchMinutes: 15, stepMinutes: 30, minBlockMinutes: 60, maxLateMinutes: 30 } as const;
+export const RATES = { onePerson: 90, twoPeople: 170, robot: 17, trailer: 220, switchMinutes: 15, stepMinutes: 30, minBlockMinutes: 60, maxLateMinutes: 0 } as const;
 export const STARS = { one: 500, two: 750, three: 900 } as const;
 export const CURRENCY = '§';

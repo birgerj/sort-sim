@@ -28,6 +28,9 @@ export type ShiftHud = (o: {
   onFocus?(city: number): void;
   /** The player asked for the automatic camera back. */
   onAuto?(): void;
+  /** Fixed places to look from, and going to one. */
+  views?: { id: string; name: string }[];
+  onView?(id: string): void;
   /** The player asked for the settings panel. */
   onSettings?(): void;
 }) => { root: HTMLElement; setClock(minute: number): void; setTimeline(t: Timeline): void; done(): void; setAuto?(on: boolean): void };

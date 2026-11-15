@@ -161,6 +161,8 @@ export function mountShifts(deps: ShiftsDeps): { root: HTMLElement; open(): void
       onFocus: (city) => deps.director.focusCity?.(city),
       onSettings: settings ? () => openSettings(root, settings, false, () => {}) : undefined,
       onAuto: () => deps.director.setAutoCamera?.(true),
+      views: deps.director.views?.() ?? [],
+      onView: (id) => deps.director.view?.(id),
     });
     deps.director.onAutoCamera?.((on) => {
       if (mine === run) hud.setAuto?.(on);
