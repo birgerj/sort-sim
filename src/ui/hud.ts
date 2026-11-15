@@ -32,6 +32,8 @@ export interface Settings {
   quality: Quality;
   /** Christmas decorations. */
   xmas?: boolean;
+  /** Decorations earned as trophies in the planning game stay in the hall (default) or are put away. */
+  trophies?: boolean;
   /** Country the hub serves (unset: from the browser's language). */
   country?: CountryId;
   muted: boolean;
@@ -89,6 +91,8 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 };
 
 export class Hud {
+  /** Called when the Trophies setting changes (main.ts shows or hides the earned decorations). */
+  onTrophies: () => void = () => {};
   readonly root = el('div', 'hud');
   private caption = el('div', 'caption');
   private info: InfoPanel;
@@ -557,6 +561,22 @@ export class Hud {
       };
       xmasBtns.push(b);
       xb.append(b);
+    }
+    const trb = this.row(sec, 'Trophies', 'Decorations earned with badges in Ten Shifts stay in the hall, Christmas or not. Hide puts them away here; in the game they always show.');
+    trb.classList.add('cols2');
+    const trophyBtns: HTMLButtonElement[] = [];
+    for (const [on, label] of [[false, 'Hide'], [true, 'Show']] as const) {
+      const b = el('button', on === (this.settings.trophies !== false) ? 'on' : '', label);
+      b.onclick = () => {
+        if (on === (this.settings.trophies !== false)) return;
+        this.settings.trophies = on;
+        saveSettings(this.settings);
+        this.onTrophies();
+        this.openTab(null);
+        trophyBtns.forEach((x, i) => x.classList.toggle('on', (i === 1) === on));
+      };
+      trophyBtns.push(b);
+      trb.append(b);
     }
     const ib = this.pv ? this.row(sec, 'Product info', 'A card with the product behind each tour stop; the tour stays long enough to read it.') : el('div');
     ib.classList.add('cols2');
