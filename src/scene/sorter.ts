@@ -40,6 +40,7 @@ import { buildForklift } from './forklift';
 import { buildHuman, setPeopleLod } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
 import { StackLights } from './stackLights';
+import { AO, aoOptions, bakeGroundAo, groundAo } from './groundAo';
 import { BEVEL, bevel, bevelOptions, CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper, lightPools, parcelWear } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
@@ -2275,6 +2276,9 @@ export class Sorter implements Scene3D {
   private movers: THREE.Mesh[] | null = null;
   private moverWatch: { list: { m: THREE.Mesh; w: THREE.Matrix4; v: number }[]; until: number } | null = null;
   private nextBake = 0;
+  /** The baked shade round what stands on the floor (trial, groundAo.ts): when to work it out, and whether that is done. */
+  private aoDue = 0;
+  private aoBaked = false;
 
   private updateShadows(): void {
     const q = this.quality;
@@ -2360,9 +2364,26 @@ export class Sorter implements Scene3D {
       this.moverWatch = null;
       this.renderer.shadowMap.needsUpdate = true;
       this.nextBake = this.time + 30;
+      // Now that it is known what stands still: the shade round it (a few frames later, once the shadow is drawn).
+      if (aoOptions.on && !this.aoBaked) this.aoDue = this.time + 0.3;
     } else if (!w && this.time >= this.nextBake) {
       this.renderer.shadowMap.needsUpdate = true;
       this.nextBake = this.time + 30;
+    }
+    if (this.aoDue && this.time >= this.aoDue && this.real && this.dayShown) {
+      this.aoDue = 0;
+      this.aoBaked = true;
+      bakeGroundAo(this.renderer, this.scene, {
+        x0: WX - 2,
+        x1: EX + 2,
+        z0: WING.z0 - 2,
+        z1: HZ + 2,
+        hide: [...(this.movers ?? []), ...this.realOnly, ...this.flatOnly],
+        inside: (x, z) => {
+          const [ix, iz] = inHall(x, z, 0);
+          return ix === x && iz === z;
+        },
+      });
     }
   }
 
@@ -4515,6 +4536,7 @@ export class Sorter implements Scene3D {
     this.themed.push({ m, n: m.color.clone(), d: new THREE.Color(day), nr: m.roughness, dr: rough, nm: m.metalness, dm: metal });
     toonify(m);
     if (bevelOptions.on) bevel(m);
+    if (aoOptions.on) groundAo(m);
     // Safety yellow is the paint that takes the knocks (realistic day only).
     if (day === 0xf2c200) wear(m);
     return m;
@@ -4525,6 +4547,7 @@ export class Sorter implements Scene3D {
     if (day === undefined) {
       toonify(m);
       if (bevelOptions.on) bevel(m);
+      if (aoOptions.on) groundAo(m);
       // One colour in every look; the realistic day may still re-colour it (REAL_PALETTE).
       const pal = REAL_PALETTE.get(color);
       if (pal) this.plain.push({ m, c: new THREE.Color(color), r: rough, mt: metal, pal: new THREE.Color(pal.c), pr: pal.rough ?? rough, pm: pal.metal ?? metal });
@@ -4731,6 +4754,7 @@ export class Sorter implements Scene3D {
     for (const n of this.realNormals) n.m.normalScale.setScalar(this.real ? n.s * day : 0);
     REAL.value = this.real ? day : 0;
     BEVEL.value = bevelOptions.on ? REAL.value : 0;
+    AO.value = aoOptions.on ? REAL.value : 0;
     // The belts' side strips: the frame's teal in the drawn day, plain dark rubber edging in the realistic one.
     for (const st of this.strips) {
       const u = st.uniforms.uDayCol;
@@ -6110,6 +6134,8 @@ export class Sorter implements Scene3D {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
+    // (Trial: the hall's own surfaces take the baked shade too.)
+    if (aoOptions.on) for (const m of [floorMat, wallMat, westMat, sideMat]) groundAo(m);
     this.buildWing(floorMat, wallMat, ceilMat, add, westMat);
     {
       const shafts = lightShafts(ROOF_LIGHTS, HH, this.keyLight.position.clone().sub(this.keyLight.target.position));
