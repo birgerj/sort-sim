@@ -410,6 +410,77 @@ export function wheelTracks(paths: TrackPath[], style: TrackStyle, seed = 11): T
 export const REAL = { value: 0 };
 
 /**
+ * Trial (`?bevel=1`, or `?bevel=<millimetres>`): rounded edges on everything built from boxes,
+ * only in the realistic day. Off unless asked for, so the other looks compile the shaders they
+ * always did.
+ */
+export const bevelOptions = { on: false, radius: 0.01 };
+/** How much of the rounding shows (follows `REAL` while the trial is on); set by the scene. */
+export const BEVEL = { value: 0 };
+
+/**
+ * Rounds the edges of box faces in the light, without adding a triangle: real sheet metal,
+ * crates and profiles have a bend of a few millimetres that catches the light, and a
+ * knife-sharp corner is what gives a generated box away. Near an edge of a face the shading
+ * normal leans towards the neighbouring face (45° at the edge itself, where the two meet), so
+ * the corner lights up or darkens like a small fillet. The outline stays square.
+ *
+ * A box face is recognised by its picture coordinates: they run 0…1 over each face of a
+ * `BoxGeometry` (also after merging, scaling and instancing), so the distance to the edge in
+ * metres follows from them and the face's size on screen. Faces that are not flat quads with
+ * corners at 0 or 1 (tubes, spheres, walls with coordinates in metres, parts already rounded)
+ * are left alone. Thin parts get a smaller radius; far away, where the bend would be thinner
+ * than a pixel, it widens to a pixel and fades by as much, so it does not flicker.
+ */
+export function bevel(m: THREE.MeshStandardMaterial): void {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    prev.call(m, sh, r);
+    if (m.userData.noBevel) return;
+    sh.uniforms.uBevel = BEVEL;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vBvUv;\nflat varying vec2 vBvCorner;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBvUv = uv;\nvBvCorner = uv;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uBevel;\nvarying vec2 vBvUv;\nflat varying vec2 vBvCorner;')
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        if (uBevel > 0.001) {
+          // A corner of a quad whose coordinates run 0…1: a box face.
+          vec2 bvC = abs(vBvCorner - step(0.5, vBvCorner));
+          if (max(bvC.x, bvC.y) < 1e-4) {
+            vec3 bvQ0 = dFdx(vViewPosition), bvQ1 = dFdy(vViewPosition);
+            vec2 bvS0 = dFdx(vBvUv), bvS1 = dFdy(vBvUv);
+            float bvDet = bvS0.x * bvS1.y - bvS1.x * bvS0.y;
+            vec3 bvN = cross(bvQ0, bvQ1);
+            float bvNl = length(bvN);
+            // Flat faces only: the face's own normal and the shading normal agree.
+            if (abs(bvDet) > 1e-14 && bvNl > 0.0 && abs(dot(bvN / bvNl, normal)) > 0.9995) {
+              // Along the face, per unit of u and v (vViewPosition points back at the camera, hence the minus).
+              vec3 bvPu = -(bvQ0 * bvS1.y - bvQ1 * bvS0.y) / bvDet;
+              vec3 bvPv = -(bvQ1 * bvS0.x - bvQ0 * bvS1.x) / bvDet;
+              float bvLu = length(bvPu), bvLv = length(bvPv);
+              if (bvLu > 1e-6 && bvLv > 1e-6) {
+                float bvPx = max(length(bvQ0), length(bvQ1));
+                float bvR = min(${bevelOptions.radius.toFixed(4)}, 0.3 * min(bvLu, bvLv));
+                float bvRe = max(bvR, bvPx);
+                vec2 bvD = min(vBvUv, 1.0 - vBvUv) * vec2(bvLu, bvLv);   // metres to the nearest edge, each way
+                vec2 bvA = clamp(1.0 - bvD / bvRe, 0.0, 1.0);
+                vec2 bvSide = sign(vBvUv - 0.5);
+                vec3 bvLean = (bvPu / bvLu) * (bvSide.x * tan(bvA.x * 0.7854)) + (bvPv / bvLv) * (bvSide.y * tan(bvA.y * 0.7854));
+                normal = normalize(normal + bvLean * (uBevel * bvR / bvRe));
+              }
+            }
+          }
+        }`,
+      );
+  };
+  const key = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${key()}-bevel`;
+}
+
+/**
  * Knocks and scuffs on painted safety steel (yellow guards, bollards, rails, red column
  * feet), only in the realistic day: chipped paint showing dark steel, mostly in the
  * bump zone near the floor, horizontal scrapes where pallets and cages rub along, and

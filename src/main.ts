@@ -22,6 +22,7 @@ import { Music } from './audio/music';
 import { Sorter } from './scene/sorter';
 import { HUMANS, loadBakedBodies, startLaterWork } from './scene/people';
 import { clipOptions, loadClips } from './scene/clips';
+import { bevelOptions } from './scene/realDay';
 import { NIGHT_PRESETS, normalizeNightFx } from './scene/nightFx';
 import { Hud, loadSettings, saveSettings, type Settings, type TimeMode } from './ui/hud';
 import { startCard } from './ui/startCard';
@@ -88,6 +89,12 @@ await nextPaint();
 // The people's bodies, made at build time (a few hundred kB), while the loading screen is up;
 // and the animation clips some of them walk with (`?clips=0`: the generated gait instead).
 clipOptions.on = q.get('clips') !== '0';
+// Trial: rounded edges in the realistic day (`?bevel=1`, or `?bevel=<millimetres>` for another radius).
+const bevelMm = Number(q.get('bevel') ?? 0);
+if (bevelMm > 0) {
+  bevelOptions.on = true;
+  if (bevelMm > 1) bevelOptions.radius = Math.min(bevelMm, 50) / 1000;
+}
 await Promise.all([loadBakedBodies(), loadClips('./anims/ual.glb')]);
 const scene = new Sorter();
 app.append(scene.canvas);

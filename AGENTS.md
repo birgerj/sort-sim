@@ -255,6 +255,11 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   edges (`parcelWear`, seeded from its instance colour), dirty roof glass.
   A light vignette and warm/cool finish (`gradePass`) runs only in
   Day. The Day hall is built the first time Day is chosen.
+  Trial, off unless asked for: `?bevel=1` (or `?bevel=<millimetres>`, default 10) rounds the
+  edges of box faces in the light (`bevel` in `realDay.ts`, on `std()` and themed materials,
+  gated by `BEVEL`): the shading normal leans over near an edge, found from the face's 0…1
+  picture coordinates; no extra triangles, the outline stays square. Tubes, extrusions and
+  walls are left alone; a material opts out with `userData.noBevel`.
 - **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`
   walks the scene graph once per frame, just before `composer.render`.
   Anything posed later in a frame would be drawn a frame late.
