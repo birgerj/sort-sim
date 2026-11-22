@@ -40,7 +40,7 @@ import { buildForklift } from './forklift';
 import { buildHuman, setPeopleLod } from './people';
 import { blobTexture, InkPass, TOON, toonify } from './post';
 import { StackLights } from './stackLights';
-import { CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper, lightPools, parcelWear } from './realDay';
+import { BEVEL, bevel, bevelOptions, CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, gradePass, grime, lightShafts, REAL, realFloorMaps, ROBOT_TRACKS, trayWear, wear, wheelTracks, beltWear, litPaper, lightPools, parcelWear } from './realDay';
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
@@ -4514,6 +4514,7 @@ export class Sorter implements Scene3D {
   private theme<M extends THREE.MeshStandardMaterial>(m: M, day: number, rough = 0.85, metal = 0.05): M {
     this.themed.push({ m, n: m.color.clone(), d: new THREE.Color(day), nr: m.roughness, dr: rough, nm: m.metalness, dm: metal });
     toonify(m);
+    if (bevelOptions.on) bevel(m);
     // Safety yellow is the paint that takes the knocks (realistic day only).
     if (day === 0xf2c200) wear(m);
     return m;
@@ -4523,6 +4524,7 @@ export class Sorter implements Scene3D {
     const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
     if (day === undefined) {
       toonify(m);
+      if (bevelOptions.on) bevel(m);
       // One colour in every look; the realistic day may still re-colour it (REAL_PALETTE).
       const pal = REAL_PALETTE.get(color);
       if (pal) this.plain.push({ m, c: new THREE.Color(color), r: rough, mt: metal, pal: new THREE.Color(pal.c), pr: pal.rough ?? rough, pm: pal.metal ?? metal });
@@ -4728,6 +4730,7 @@ export class Sorter implements Scene3D {
     this.cageLine.color.setHex(0x8a8f96).lerp(this.c.setHex(DAY.tealD), day);
     for (const n of this.realNormals) n.m.normalScale.setScalar(this.real ? n.s * day : 0);
     REAL.value = this.real ? day : 0;
+    BEVEL.value = bevelOptions.on ? REAL.value : 0;
     // The belts' side strips: the frame's teal in the drawn day, plain dark rubber edging in the realistic one.
     for (const st of this.strips) {
       const u = st.uniforms.uDayCol;
