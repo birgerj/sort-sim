@@ -410,12 +410,11 @@ export function wheelTracks(paths: TrackPath[], style: TrackStyle, seed = 11): T
 export const REAL = { value: 0 };
 
 /**
- * Trial (`?bevel=1`, or `?bevel=<millimetres>`): rounded edges on everything built from boxes,
- * only in the realistic day. Off unless asked for, so the other looks compile the shaders they
- * always did.
+ * Rounded edges on everything built from boxes, only in the realistic day. `?bevel=0` leaves
+ * them out, `?bevel=<millimetres>` sets another radius.
  */
-export const bevelOptions = { on: false, radius: 0.01 };
-/** How much of the rounding shows (follows `REAL` while the trial is on); set by the scene. */
+export const bevelOptions = { on: true, radius: 0.01 };
+/** How much of the rounding shows (follows `REAL`); set by the scene. */
 export const BEVEL = { value: 0 };
 
 /**
