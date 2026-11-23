@@ -33,7 +33,7 @@ const hud = () => page.evaluate(() => {
   const q = (s) => document.querySelector(s);
   const box = (s) => { const e = q(s); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]; };
   const m = q('.shp-hud-meter');
-  return { clock: q('.shp-hud-clock')?.textContent, now: +m?.getAttribute('aria-valuenow'), max: +m?.getAttribute('aria-valuemax'), cards: [...document.querySelectorAll('.shp-hud-card')].map((c) => c.textContent).join('|'), gone: q('.shp-hud-gone')?.children.length ?? -1, goneText: q('.shp-hud-gone')?.textContent.slice(0, 200), top: box('.shp-hud-top'), goneBox: box('.shp-hud-gone'), side: box('.shp-hud-side'), bottom: box('.shp-hud-bottom'), autoHidden: q('.shp-hud-auto')?.hidden, pressed: [...document.querySelectorAll('.shp-hud-speed [aria-pressed=true]')].map((x) => x.textContent).join(','), money: q('.shp-hud-money')?.textContent, vh: innerHeight, vw: innerWidth };
+  return { clock: q('.shp-hud-clock')?.textContent, now: +m?.getAttribute('aria-valuenow'), max: +m?.getAttribute('aria-valuemax'), cards: [...document.querySelectorAll('.shp-hud-card')].map((c) => c.textContent).join('|'), gone: q('.shp-hud-gone')?.children.length ?? -1, goneText: q('.shp-hud-gone')?.textContent.slice(0, 200), top: box('.shp-hud-top'), goneBox: box('.shp-hud-gone'), side: box('.shp-hud-side'), bottom: box('.shp-hud-bottom'), viewOff: q('.shp-hud-view')?.classList.contains('is-off'), pressed: [...document.querySelectorAll('.shp-hud-speed [aria-pressed=true]')].map((x) => x.textContent).join(','), money: q('.shp-hud-money')?.textContent, vh: innerHeight, vw: innerWidth };
 });
 const fps = (ms) => page.evaluate((ms) => new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(+(n * 1000 / (performance.now() - t0)).toFixed(2)); }; requestAnimationFrame(f); }), ms);
 const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('sortsim.shifts') || '{}'));
@@ -47,14 +47,15 @@ try {
   for (let n = first; n <= last; n++) {
     console.log(`\n=== level ${n} (${size})`);
     await page.waitForTimeout(600);
-    const br = await look(n, '03-briefing');
-    if (!br.hasSection) note(n, 'briefing: no § sign');
-    await clickText(page, 'Plan the shift');
-    await page.waitForTimeout(900);
-    await look(n, '04-planner');
+    // A level opens straight in its planner (the briefing is a card in it, no screen of its own).
+    await page.waitForSelector('[data-key=start]', { timeout: 30000 });
+    await page.waitForTimeout(600);
+    const pl = await look(n, '04-planner');
+    if (!pl.hasSection) note(n, 'planner: no § sign');
     const pt = await text(page);
     console.log('  planner text:', pt.replace(/\n+/g, ' | ').slice(0, 600));
-    const verdict = pt.match(/buffer (level|peak|full)|will be late|on time|left behind|too late|fits|profit/gi);
+    // ("Profit to beat" in the header is the level's target, not a verdict on the plan.)
+    const verdict = pt.replace(/Profit to beat/g, '').match(/buffer (level|peak|full)|will be late|on time|left behind|too late|fits|profit/gi);
     if (verdict) note(n, 'planner words that may give the result away: ' + [...new Set(verdict)].join(', '));
     // The robot switch: flip the first one and back, and see that the fixed costs or state change.
     if (await page.locator('.shp-fleet').filter({ visible: true }).count()) {
@@ -95,8 +96,21 @@ try {
     if (h1.bottom && h1.bottom[3] > h1.vh + 1) note(n, 'shift: bottom bar runs off the screen');
     if (h1.side && h1.bottom && h1.side[3] > h1.bottom[1] + 1 && h1.side[0] < h1.bottom[2] && h1.side[2] > h1.bottom[0]) note(n, `shift: city cards overlap the bottom bar (${h1.side} / ${h1.bottom})`);
     if (h1.side && h1.top && h1.side[1] < h1.top[3] - 1 && h1.side[0] < h1.top[2]) note(n, `shift: city cards overlap the top bar (${h1.side} / ${h1.top})`);
-    // Tap a city card, then the Auto button.
-    try { await page.locator('.shp-hud-card').first().click({ timeout: 40000 }); await page.waitForTimeout(1500); const h = await hud(); await shot(page, `${P}-l${n}-08-city-tapped`); if (h.autoHidden !== false) note(n, 'shift: no Auto button after tapping a city card'); else { await page.locator('.shp-hud-auto').click({ timeout: 40000 }); await page.waitForTimeout(800); console.log('  city card and Auto tapped; Auto hidden again:', (await hud()).autoHidden); } } catch (e) { note(n, 'shift: city card or Auto could not be tapped: ' + e.message.split('\n')[0]); }
+    // Tap a city card (the camera leaves the automatic direction: the View button shows it), then View → Auto.
+    try {
+      await page.locator('.shp-hud-card').first().click({ timeout: 40000 });
+      await page.waitForTimeout(1500);
+      await shot(page, `${P}-l${n}-08-city-tapped`);
+      if ((await hud()).viewOff !== true) note(n, 'shift: the View button does not show that the camera left the automatic direction after a tap on a city card');
+      else {
+        await page.locator('.shp-hud-view').click({ timeout: 40000 });
+        await page.locator('.shp-hud-views [data-view=""]').click({ timeout: 40000 });
+        await page.waitForTimeout(800);
+        const off = (await hud()).viewOff;
+        console.log('  city card tapped, then View → Auto; back on automatic:', off === false);
+        if (off !== false) note(n, 'shift: View → Auto does not give the automatic direction back');
+      }
+    } catch (e) { note(n, 'shift: city card or View could not be tapped: ' + e.message.split('\n')[0]); }
     const rate = n === 10 || n === first ? await fps(8000) : null;
     if (rate !== null) console.log(`  frames per second at 16×: ${rate}`);
     // Watch, then finish or skip.
