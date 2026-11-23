@@ -1,0 +1,37 @@
+{
+ "level": 3,
+ "badge": "fleet4",
+ "par": 809.0,
+ "parPlanEarns": false,
+ "plainEarns": false,
+ "plainProfit": 664.0,
+ "found": true,
+ "profit": 795.5,
+ "plan": {
+  "blocks": [
+   {
+    "city": 0,
+    "start": 0,
+    "end": 90,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 90,
+    "end": 210,
+    "people": 2,
+    "docks": 1
+   }
+  ],
+  "robotCities": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "robots": 4
+ },
+ "closest": null,
+ "closestPlan": null
+}

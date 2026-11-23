@@ -1,0 +1,244 @@
+{
+ "level": 9,
+ "badge": "lean12",
+ "par": 13029.157843637204,
+ "parPlanEarns": false,
+ "plainEarns": false,
+ "plainProfit": 7484.9527246411335,
+ "found": true,
+ "profit": 5803.335153743315,
+ "plan": {
+  "blocks": [
+   {
+    "city": 0,
+    "start": 0,
+    "end": 450,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 150,
+    "end": 330,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 300,
+    "end": 360,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 360,
+    "end": 450,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 390,
+    "end": 450,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 1,
+    "start": 210,
+    "end": 300,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 180,
+    "end": 270,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 270,
+    "end": 420,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 330,
+    "end": 390,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 360,
+    "end": 420,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 390,
+    "end": 450,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 2,
+    "start": 420,
+    "end": 480,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 0,
+    "end": 60,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 0,
+    "end": 150,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 60,
+    "end": 120,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 120,
+    "end": 210,
+    "people": 1,
+    "docks": 2
+   },
+   {
+    "city": 4,
+    "start": 90,
+    "end": 300,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 4,
+    "start": 300,
+    "end": 360,
+    "people": 1,
+    "docks": 2
+   },
+   {
+    "city": 5,
+    "start": 0,
+    "end": 270,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 5,
+    "start": 30,
+    "end": 90,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 6,
+    "start": 90,
+    "end": 270,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 6,
+    "start": 420,
+    "end": 480,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 7,
+    "start": 30,
+    "end": 180,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 7,
+    "start": 180,
+    "end": 300,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 7,
+    "start": 210,
+    "end": 330,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 8,
+    "start": 270,
+    "end": 360,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 8,
+    "start": 360,
+    "end": 420,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 9,
+    "start": 0,
+    "end": 90,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 10,
+    "start": 300,
+    "end": 420,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 10,
+    "start": 360,
+    "end": 420,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 11,
+    "start": 90,
+    "end": 360,
+    "people": 1,
+    "docks": 1
+   }
+  ],
+  "robotCities": [
+   1,
+   2,
+   4,
+   5,
+   6,
+   7,
+   10,
+   11
+  ],
+  "robots": 24
+ },
+ "closest": null,
+ "closestPlan": null
+}

@@ -1,0 +1,68 @@
+{
+ "level": 6,
+ "badge": "halfBuffer",
+ "par": 2398.610293223143,
+ "parPlanEarns": true,
+ "plainEarns": true,
+ "plainProfit": 1282.5916666666665,
+ "found": true,
+ "profit": 2398.610293223143,
+ "plan": {
+  "blocks": [
+   {
+    "city": 0,
+    "start": 30,
+    "end": 90,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 90,
+    "end": 150,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 180,
+    "end": 240,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 240,
+    "end": 330,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 1,
+    "start": 30,
+    "end": 90,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 3,
+    "start": 60,
+    "end": 180,
+    "people": 1,
+    "docks": 1
+   }
+  ],
+  "robotCities": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7
+  ],
+  "robots": 13
+ },
+ "closest": null,
+ "closestPlan": null
+}
