@@ -50,7 +50,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/sim/addresses.ts` | Made-up recipients for the labels, written per country (`line1`, `line2`). |
 | `src/sim/postcodes.ts` | The 36 destinations of the chosen country with their postcode ranges (north doors shared out by volume with `planDoors` → `DOORS_PER_CITY`, `DOCK_CITY`; the next 20 south); `split` into cage/box ranges; `randomPostcode(rnd, south)` (the sorter asks about 20% south, less while the pickup tables fill up). |
 | `src/scene/labels.ts` | `Labels`: many signs with different text in one draw call (canvas atlas + instanced planes): cage boards, door screens, projected postcodes. Each atlas layout needs its own shader cache key. |
-| `src/scene/batch.ts` | `Batcher`: models are built from proxy objects; one `InstancedMesh` per geometry+material, matrices copied every frame (`kit.batch`). Robots, forklifts, cages and trailers use it (people are skinned meshes, see `people.ts`). |
+| `src/scene/batch.ts` | `Batcher`: models are built from proxy objects; one `InstancedMesh` per geometry+material, matrices copied every frame (`kit.batch`); remembers which parts have ever moved (`flips`, `onlyStill`, for the baked shade). Robots, forklifts, cages and trailers use it (people are skinned meshes, see `people.ts`). |
 | `src/scene/merge.ts` | `StaticMerge`: merges the hall's fixed single meshes (per parent, material, flags, 24 m patch) after the build, keeps the originals and takes a group apart again when one of them turns out to move or hide (see Quality / Static merging). |
 | `src/scene/trucks.ts` | `Trucks`: a trailer behind every dock door, and a screen above it. Full (2 cages / 4 boxes) or by hand (`cleardown`) → cleardown (amber lamp flashes; waits while `hold()` says the workers are still loading: always while someone is in the trailer or pushing a cage in, up to `WAIT_CAGES` beats for cages still to go; cage slots are not drawn, the docks show the real cages) → door down → truck leaves → new empty truck → door up. |
 | `src/scene/manualSort.ts` | `ManualSort`: robots tip envelopes into a hopper west of row 2; a roller belt takes them to the table; a worker puts them in pigeonholes and empties full ones into the crates. Day only, few parcels. |
@@ -267,6 +267,10 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   one picture of the floor plan that the floor, the walls and the lower 1.4 m of `std()` and
   themed materials read (`groundAo`, gated by `AO`). Nothing per frame; quality normal and up
   (it follows the baked shadow). An object opts out of the bake with `userData.noAo`.
+  Machines drawn through the batcher are in it part by part: only parts that have never moved
+  (`Batcher` keeps count), are not under something with `blobUnder` (robots, forklifts, cages,
+  people) and stand inside the hall (`Batcher.onlyStill`). When a part that was in the picture
+  moves for the first time, the shade is worked out once more without it (at most every 20 s).
 - **Matrices:** `scene.matrixWorldAutoUpdate` is off; `Batcher.update()`
   walks the scene graph once per frame, just before `composer.render`.
   Anything posed later in a frame would be drawn a frame late.
