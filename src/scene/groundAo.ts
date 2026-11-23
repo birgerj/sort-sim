@@ -2,9 +2,8 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
 /**
- * Trial (`?ao=1`): soft shade where things stand on the floor, along the walls and in the
- * corners, only in the realistic day. Off unless asked for, so the other looks compile the
- * shaders they always did.
+ * Soft shade where things stand on the floor, along the walls and in the corners, only in the
+ * realistic day (`?ao=0` leaves it out).
  *
  * The hall's lights come from everywhere, so the floor is darker wherever something close by
  * hides part of the ceiling: under racks and tables, round machine feet, along a wall. That
@@ -13,8 +12,8 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
  * of the floor plan, and read by the floor, the walls and the lower part of every object
  * (`groundAo`): one texture read per pixel, nothing per frame.
  */
-export const aoOptions = { on: false };
-/** How much of the shade shows (follows the realistic day while the trial is on); set by the scene. */
+export const aoOptions = { on: true };
+/** How much of the shade shows (follows the realistic day); set by the scene. */
 export const AO = { value: 0 };
 
 const WHITE = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);

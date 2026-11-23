@@ -2276,7 +2276,7 @@ export class Sorter implements Scene3D {
   private movers: THREE.Mesh[] | null = null;
   private moverWatch: { list: { m: THREE.Mesh; w: THREE.Matrix4; v: number }[]; until: number } | null = null;
   private nextBake = 0;
-  /** The baked shade round what stands on the floor (trial, groundAo.ts): when to work it out, and whether that is done. */
+  /** The baked shade round what stands on the floor (groundAo.ts): when to work it out, and whether that is done. */
   private aoDue = 0;
   private aoBaked = false;
   /** When it was last worked out, and how many parts the batcher had seen move by then. */
@@ -6156,7 +6156,7 @@ export class Sorter implements Scene3D {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(HCX, HH, HZC);
     add(ceil);
-    // (Trial: the hall's own surfaces take the baked shade too.)
+    // The hall's own surfaces take the baked shade too.
     if (aoOptions.on) for (const m of [floorMat, wallMat, westMat, sideMat]) groundAo(m);
     this.buildWing(floorMat, wallMat, ceilMat, add, westMat);
     {
