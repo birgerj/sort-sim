@@ -94,8 +94,8 @@ clipOptions.on = q.get('clips') !== '0';
 const bevelMm = Number(q.get('bevel') ?? 1);
 bevelOptions.on = bevelMm > 0;
 if (bevelMm > 1) bevelOptions.radius = Math.min(bevelMm, 50) / 1000;
-// Trial: soft shade where things stand on the floor and along the walls, in the realistic day (`?ao=1`).
-aoOptions.on = q.get('ao') === '1';
+// Soft shade where things stand on the floor and along the walls, in the realistic day: `?ao=0` leaves it out.
+aoOptions.on = q.get('ao') !== '0';
 await Promise.all([loadBakedBodies(), loadClips('./anims/ual.glb')]);
 const scene = new Sorter();
 app.append(scene.canvas);

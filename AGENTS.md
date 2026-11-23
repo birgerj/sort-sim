@@ -79,7 +79,7 @@ Read this before changing code. README.md describes the hall and the controls.
 | `src/scene/nightFx.ts` | What the night shows (`NightFx`): parcel glow 0…1 and a switch per party effect, presets Party / Calm / Dark. `Sorter.setNightFx` applies it; the HUD's Night effects panel (only shown while the night look is on) edits and stores it. |
 | `src/scene/roof.ts` | `Roof`: 18 flat skylights (curb, level glass, glazing bars) in two rows at z ±20, one in every other bay between the roof beams; both ceilings have holes for them (`ceilingWithLights`). Above them a sky dome that follows the camera: light blue with drifting flat clouds by day, stars and grey clouds at night (`uDay`). |
 | `src/scene/party.ts` | Night party: DJ booth on the maintenance platform inside the loop's west end (`PLATFORM_X`), laser fans, mirror-ball floor spots, confetti on the drop. |
-| `src/scene/groundAo.ts` | Trial (`?ao=1`): the baked shade round what stands on the floor, in Day (`bakeGroundAo`, `groundAo`). |
+| `src/scene/groundAo.ts` | The baked shade round what stands on the floor, in Day (`bakeGroundAo`, `groundAo`). |
 | `src/scene/realDay.ts` | The realistic day look ("Day"): generated worn-concrete floor (`realFloorMaps`), world-space grime that never tiles (`grime`), a generated daylight environment (`dayEnvironment`), daylight shafts under the roof lights (`lightShafts`, one draw call), wheel marks (`wheelTracks`), paint wear (`wear`, `REAL`), colour finish (`gradePass`). Built in `Sorter.buildRealHall`. |
 | (racks) | `Sorter.buildRacks`: six 42U server racks against the west wall; fronts drawn by `rackFront` (servers with drive bays, switches, patch panels, blanks, empty slots), a pull-out console with the live dash screen, blinking status LEDs in one instanced mesh (`blinkRacks`, only near the camera). |
 | `src/scene/stackLights.ts` | `StackLights`: three-colour signal towers in the hub plan's code (`chuteFill`: off empty, green filling, amber over 60 % or truck in cleardown, red full; disco at night), one on each chute's pillar above its display and one on a post at the end of each dock chute and robot station chute. All towers: two draw calls. Driven by `Sorter.updateTowers`. |
@@ -261,7 +261,7 @@ one `InstancedMesh` (`writeParcels`), with an inverted-hull outline by day.
   another, `?bevel=0` to leave it out): the shading normal leans over near an edge, found from
   the face's 0…1 picture coordinates; no extra triangles, the outline stays square. Tubes,
   extrusions and walls are left alone; a material opts out with `userData.noBevel`.
-  Trial, off unless asked for: `?ao=1` bakes a soft shade where things stand on the floor,
+  Baked shade (`?ao=0` leaves it out): a soft shade where things stand on the floor,
   along the walls and in corners (`groundAo.ts`): once what moves is known (the baked shadow's
   `movers`), two looks up from under the floor give the room above every spot; blurred, it is
   one picture of the floor plan that the floor, the walls and the lower 1.4 m of `std()` and
