@@ -2279,6 +2279,11 @@ export class Sorter implements Scene3D {
   /** The baked shade round what stands on the floor (trial, groundAo.ts): when to work it out, and whether that is done. */
   private aoDue = 0;
   private aoBaked = false;
+  /** When it was last worked out, and how many parts the batcher had seen move by then. */
+  private aoAt = 0;
+  private aoFlips = 0;
+  /** What can move even when it stands still for now: everything with a contact shadow that follows it (`blobUnder`). */
+  private mobile = new Set<THREE.Object3D>();
 
   private updateShadows(): void {
     const q = this.quality;
@@ -2370,20 +2375,36 @@ export class Sorter implements Scene3D {
       this.renderer.shadowMap.needsUpdate = true;
       this.nextBake = this.time + 30;
     }
+    // Something that stood still when the shade was worked out has moved since: once more without it
+    // (at most every 20 s; it is left out for good, so this dies down after the first minutes).
+    if (this.aoBaked && !this.aoDue && this.batcher.flips !== this.aoFlips && this.time - this.aoAt > 20) this.aoDue = this.time;
     if (this.aoDue && this.time >= this.aoDue && this.real && this.dayShown) {
       this.aoDue = 0;
       this.aoBaked = true;
+      this.aoAt = this.time;
+      this.aoFlips = this.batcher.flips;
+      // Machines drawn through the batcher share their meshes with robots, forklifts and cages:
+      // of those meshes only the parts that stand still are kept in the picture.
+      const batched = new Set<THREE.Object3D>(this.batcher.meshes());
+      const inside = (x: number, z: number) => {
+        const [ix, iz] = inHall(x, z, 0);
+        return ix === x && iz === z;
+      };
+      const back = this.batcher.onlyStill((part) => {
+        for (let o: THREE.Object3D | null = part; o; o = o.parent) if (this.mobile.has(o)) return true;
+        // Trailers stand outside the hall and come and go.
+        const e = part.matrixWorld.elements;
+        return !inside(e[12]!, e[14]!);
+      });
       bakeGroundAo(this.renderer, this.scene, {
         x0: WX - 2,
         x1: EX + 2,
         z0: WING.z0 - 2,
         z1: HZ + 2,
-        hide: [...(this.movers ?? []), ...this.realOnly, ...this.flatOnly],
-        inside: (x, z) => {
-          const [ix, iz] = inHall(x, z, 0);
-          return ix === x && iz === z;
-        },
+        hide: [...(this.movers ?? []).filter((m) => !batched.has(m)), ...this.realOnly, ...this.flatOnly],
+        inside,
       });
+      back();
     }
   }
 
@@ -4505,6 +4526,7 @@ export class Sorter implements Scene3D {
 
   /** A soft contact shadow that moves with an object (a child at floor level). */
   blobUnder(obj: THREE.Object3D, w: number, d: number): void {
+    this.mobile.add(obj);
     const p = this.batcher.add(this.blobGeo, this.blobMaterial(), obj, undefined, true);
     p.scale.set(w, 1, d);
     p.position.y = 0.03;

@@ -14,7 +14,15 @@ interface Batch {
   colors: (THREE.Color | null)[];
   mesh: THREE.InstancedMesh | null;
   noInk: boolean;
+  /** Per part: where it was last drawn (place and two terms of its turn), and whether it has moved since it was first drawn. */
+  last: Float32Array | null;
+  moved: Uint8Array | null;
+  /** Per part: 1 when it belongs to something that can move (worked out once, see `onlyStill`). */
+  mobile: Uint8Array | null;
 }
+
+/** The matrix elements compared to see whether a part moved: its place, and two that change with any turn. */
+const WATCHED = [12, 13, 14, 0, 10];
 
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
@@ -32,7 +40,7 @@ export class Batcher {
     const key = `${geo.uuid}|${mat.uuid}|${noInk ? 1 : 0}`;
     let b = this.batches.get(key);
     if (!b) {
-      b = { geo, mat, proxies: [], colors: [], mesh: null, noInk };
+      b = { geo, mat, proxies: [], colors: [], mesh: null, noInk, last: null, moved: null, mobile: null };
       this.batches.set(key, b);
       this.list.push(b);
     }
@@ -75,9 +83,65 @@ export class Batcher {
     for (const b of this.list) {
       const m = b.mesh;
       if (!m) continue;
-      b.proxies.forEach((p, i) => m.setMatrixAt(i, this.shown(p) ? p.matrixWorld : HIDDEN));
+      const first = !b.last;
+      const last = (b.last ??= new Float32Array(b.proxies.length * WATCHED.length));
+      const moved = (b.moved ??= new Uint8Array(b.proxies.length));
+      b.proxies.forEach((p, i) => {
+        const shown = this.shown(p);
+        m.setMatrixAt(i, shown ? p.matrixWorld : HIDDEN);
+        // Has it moved since it was last in sight? (Being hidden for a while is not moving.)
+        if (!shown) return;
+        const e = p.matrixWorld.elements;
+        let o = i * WATCHED.length;
+        let differs = false;
+        for (const k of WATCHED) {
+          if (Math.abs(last[o]! - e[k]!) > 1e-4) differs = true;
+          last[o++] = e[k]!;
+        }
+        if (differs && !first && !moved[i] && this.frames > 2) {
+          moved[i] = 1;
+          this.flips++;
+        }
+      });
       m.instanceMatrix.needsUpdate = true;
     }
+    this.frames++;
+  }
+
+  /**
+   * How many parts have been seen moving for the first time: when this number grows, something
+   * that stood still until now turned out to be movable.
+   */
+  flips = 0;
+  private frames = 0;
+
+  /** The instanced meshes the parts are drawn with. */
+  meshes(): THREE.InstancedMesh[] {
+    return this.list.flatMap((b) => (b.mesh ? [b.mesh] : []));
+  }
+
+  /**
+   * For a picture of what stands still (the baked shade): hides every part that has moved, and
+   * every part of something `mobile` says can move even if it has not yet. Returns the way back.
+   */
+  onlyStill(mobile: (part: THREE.Object3D) => boolean): () => void {
+    for (const b of this.list) {
+      const m = b.mesh;
+      if (!m) continue;
+      const mob = (b.mobile ??= Uint8Array.from(b.proxies, (p) => (mobile(p) ? 1 : 0)));
+      b.proxies.forEach((_, i) => {
+        if (mob[i] || b.moved?.[i]) m.setMatrixAt(i, HIDDEN);
+      });
+      m.instanceMatrix.needsUpdate = true;
+    }
+    return () => {
+      for (const b of this.list) {
+        const m = b.mesh;
+        if (!m) continue;
+        b.proxies.forEach((p, i) => m.setMatrixAt(i, this.shown(p) ? p.matrixWorld : HIDDEN));
+        m.instanceMatrix.needsUpdate = true;
+      }
+    };
   }
 
   /** Visible all the way up to the scene (and still attached)? */

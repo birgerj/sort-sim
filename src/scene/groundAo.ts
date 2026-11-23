@@ -24,6 +24,9 @@ const AO_MAP: { value: THREE.Texture } = { value: WHITE };
 /** Where the picture lies on the floor: its centre (x, z) and one over its size. */
 const AO_BOX = { value: new THREE.Vector4(0, 0, 0, 0) };
 
+/** The picture in use (freed when a newer one replaces it). */
+let kept: THREE.WebGLRenderTarget | null = null;
+
 /** Texels per metre of the floor plan. */
 const PX_PER_M = 10;
 /** The slice above the floor that counts: what hangs higher hides too little to matter. */
@@ -311,7 +314,8 @@ export function bakeGroundAo(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   for (const m of [weigh, copy, blur, add, depthFront, depthBack]) m.dispose();
   quad.dispose();
 
-  if (AO_MAP.value !== WHITE) AO_MAP.value.dispose();
+  kept?.dispose();
+  kept = a;
   AO_MAP.value = a.texture;
   AO_BOX.value.set(cx, cz, 1 / w, 1 / h);
 }
