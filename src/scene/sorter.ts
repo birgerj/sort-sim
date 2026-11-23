@@ -45,8 +45,8 @@ import { BEVEL, bevel, bevelOptions, CAGE_TRACKS, dayEnvironment, FLOOR_TILE_M, 
 import { Life } from './life';
 import { HUMANS, INK_MASK_LAYER } from './people';
 import { FORKLIFTS } from './forklift';
-import { Xmas } from './xmas';
-import { onXmas, XMAS } from '../sim/season';
+import { XmasSet } from './xmas';
+import { onDecor, shows } from '../sim/season';
 import { Party } from './party';
 import { Roof, ceilingWithLights, roofLights } from './roof';
 import { Crowd } from './crowd';
@@ -978,6 +978,11 @@ export interface Parcel {
   tray2?: number;
   /** Sent to the wrong chute by mistake: it goes back to the infeed from the dock. */
   missorted?: boolean;
+  /** During a shift of the planning game: rides the loop until the director sends it to a chute. */
+  spare?: boolean;
+  /** During a shift: the city of the plan it is for (it wears a band in that city's colour), and whether it is on its way into the buffer rack. */
+  city?: number;
+  toRack?: boolean;
   /** Not counted as leaving the hub (it came back in). */
   recycled?: boolean;
   /** On its way down the no-read chute. */
@@ -1015,6 +1020,39 @@ export interface Parcel {
   dropAt?: number;
   /** Times it went round the loop again because its chute was full. */
   laps?: number;
+}
+
+/** During a shift: metres before its chute within which a parcel riding the loop is sent down it (and counts as on its way). */
+const SHIFT_NEAR = 36;
+
+/**
+ * What a shift of the planning game being played asks of the hall (see director.ts). The
+ * scene calls these; with no shift (`Sorter.shift` null) it is the free simulation.
+ */
+export interface ShiftHooks {
+  /** Every frame, before anything moves. */
+  frame(dt: number, bt: number): void;
+  /** Every beat, before the robots and the docks take theirs. */
+  beat(b: number): void;
+  /** Is north door `door` (0-based, west to east) loading now? */
+  doorOpen(door: number): boolean;
+  /**
+   * How many hall beats pass per beat of the music: 1 is the hall's own pace, 4, 8 or 16 a
+   * shift played faster (people, belts, robots, trucks and doors all with it), 0 a pause.
+   */
+  warp: number;
+  /** The band colour of the parcels of city i. */
+  colours: THREE.Color[];
+  /** The city whose next parcel is due on the loop now (−1: none is), and: one for that city has just been let onto it. */
+  next(): number;
+  took(city: number): void;
+  /** A parcel of this city has just come onto the loop: the chute of a dock that may take it now, and its postcode (null: none); and: it was sent there. */
+  route(city: number): { chute: number; pc: number } | null;
+  sent(chute: number, n?: number): void;
+  /** 0…1: how far the night look is on whatever the time of day (the closing party). */
+  night: number;
+  /** Parcels per beat to bring in from the inbound docks. */
+  inflow: number;
 }
 
 interface Slot {
@@ -1255,6 +1293,9 @@ export class Sorter implements Scene3D {
   private bt = 0;
   private lastBeats = Number.NaN;
   private offset = 0;
+  /** The music's beats as the scene follows them, and how far the hall's own beats (`bt`) are ahead of them (see `render`). */
+  private mbt = 0;
+  private ahead = 0;
   private time = 0;
   private kick = 0;
   private snare = 0;
@@ -1402,7 +1443,7 @@ export class Sorter implements Scene3D {
   // Day / night look.
   private day = 0;
   /** Christmas decorations (Settings → Christmas). */
-  private xmas: Xmas | null = null;
+  private xmas: XmasSet | null = null;
   private dayShown: boolean | null = null;
   private themed: { m: THREE.MeshStandardMaterial; n: THREE.Color; d: THREE.Color; nr: number; dr: number; nm: number; dm: number; rc?: THREE.Color; rr?: number; rm?: number }[] = [];
   readonly dayOnly: THREE.Object3D[] = [];
@@ -1425,6 +1466,8 @@ export class Sorter implements Scene3D {
   /** Materials that wear another picture in the realistic day (their own map otherwise). */
   private realMaps: { m: THREE.MeshStandardMaterial; own: THREE.Texture | null; real: THREE.Texture; col: THREE.Color; realCol: THREE.Color; rough: number; realRough: number }[] = [];
   private hull!: THREE.InstancedMesh;
+  /** The city bands of a played shift's parcels (made the first time a shift is played). */
+  private bands: { mesh: THREE.InstancedMesh; count0: number } | null = null;
   private cageLine!: THREE.LineBasicMaterial;
 
   // Camera.
@@ -1597,7 +1640,7 @@ export class Sorter implements Scene3D {
       }
       const beams: number[] = [];
       for (let x = WX + 2; x <= EX - 2; x += 10) beams.push(x);
-      this.xmas = new Xmas(this, {
+      this.xmas = new XmasSet(this, {
         wx: WX,
         ex: EX,
         hz: HZ,
@@ -1636,8 +1679,9 @@ export class Sorter implements Scene3D {
         ],
         snow: [...Array.from({ length: 11 }, (_, k) => ({ x: -36 + k * 12, z: 0 })), { x: -58, z: 12 }, { x: -58, z: -14 }, { x: -26, z: -20 }],
         market: { x: -28.6, z: 32.6 },
-      }, XMAS);
-      onXmas((on) => this.xmas?.set(on, this.lookPoint()));
+      }, shows);
+      // (Christmas switched, or a trophy earned in the planning game: what is new comes in from where the camera looks.)
+      onDecor(() => this.xmas?.sync(shows, this.lookPoint()));
     }
     this.life = new Life(this, {
       wx: WX,
@@ -1795,8 +1839,13 @@ export class Sorter implements Scene3D {
     this.crowd = new Crowd(this, PLATFORM_X + 8, LX + STRAIGHT - 1, -LOOP_ZH + 2.2, LOOP_ZH - 2.2, 520);
     // At Christmas the dancers keep clear of the trees in the middle.
     const treeSpots = XMAS_MID_TREES.map(({ x, z }) => ({ x, z, r: 2.6 }));
-    this.crowd.setAvoid(treeSpots, XMAS, true);
-    onXmas((on) => this.crowd.setAvoid(treeSpots, on));
+    this.crowd.setAvoid(treeSpots, shows('trees'), true);
+    let treesUp = shows('trees');
+    onDecor(() => {
+      if (shows('trees') === treesUp) return;
+      treesUp = !treesUp;
+      this.crowd.setAvoid(treeSpots, treesUp);
+    });
     this.eggs = new Eggs(this);
     this.eggs.link({ life: this.life, docks: this.docks, party: this.party, floor: this.floor, tableY: DECK_Y });
     ANTICS.build(this);
@@ -1993,36 +2042,51 @@ export class Sorter implements Scene3D {
   }
 
   render(i: SceneInput): void {
-    const dt = clamp(i.dt, 0, 0.1);
-    this.time += dt;
+    // Seconds for the camera, the screens and the lights; `dt` for everything that works in the
+    // hall, which a played shift can run faster than the music (see `ShiftHooks.warp`) or freeze.
+    const real = clamp(i.dt, 0, 0.1);
+    const warp = this.shift ? this.shift.warp : 1;
+    const dt = real * warp;
+    this.time += real;
     // Beat clock: follow the music's beats; on a jump, move forward to the same phase.
     const prev = this.bt;
+    const prevM = this.mbt;
     if (Number.isNaN(this.lastBeats)) this.offset = -i.beats;
     else {
       const d = i.beats - this.lastBeats;
-      if (d < 0 || d > 0.5) this.offset = Math.ceil(prev - i.beats);
+      if (d < 0 || d > 0.5) this.offset = Math.ceil(prevM - i.beats);
     }
     this.lastBeats = i.beats;
-    this.bt = Math.max(prev, i.beats + this.offset);
+    this.mbt = Math.max(prevM, i.beats + this.offset);
+    // The hall's beats: the music's, plus what a shift played fast has run ahead (or, paused,
+    // fallen behind). Whole factors keep every music beat a hall beat; back at the hall's own
+    // pace the lead is rounded up to whole beats, so the hall is in step with the music again.
+    if (warp !== 1) this.ahead += (this.mbt - prevM) * (warp - 1);
+    else if (this.ahead !== Math.ceil(this.ahead)) this.ahead = Math.ceil(this.ahead);
+    this.bt = Math.max(prev, this.mbt + this.ahead);
     const bt = this.bt;
+    // (The night's lights and dancers stay on the music's beats: sixteen times as fast they would strobe.)
+    const lbt = this.mbt + Math.ceil(this.ahead);
     const prevCt = this.ct;
     this.ct = Number.isNaN(this.lastCt) ? bt : this.ct + (bt - prev) * this.speed;
     this.dct = this.ct - prevCt;
     this.bpmNow = i.bpm ?? BPM;
-    this.due = Math.min(this.due + ((bt - prev) * this.rate) / this.bpmNow, 4);
+    // (During a shift of the planning game the director says what comes in, per beat.)
+    this.shift?.frame(dt, bt);
+    this.due = Math.min(this.due + (this.shift ? (bt - prev) * this.shift.inflow : ((bt - prev) * this.rate) / this.bpmNow), 4);
     this.lastCt = this.ct;
     const crossed = Math.floor(bt) !== Math.floor(prev);
 
-    this.kick += (i.kick - this.kick) * Math.min(1, dt * 20);
-    this.snare += (i.snare - this.snare) * Math.min(1, dt * 20);
-    this.hat += (i.hat - this.hat) * Math.min(1, dt * 20);
-    this.bassEnv *= Math.exp(-dt * 4);
+    this.kick += (i.kick - this.kick) * Math.min(1, real * 20);
+    this.snare += (i.snare - this.snare) * Math.min(1, real * 20);
+    this.hat += (i.hat - this.hat) * Math.min(1, real * 20);
+    this.bassEnv *= Math.exp(-real * 4);
     i.cols.forEach((c, k) => {
       const t = this.cols[k];
       if (!t) return;
       this.c.setRGB(...c);
       const m = Math.max(this.c.r, this.c.g, this.c.b, 0.05);
-      t.lerp(this.c.multiplyScalar(1 / m), Math.min(1, dt * 3));
+      t.lerp(this.c.multiplyScalar(1 / m), Math.min(1, real * 3));
     });
     const bar = i.playing && i.bar !== undefined ? i.bar : bt / 4;
 
@@ -2043,7 +2107,8 @@ export class Sorter implements Scene3D {
     }
 
     // Time of day: "dusk" (0) is the day look, "night" (1) the club.
-    this.applyTheme(1 - smooth01((i.tod ?? 0) * 1.6 - 0.3));
+    // (A played shift can turn the night on by itself: the party after a perfect one.)
+    this.applyTheme(1 - smooth01(Math.max(i.tod ?? 0, this.shift?.night ?? 0) * 1.6 - 0.3));
 
     this.floor.update(dt, bt, {
       kick: this.kick,
@@ -2061,7 +2126,7 @@ export class Sorter implements Scene3D {
     this.updateParcels(dt);
     this.updateTrays(dt);
     this.updateStore();
-    this.updateClub(dt, bar);
+    this.updateClub(real, bar);
     this.updateForklifts(dt, prev);
     this.trucks.update(bt);
     // One unloader per truck while that keeps up with the rate (about UNLOAD_PER_HOUR each), else two.
@@ -2075,7 +2140,7 @@ export class Sorter implements Scene3D {
     this.wing.update(dt, bt);
     this.canteen.update(dt, bt);
     this.breaks.update(dt, bt, this.dayShown !== false);
-    this.batches.tick(this.hubTime());
+    if (!this.shift) this.batches.tick(this.hubTime());
     this.kpi.tick(this.hubTime(), () => ({
       chutesFull: CHUTES.reduce((a, _, k) => a + (k !== REJECT && k !== NOREAD && !this.faults.isDown(k) && this.room(k) <= 0 ? 1 : 0), 0),
       robotsBusyPct: (100 * this.floor.fleet.bots.filter((b) => b.state !== 'idle').length) / this.floor.fleet.bots.length,
@@ -2090,10 +2155,10 @@ export class Sorter implements Scene3D {
     this.life.update(dt, bt);
     this.crew?.update(dt, bt);
     this.updateFaultShows();
-    this.xmas?.update(bt, 1 - this.day, this.kick);
-    this.crowd.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown, camera: this.camera, far: 18 * this.lodScale });
-    this.roof.update(bt, this.day, this.camera);
-    this.party.update(dt, bt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
+    this.xmas?.update(lbt, 1 - this.day, this.kick);
+    this.crowd.update(real, lbt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, cols: this.cols, dayShown: !!this.dayShown, camera: this.camera, far: 18 * this.lodScale });
+    this.roof.update(lbt, this.day, this.camera);
+    this.party.update(real, lbt, { kick: this.kick, snare: this.snare, hat: this.hat, energy: i.energy, bar, cols: this.cols, dayShown: !!this.dayShown });
     const bots = this.floor.fleet.bots;
     this.screens.updateMap(this.time, this.mapData(), this.camera.position.distanceTo(this.t.set(-48, 2.7, 21.5)) < 14);
     this.screens.update(this.time, {
@@ -2109,7 +2174,7 @@ export class Sorter implements Scene3D {
     this.eggs.update(dt, bt, this.dayShown !== false, this.camera.position);
     // ...and their acts on top, once everyone has been animated.
     ANTICS.post(bt);
-    this.updateCamera(dt, bar, i.travelSpeed);
+    this.updateCamera(real, bar, i.travelSpeed);
     this.updateAboveRoof();
     this.bakeShadows();
     if (this.shadowMode === 'live') {
@@ -2129,11 +2194,12 @@ export class Sorter implements Scene3D {
     }
     this.ink.focus = this.camera.position.distanceTo(this.look);
     this.batcher.update();
-    this.composer.render(dt);
+    this.composer.render(real);
   }
 
   // ---------- music events ----------
   private onBeat(b: number): void {
+    this.shift?.beat(b);
     this.floor.beat(b);
     this.docks.beat(b, !!this.dayShown);
     if (b % 2 === 0) this.floor.tableBeat(b / 2, this.cols);
@@ -2165,6 +2231,12 @@ export class Sorter implements Scene3D {
     for (let k = 0; k < this.lanes.length; k++) if (this.feedable(k) && (best < 0 || n(k) < n(best))) best = k;
     return best;
   }
+
+  /**
+   * A shift of the planning game is being played: the director's hooks (see director.ts).
+   * Null: the free simulation, and none of the code that asks for it does anything else.
+   */
+  shift: ShiftHooks | null = null;
 
   /** Parcels per minute coming into the hub (set from the controls). */
   rate = 150;
@@ -2473,6 +2545,8 @@ export class Sorter implements Scene3D {
 
   /** Calls a buffered parcel back out of the store once its chute has room again (oldest first). */
   private requestRetrieve(): void {
+    // (During a shift the rack is filled and emptied from the timeline: see `shiftBuffer`.)
+    if (this.shift) return;
     if (this.retrieving >= 3 || this.lift.steps.length > 10) return;
     let best: Slot | null = null;
     for (const s of this.slots) {
@@ -2547,7 +2621,8 @@ export class Sorter implements Scene3D {
 
   private newParcel(noLabel = false): Parcel | null {
     if (this.parcels.length >= MAX_PARCELS) return null;
-    const r = Math.random();
+    // (A shift of the planning game: small cartons only, see `shiftTag`.)
+    const r = this.shift ? 0.5 : Math.random();
     // Very rarely: a rubber duck, on its own, with a label round its neck.
     if (r < 0.0025) return this.addParcel(this.duckParcel());
     // Flat envelopes, soft polybags, tubes and boxes.
@@ -2555,10 +2630,11 @@ export class Sorter implements Scene3D {
     const bag = !env && r < 0.3;
     const tube = !env && !bag && r < 0.37;
     // Now and then a box too big for the sorter (it will be measured at the infeed and put aside).
-    const big = !env && !bag && !tube && Math.random() < 0.004;
-    const w = env ? rnd(0.7, 0.9) : bag ? rnd(0.45, 0.8) : tube ? rnd(0.16, 0.26) : big ? rnd(0.8, 1.0) : rnd(0.35, 0.95);
-    const h = env ? rnd(0.06, 0.12) : bag ? rnd(0.12, 0.25) : tube ? w : big ? rnd(0.6, 0.9) : rnd(0.22, 0.7);
-    const d = env ? rnd(0.5, 0.7) : bag ? rnd(0.4, 0.65) : tube ? rnd(0.7, 1.1) : big ? rnd(1.25, 1.6) : rnd(0.35, 0.85);
+    const big = !env && !bag && !tube && !this.shift && Math.random() < 0.004;
+    const small = !!this.shift;
+    const w = small ? rnd(0.3, 0.42) : env ? rnd(0.7, 0.9) : bag ? rnd(0.45, 0.8) : tube ? rnd(0.16, 0.26) : big ? rnd(0.8, 1.0) : rnd(0.35, 0.95);
+    const h = small ? rnd(0.16, 0.33) : env ? rnd(0.06, 0.12) : bag ? rnd(0.12, 0.25) : tube ? w : big ? rnd(0.6, 0.9) : rnd(0.22, 0.7);
+    const d = small ? rnd(0.3, 0.42) : env ? rnd(0.5, 0.7) : bag ? rnd(0.4, 0.65) : tube ? rnd(0.7, 1.1) : big ? rnd(1.25, 1.6) : rnd(0.35, 0.85);
     // Weight from the volume and a density (most parcels are largely air).
     const vol = w * h * d;
     // (Big boxes are mostly light goods: lower density; only a few end up over 31.5 kg.)
@@ -2578,7 +2654,7 @@ export class Sorter implements Scene3D {
       lead: false,
       shape: bag ? 1 : tube ? 2 : 0,
       // Christmas: some boxes are presents, in wrapping paper with a ribbon round them.
-      gift: XMAS && !env && !bag && !tube && !big && Math.random() < 0.18,
+      gift: shows('gifts') && !env && !bag && !tube && !big && Math.random() < 0.18,
       scanned: false,
       flash: 0,
       dest: 0,
@@ -2826,6 +2902,9 @@ export class Sorter implements Scene3D {
   private releaseOne(q: Parcel[], k: number, ct: number, behind: (t: number) => number): boolean {
     const p = q.find((x) => x.t1 === Infinity);
     if (!p) return false;
+    // A shift of the planning game: only the plan's parcels come onto the loop, each when it is due.
+    const city = this.shift ? this.shift.next() : -1;
+    if (this.shift && city < 0) return false;
     const lane = this.lanes[k]!;
     const len = lane.path.len;
     const hold = (len - HOLD_S) / BEAT_M;
@@ -2836,7 +2915,8 @@ export class Sorter implements Scene3D {
     // Not yet near the buffer: choose later.
     if (a - ct > hold + 2) return false;
     // A parcel longer than a tray takes the one behind it too.
-    const long = p.d > 0.9;
+    // (A shift's parcels are small cartons: whatever stood in the lane becomes one, see `shiftTag`.)
+    const long = p.d > 0.9 && !this.shift;
     const tray = trayAt(INDUCT[k]!, a);
     if (this.trayOwner[tray] || (long && this.trayOwner[behind(tray)])) return false;
     this.trayOwner[tray] = p;
@@ -2847,6 +2927,10 @@ export class Sorter implements Scene3D {
     }
     lane.lastArrive = a;
     p.t1 = a;
+    if (this.shift) {
+      this.shiftTag(p, city);
+      this.shift.took(city);
+    }
     return true;
   }
 
@@ -2874,11 +2958,32 @@ export class Sorter implements Scene3D {
     p.sIn = s;
     p.tIn = t;
     p.sPrev = s;
+    if (this.shift) {
+      // A shift of the planning game: it rides round until a door of the plan wants it.
+      p.spare = true;
+      p.noread = false;
+      p.reason = undefined;
+      // Straight to its dock when that may take it now (else the director sends it later, as it rides by).
+      const to = p.city === undefined ? null : this.shift.route(p.city);
+      const ch = to ? this.chutes[to.chute] : undefined;
+      if (to && ch && this.shiftRoom(to.chute) > 0) {
+        p.spare = false;
+        p.dest = to.chute;
+        p.pc = to.pc;
+        p.glow.copy(ch.col);
+        if (p.labelCell) this.drawLabel(p.labelCell, p);
+        this.shift.sent(to.chute);
+      }
+    }
     this.retarget(p);
   }
 
   /** When to leave the loop: at its chute (or the no-read chute), the next time it passes. */
   private retarget(p: Parcel): void {
+    if (p.spare) {
+      p.divertAt = Infinity;
+      return;
+    }
     const target = p.noread ? this.chutes[p.reason === 'noread' ? NOREAD : REJECT]!.s : p.dest >= 0 ? this.chutes[p.dest]!.s : STORE_OUT;
     let at = p.tIn + beatsAlong(p.sIn, target);
     while (at <= this.ct + 0.01 && p.mode === 'loop' && at > p.tIn + 0.5) at += LOOP_LEN / BEAT_M;
@@ -2985,7 +3090,9 @@ export class Sorter implements Scene3D {
             if (p.sPrev < lane.tunnelS && s >= lane.tunnelS) {
               this.scan(p, lane.tunnel);
               // The scan tunnel also measures and weighs: too big or too heavy for the trays goes aside.
-              if (p.dest >= 0 && (Math.max(p.w, p.d, p.h) > 1.2 || p.kg > 31.5)) {
+              if (this.shift) {
+                // (No exceptions during a shift of the planning game.)
+              } else if (p.dest >= 0 && (Math.max(p.w, p.d, p.h) > 1.2 || p.kg > 31.5)) {
                 p.noread = true;
                 p.reason = 'oversize';
               } else if (!lane.tunnel.read && p.dest >= 0) {
@@ -3135,7 +3242,7 @@ export class Sorter implements Scene3D {
     t.flash = 1;
     t.scannedAt = this.time;
     // Now and then a label cannot be read (a red line); the next scanner gets it.
-    t.read = Math.random() > 0.02;
+    t.read = !!this.shift || Math.random() > 0.02;
     t.col.copy(p.glow);
     const city = CITIES.find((c) => c.pc.some(([a, b]) => p.pc >= a && p.pc <= b))?.name ?? '';
     const cm = (m: number) => Math.round(m * 100);
@@ -3221,6 +3328,11 @@ export class Sorter implements Scene3D {
         this.docks.arrive(p.dest, p);
         break;
       case 'intake':
+        if (this.shift) {
+          // A shift: into the rack at once (the rack's fill is drawn from the buffer's count, see `shiftBuffer`).
+          p.dead = true;
+          break;
+        }
         p.mode = 'queue';
         p.sPrev = this.intake.len - 0.5;
         this.queue.push(p);
@@ -3256,6 +3368,8 @@ export class Sorter implements Scene3D {
 
   /** Take a dock chute down now (a random running one without `chute`); false when none could. */
   fault(chute?: number): boolean {
+    // (No faults during a shift of the planning game.)
+    if (this.shift) return false;
     const f = this.faults.trigger(this.bt, chute);
     if (f) this.crew?.report(f);
     if (f) this.kpi.fault();
@@ -3353,6 +3467,8 @@ export class Sorter implements Scene3D {
     if (!belt) return 0;
     // During a cleardown nothing more goes down this chute, until everything is in the truck.
     const door = NORTH_DOORS.indexOf(this.dockOf.get(dest) ?? NaN);
+    // (A shift of the planning game: only the doors that are loading take parcels.)
+    if (this.shift && door >= 0 && !this.shift.doorOpen(door)) return 0;
     if (door >= 0 && this.trucks && (this.trucks.clearing(door) || this.trucks.docks[door]?.state === 'closing')) return 0;
     return belt.len - this.docks.depth(dest) - (this.dockLoad.get(dest) ?? 0) - 0.2;
   }
@@ -3439,6 +3555,16 @@ export class Sorter implements Scene3D {
     // round too often, by the chute to manual sorting.
     const out = p.reason === 'noread' ? NOREAD : REJECT;
     const to = p.noread && p.dest >= 0 ? out : p.dest;
+    if (this.shift && !p.noread && !p.toRack && (p.dest < 0 || this.room(p.dest, p.d + GAP) <= 0)) {
+      // A shift of the planning game: its door closed or its belt filled up meanwhile. Round
+      // again, until the director sends it somewhere (no store, no manual sorting).
+      // (It was counted as sent there: not any more.)
+      if (!p.spare && p.dest >= 0) this.shift.sent(p.dest, -1);
+      p.dest = Math.max(0, p.dest);
+      p.spare = true;
+      this.retarget(p);
+      return;
+    }
     if (to !== p.dest) {
       if (this.room(out) <= 0) {
         if (p.reason === 'overflow') {
@@ -3480,7 +3606,7 @@ export class Sorter implements Scene3D {
       return;
     }
     // Now and then a tray tips a moment too early or late: the parcel lands in the next dock chute.
-    if (p.dest >= 0 && p.dest < 20 && Math.random() < MISSORT) {
+    if (p.dest >= 0 && p.dest < 20 && !this.shift && Math.random() < MISSORT) {
       const n = clamp(p.dest + (Math.random() < 0.5 ? -1 : 1), 0, 19);
       if (n !== p.dest && this.room(n, p.d + GAP) > 0) {
         p.dest = n;
@@ -3673,6 +3799,7 @@ export class Sorter implements Scene3D {
     let tapes = 0;
     let ribbons = 0;
     let hull = 0;
+    let bands = 0;
     for (const p of this.parcels) {
       const shape = this.shapes[p.shape]!;
       this.sphere.center.copy(p.pos);
@@ -3694,6 +3821,15 @@ export class Sorter implements Scene3D {
       const sick = p.mode === 'loop' && (p.laps ?? 0) >= 2;
       if (sick) {
         o.quaternion.multiply(this.qa.setFromAxisAngle(this.t.set(0, 0, 1), Math.sin(this.time * 5 + p.id) * 0.14));
+        o.updateMatrix();
+      }
+      if (p.city !== undefined && this.bands && this.shift && bands < this.bands.count0) {
+        // A parcel of a played shift: a band round its middle in its city's colour.
+        o.scale.set(p.w + 0.014, p.h + 0.014, p.d * 0.38);
+        o.updateMatrix();
+        this.bands.mesh.setMatrixAt(bands, o.matrix);
+        this.bands.mesh.setColorAt(bands++, this.shift.colours[p.city % this.shift.colours.length] ?? this.white);
+        o.scale.set(p.w, p.h, p.d);
         o.updateMatrix();
       }
       set.mesh.setMatrixAt(k, o.matrix);
@@ -3778,6 +3914,11 @@ export class Sorter implements Scene3D {
       this.labelTex.needsUpdate = true;
       this.labelsDirty = 0;
     }
+    if (this.bands) {
+      this.bands.mesh.count = bands;
+      this.bands.mesh.instanceMatrix.needsUpdate = true;
+      if (this.bands.mesh.instanceColor) this.bands.mesh.instanceColor.needsUpdate = true;
+    }
     this.hull.count = hull;
     this.hull.instanceMatrix.needsUpdate = true;
     if (this.hull.instanceColor) this.hull.instanceColor.needsUpdate = true;
@@ -3828,7 +3969,8 @@ export class Sorter implements Scene3D {
       ch.flash = Math.max(0, ch.flash - dt * 2);
       // A dock belt that is full: its lamp flashes red, and the sorter sends nothing more down
       // (parcels for it go round again, or into the buffer store).
-      if (ch.belt && (this.dockFree(k) < 0.9 || this.faults.isDown(k))) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
+      if (this.shift && this.shiftShut(k)) ch.lamp.color.setScalar(0.03);
+      else if (ch.belt && (this.dockFree(k) < 0.9 || this.faults.isDown(k))) ch.lamp.color.setRGB(Math.floor(this.bt * 2) % 2 ? 3 : 0.6, 0.05, 0.02);
       else ch.lamp.color.copy(ch.col).multiplyScalar(0.35 + ch.flash * 3 + this.kick * 0.3);
     });
     this.updateTowers();
@@ -4457,9 +4599,11 @@ export class Sorter implements Scene3D {
         const st = door >= 0 ? this.trucks.docks[door]?.state : undefined;
         clearing = st === 'cleardown' || st === 'closing';
       }
-      let red = fill >= 1 ? 1 : 0;
-      let amber = !red && (fill > 0.6 || clearing) ? 1 : 0;
-      let green = !red && !amber && fill > 0.001 ? 1 : 0;
+      // (A door that is not in a shift's plan: its tower is off.)
+      const shut = !!this.shift && this.shiftShut(k);
+      let red = !shut && fill >= 1 ? 1 : 0;
+      let amber = !shut && !red && (fill > 0.6 || clearing) ? 1 : 0;
+      let green = !shut && !red && !amber && fill > 0.001 ? 1 : 0;
       if (this.faults.isDown(k)) {
         // A fault: red flashing, on the beat (a full chute is steady red).
         red = Math.floor(this.bt * 2) % 2 ? 1 : 0.15;
@@ -7179,6 +7323,422 @@ export class Sorter implements Scene3D {
         return 'At the no-read table: a new label, then back on an infeed';
       default:
         return p.buffered !== undefined ? `In the buffer store: chute ${p.buffered + 1} is full; it comes back out when there is room` : 'In the store';
+    }
+  }
+
+  // ---------- a shift of the planning game (driven by director.ts) ----------
+
+  /**
+   * The camera for a played shift: from `eye` towards `look`, flying there or (`cut`) at
+   * once; `free` lets it stand outside the hall's walls.
+   */
+  /** Where one of the free simulation's stops puts the camera, for the game's own view buttons. */
+  shiftStop(name: string): { eye: V3; look: V3; free: boolean } | null {
+    const p = this.pois.find((x) => x.name === name);
+    if (!p) return null;
+    const eye = new THREE.Vector3();
+    const look = new THREE.Vector3();
+    p.at(eye, look, 0);
+    return { eye, look, free: p.free === true };
+  }
+
+  shiftView(eye: V3, look: V3, name: string, cut: boolean, free = false): void {
+    this.spotEye.copy(eye);
+    this.spotLook.copy(look);
+    this.spotName = name;
+    const spot = this.pois.find((p) => p.name === 'spot');
+    if (spot) spot.free = free || undefined;
+    this.tour = null;
+    this.visit('spot', cut);
+  }
+
+  /**
+   * Looking around by hand during a shift, from the place `shiftView` last set: `orbit` turns
+   * the camera round what it looks at (radians: sideways, up), `pan` moves both over the floor
+   * (metres to the right and away), `zoom` scales the distance. The camera stays in the hall
+   * (or, from a place above the roof, over it).
+   */
+  shiftLook(o: { orbit?: [number, number]; pan?: [number, number]; zoom?: number }): void {
+    const spot = this.pois.find((p) => p.name === 'spot');
+    const free = spot?.free === true;
+    const eye = this.spotEye;
+    const look = this.spotLook;
+    const off = this.t.subVectors(eye, look);
+    let r = Math.max(0.5, off.length());
+    let yaw = Math.atan2(off.x, off.z);
+    let pitch = Math.asin(clamp(off.y / r, -1, 1));
+    if (o.orbit) {
+      yaw -= o.orbit[0];
+      pitch = clamp(pitch + o.orbit[1], 0.06, 1.5);
+    }
+    if (o.zoom) r = clamp(r * o.zoom, 3, free ? 140 : 70);
+    if (o.pan) {
+      // (To the right of the picture, and away from the camera over the floor.)
+      const fx = -Math.sin(yaw);
+      const fz = -Math.cos(yaw);
+      look.x += -fz * o.pan[0] + fx * o.pan[1];
+      look.z += fx * o.pan[0] + fz * o.pan[1];
+    }
+    look.x = clamp(look.x, WX + 2, EX - 2);
+    look.z = clamp(look.z, NZ + 1, HZ - 1);
+    eye.set(look.x + r * Math.sin(yaw) * Math.cos(pitch), look.y + r * Math.sin(pitch), look.z + r * Math.cos(yaw) * Math.cos(pitch));
+    if (!free) {
+      eye.x = clamp(eye.x, WX + 1, EX - 1);
+      eye.z = clamp(eye.z, NZ + 1, HZ - 1);
+      eye.y = clamp(eye.y, 1.2, HH - 0.8);
+    }
+    this.tour = null;
+    this.visit('spot', true);
+  }
+
+  /** Width over height of the picture (a phone held upright is well under 1). */
+  shiftAspect(): number {
+    return this.camera.aspect;
+  }
+
+  /** Where the camera is and what it is doing, to put back after a shift (`shiftCameraBack`). */
+  shiftCamera(): object {
+    return { mode: this.camMode, poi: this.visitPoi, auto: this.autoFollow, eye: this.spotEye.clone(), look: this.spotLook.clone(), name: this.spotName, walk: { ...this.walk }, at: this.camera.position.clone(), to: this.look.clone() };
+  }
+
+  shiftCameraBack(saved: object): void {
+    const c = saved as { mode: CamMode; poi: number; auto: boolean; eye: V3; look: V3; name: string; walk: Sorter['walk']; at: V3; to: V3 };
+    const spot = this.pois.find((p) => p.name === 'spot');
+    if (spot) spot.free = undefined;
+    this.spotEye.copy(c.eye);
+    this.spotLook.copy(c.look);
+    this.spotName = c.name;
+    this.camMode = c.mode;
+    this.visitPoi = c.poi;
+    this.autoFollow = c.auto;
+    Object.assign(this.walk, c.walk);
+    this.follow = null;
+    this.tour = null;
+    this.camera.position.copy(c.at);
+    this.look.copy(c.to);
+    this.want.copy(c.at);
+    this.wantLook.copy(c.to);
+    this.camera.lookAt(this.look);
+  }
+
+  /** The parts of the hall the director runs itself. */
+  shiftParts(): { docks: Docks; trucks: Trucks; floor: RobotFloor; fleet: RobotFloor['fleet']; breaks: BreakCrew; batches: Batches; southDoors: number; northDoors: number; beat: number; lift: [number, number] } {
+    return { docks: this.docks, trucks: this.trucks, floor: this.floor, fleet: this.floor.fleet, breaks: this.breaks, batches: this.batches, northDoors: NORTH_DOORS.length, southDoors: SOUTH_DOORS.length, beat: this.bt, lift: [LIFT_X, 0] };
+  }
+
+  /** The chute of north door `door` (0-based, west to east), and the robot stations' chutes (as the loop passes them). */
+  shiftChutes(): { doors: number[]; stations: number[] } {
+    return { doors: [...this.dockOf.keys()], stations: [...this.stationOf.keys()].filter((k) => k !== REJECT && k !== NOREAD) };
+  }
+
+  /** Hall beats a parcel rides from the infeeds to a chute (−1: to the store's intake), at the loop's speed now. */
+  shiftLead(chute: number): number {
+    const ch = chute < 0 ? undefined : this.chutes[chute];
+    // Round the loop, down the chute and along the dock belt (all at the belts' speed), and the lane's last stretch before that.
+    return (beatsAlong(INDUCT[1]!, ch?.s ?? STORE_OUT) + (ch ? 1.5 + (ch.belt ? ch.belt.len / BEAT_M : 0) : 0)) / this.speed + 4;
+  }
+
+  /** Hall beats from the infeeds to the point on the loop where a chute (−1: the store's intake) branches off. */
+  shiftLoopBeats(chute: number): number {
+    return beatsAlong(INDUCT[1]!, chute < 0 ? STORE_OUT : (this.chutes[chute]?.s ?? STORE_OUT)) / this.speed;
+  }
+
+  /** Is this the chute of a north door that is not loading in the shift being played? */
+  private shiftShut(chute: number): boolean {
+    const door = NORTH_DOORS.indexOf(this.dockOf.get(chute) ?? NaN);
+    return door >= 0 && !this.shift!.doorOpen(door);
+  }
+
+  /**
+   * The hall made ready for a shift, or handed back after it. Ready: nothing of the free
+   * simulation is on the loop, on a chute, a dock belt or a robot table any more (a shift
+   * shows only the plan's parcels), no fault is open and the technician is at his bench.
+   * Back: the shift's parcels are ordinary ones again, with a destination of their own.
+   */
+  shiftReset(on: boolean): void {
+    for (const p of this.parcels) {
+      if (on) {
+        if (p.mode === 'loop' || p.mode === 'table' || (p.mode === 'path' && (p.pathKind === 'chute' || p.pathKind === 'dock' || p.pathKind === 'intake' || p.pathKind === 'back'))) {
+          this.freeTrays(p, 0);
+          p.dead = true;
+        } else if (p.mode === 'path' && p.pathKind === 'lane' && p.t1 !== Infinity) {
+          // Already let go towards the loop: back into its lane's queue, until the plan wants it.
+          this.freeTrays(p, 0);
+          p.t1 = Infinity;
+        }
+        continue;
+      }
+      p.city = undefined;
+      p.toRack = false;
+      if (p.mode !== 'loop') continue;
+      p.spare = false;
+      this.assign(p);
+      if (p.labelCell) this.drawLabel(p.labelCell, p);
+      this.retarget(p);
+    }
+    if (on) for (const q of this.stationQueue) q.length = 0;
+    this.inbound.clear();
+    if (on) {
+      this.crew?.recall(this.bt);
+      this.showNow.clear();
+      if (!this.bands) {
+        const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_PARCELS);
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.setColorAt(0, this.white);
+        mesh.frustumCulled = false;
+        mesh.count = 0;
+        mesh.userData.noInk = true;
+        this.put(mesh);
+        this.bands = { mesh, count0: MAX_PARCELS };
+      }
+    } else {
+      this.shiftSign(-1, '', '');
+      if (this.bands) this.bands.mesh.count = 0;
+    }
+  }
+
+  /** A parcel becomes one of the shift's: a small carton for city `city` (its band shows the colour). */
+  private shiftTag(p: Parcel, city: number): void {
+    p.city = city;
+    p.toRack = false;
+    p.noread = false;
+    p.reason = undefined;
+    p.manual = false;
+    p.gift = false;
+    if (p.shape !== 0 || p.w > 0.42 || p.d > 0.42 || p.h > 0.33) {
+      p.shape = 0;
+      p.w = rnd(0.3, 0.42);
+      p.d = rnd(0.3, 0.42);
+      p.h = rnd(0.16, 0.33);
+      p.kg = +(p.w * p.d * p.h * 180).toFixed(1);
+    }
+  }
+
+  /**
+   * The display on the pillar of a north door's chute: what the shift's plan has there
+   * (door −1: all of them back to the free simulation's own).
+   */
+  shiftSign(door: number, main: string, sub: string): void {
+    const chutes = [...this.dockOf.keys()];
+    if (door < 0) {
+      const pcs = (c: (typeof CITIES)[number]) => rangeText([c.pc[0]![0], c.pc[c.pc.length - 1]![1]]);
+      chutes.forEach((k, n) => {
+        const c = NORTH_CITIES[DOCK_CITY[n]!];
+        if (c && this.showText.has(k)) this.showText.set(k, [`${n + 1} · ${c.name}`, pcs(c)]);
+        this.showNow.set(k, '?');
+      });
+      return;
+    }
+    const k = chutes[door];
+    if (k === undefined || !this.showText.has(k)) return;
+    const was = this.showText.get(k)!;
+    if (was[0] === main && was[1] === sub) return;
+    this.showText.set(k, [main, sub]);
+    this.showNow.set(k, '?');
+  }
+
+  /** A shift's parcels riding the loop with nowhere to go yet: how many per city (index = city). */
+  shiftWaiting(out: number[]): number {
+    out.fill(0);
+    let n = 0;
+    for (const p of this.parcels) {
+      if (!p.spare || p.mode !== 'loop' || p.city === undefined) continue;
+      out[p.city] = (out[p.city] ?? 0) + 1;
+      n++;
+    }
+    return n;
+  }
+
+  /** A shift's parcels of city `city` that a lane has let go and that are not on the loop yet. */
+  shiftComing(city: number): number {
+    let n = 0;
+    for (const p of this.parcels) if (p.city === city && p.mode === 'path' && p.pathKind === 'lane') n++;
+    return n;
+  }
+
+  /** Where the parcels riding the loop stand, how the loop looks from one of its trays: `s` of the chutes and the store. */
+  private shiftPick(city: number | null, target: number, avoid?: (city: number) => boolean, within = LOOP_LEN): Parcel | null {
+    let best: Parcel | null = null;
+    let bd = within;
+    let fallback: Parcel | null = null;
+    let fd = LOOP_LEN;
+    for (const p of this.parcels) {
+      if (!p.spare || p.mode !== 'loop' || p.city === undefined) continue;
+      if (city !== null && p.city !== city) continue;
+      const at = p.sIn + (this.ct - p.tIn) * BEAT_M;
+      const ahead = (((target - at) % LOOP_LEN) + LOOP_LEN) % LOOP_LEN;
+      // (Not the one already there: its tray needs a beat to tip.)
+      if (ahead <= BEAT_M) continue;
+      if (avoid?.(p.city)) {
+        if (ahead < fd) {
+          fd = ahead;
+          fallback = p;
+        }
+      } else if (ahead < bd) {
+        bd = ahead;
+        best = p;
+      }
+    }
+    return best ?? fallback;
+  }
+
+  /** Room at a chute's end for another parcel, in parcels (a dock belt by length, a robot table by places), less what is on its way there. */
+  shiftRoom(chute: number): number {
+    let coming = 0;
+    for (const p of this.parcels) if (p.mode === 'loop' && !p.spare && p.dest === chute && !p.toRack && p.divertAt - this.ct <= SHIFT_NEAR / BEAT_M) coming++;
+    return this.room(chute) - coming;
+  }
+
+  /**
+   * Send a parcel of city `city` that is riding the loop down this chute: the one that gets
+   * there first. It takes the postcode given. False when the chute's end is full or no such
+   * parcel is on the loop.
+   */
+  shiftSend(chute: number, city: number, pc: number): boolean {
+    const ch = this.chutes[chute];
+    if (!ch || this.shiftRoom(chute) <= 0) return false;
+    // (Only one that is nearly there: a parcel half a loop away would hold a place on the belt
+    // that one just coming in could take.)
+    const p = this.shiftPick(city, ch.s, undefined, SHIFT_NEAR);
+    if (!p) return false;
+    p.spare = false;
+    p.dest = chute;
+    p.pc = pc;
+    p.glow.copy(ch.col);
+    if (p.labelCell) this.drawLabel(p.labelCell, p);
+    this.retarget(p);
+    return true;
+  }
+
+  /**
+   * Send a parcel riding the loop into the buffer rack: the one that reaches the store's
+   * intake first, rather one of a city for which `rather` says so (a city with no open dock
+   * or robot line). Returns its city, or −1 when the loop has none to give.
+   */
+  shiftStore(rather: (city: number) => boolean): number {
+    const p = this.shiftPick(null, STORE_OUT, (c) => !rather(c));
+    if (!p) return -1;
+    p.spare = false;
+    p.toRack = true;
+    p.dest = -1;
+    this.retarget(p);
+    return p.city!;
+  }
+
+  /** A parcel of city `city` comes back out of the buffer rack, onto the loop. */
+  shiftRetrieve(city: number): boolean {
+    const p = this.newParcel();
+    if (!p) return false;
+    this.shiftTag(p, city);
+    p.scanned = true;
+    this.back.at(0, p.pos);
+    this.retrieving++;
+    this.sendBack(p);
+    return true;
+  }
+
+  /**
+   * A parcel of city `city` set straight onto a free tray passing an infeed, as if its lane
+   * had just put it there (used when the lanes have nothing ready: the start of a shift in a
+   * hall that has only just been built). False when no tray is free there this beat.
+   */
+  shiftPlace(city: number, before?: { chute: number; beats: number }): boolean {
+    // (At the start of a shift: where it would be now had it come in on time, `beats` before its chute.)
+    const spots = before ? Array.from({ length: 12 }, (_, k) => (this.chutes[before.chute]?.s ?? STORE_OUT) - before.beats * BEAT_M * this.speed - k * PITCH) : INDUCT;
+    for (const at of spots) {
+      const tray = trayAt(at, this.ct);
+      if (this.trayOwner[tray]) continue;
+      const p = this.newParcel();
+      if (!p) return false;
+      this.shiftTag(p, city);
+      this.trayOwner[tray] = p;
+      p.tray = tray;
+      p.scanned = true;
+      p.lane = Math.max(0, INDUCT.indexOf(at));
+      this.induct(p, (((tray * PITCH + this.ct * BEAT_M) % LOOP_LEN) + LOOP_LEN) % LOOP_LEN, this.ct);
+      loopAt(p.sIn, p.pos, this.t);
+      this.orient(p, this.t);
+      return true;
+    }
+    return false;
+  }
+
+  /** Take `n` parcels of city `city` that are riding the loop out of the hall (they are counted as loaded). Returns how many there were. */
+  shiftDrop(city: number, n: number): number {
+    let done = 0;
+    for (const p of this.parcels) {
+      if (done >= n) break;
+      if (p.dead || p.mode !== 'loop' || p.city !== city || p.toRack) continue;
+      this.freeTrays(p, 0);
+      p.dead = true;
+      done++;
+    }
+    return done;
+  }
+
+  /**
+   * A north door or a robot station stops taking parcels: what was coming for it on the loop
+   * rides on. With `empty`, what is on its chute, belt or table is taken away as well, and
+   * the number of parcels that were there is returned.
+   */
+  shiftClear(chute: number, empty: boolean): number {
+    let n = 0;
+    for (const p of this.parcels) {
+      if (p.dead || p.dest !== chute || p.rejected || p.toRack) continue;
+      if (p.mode === 'loop' && !p.spare && !p.noread) {
+        p.spare = true;
+        this.retarget(p);
+      } else if (empty && ((p.mode === 'path' && (p.pathKind === 'chute' || p.pathKind === 'dock')) || p.mode === 'table')) {
+        p.dead = true;
+        n++;
+      }
+    }
+    if (empty) {
+      this.inbound.set(chute, 0);
+      const st = this.stationOf.get(chute);
+      if (st !== undefined) this.stationQueue[st]!.length = 0;
+    }
+    return n;
+  }
+
+  /** Parcels waiting on robot table of this chute. */
+  shiftTable(chute: number): number {
+    const st = this.stationOf.get(chute);
+    return st === undefined ? 0 : this.stationQueue[st]!.length;
+  }
+
+  /**
+   * The buffer rack as full as the shift's timeline says (0…1 of its places): cartons are set
+   * in the places nearest the lift first and taken away from the far end, a few each call.
+   * (At minutes per beat the lift cannot bring them one by one.)
+   */
+  shiftBuffer(share: number, most = 12, city: () => number = () => -1): void {
+    const want = Math.round(clamp(share, 0, 1) * this.slots.length);
+    let have = 0;
+    for (const s of this.slots) if (s.parcel || s.reserved) have++;
+    const near = (a: Slot, b: Slot) => Math.abs(a.z) + a.level * 0.3 - (Math.abs(b.z) + b.level * 0.3);
+    if (have < want) {
+      const free = this.slots.filter((s) => !s.parcel && !s.reserved).sort(near);
+      for (const slot of free.slice(0, Math.min(most, want - have))) {
+        const p = this.newParcel();
+        if (!p) break;
+        const c = city();
+        if (c >= 0) this.shiftTag(p, c);
+        p.mode = 'fixed';
+        p.scanned = true;
+        p.slot = slot;
+        p.buffered = undefined;
+        p.bufferedAt = this.bt;
+        slot.parcel = p;
+        p.pos.set(SLOT_X, LEVELS[slot.level]!, slot.z);
+        this.orient(p, this.t.set(1, 0, 0));
+      }
+    } else if (have > want) {
+      const full = this.slots.filter((s) => s.parcel && !s.reserved && s.parcel.mode === 'fixed').sort((a, b) => near(b, a));
+      for (const slot of full.slice(0, Math.min(most, have - want))) {
+        slot.parcel!.dead = true;
+        slot.parcel = null;
+      }
     }
   }
 

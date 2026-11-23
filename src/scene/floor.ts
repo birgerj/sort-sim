@@ -206,6 +206,8 @@ export class RobotFloor {
   shippedBoxes = 0;
   readonly stations: { x: number; z: number; projector: number }[] = [];
   readonly robots: RobotView[] = [];
+  /** A played shift: a robot takes its parcel to the nearest open box, whatever its postcode. */
+  near = false;
   /** The fleet's "bin" for the drop to the manual sort table (not a box). */
   readonly tableBin: number;
   private projectors: Projector[] = [];
@@ -249,6 +251,12 @@ export class RobotFloor {
       const p = this.handlers.load(k);
       if (!p) return null;
       if (p.manual) return p.tableRoom ? this.tableBin : -1;
+      if (this.near) {
+        // A played shift: the nearest box that is open (the fuller of the nearest few, so boxes fill one after another).
+        const st = this.fleet.stations[this.fleet.bots[k]!.station];
+        const open = layout.bins.map((b, i) => ({ i, d: st ? Math.abs(b.i - st[0]) : 0 })).filter((b) => b.i !== this.tableBin && this.bins[b.i]?.open).sort((a, b) => a.d - b.d);
+        return open.length ? open.slice(0, 2).sort((a, b) => this.bins[b.i]!.n - this.bins[a.i]!.n)[0]!.i : -1;
+      }
       const want = this.bins.map((b, i) => (rangeOf([b.range], p.pc) === 0 ? i : -1)).filter((i) => i >= 0);
       if (!want.length) return null;
       const open = want.filter((i) => this.bins[i]!.open).sort((a, b) => this.bins[a]!.n - this.bins[b]!.n);
@@ -808,6 +816,33 @@ export class RobotFloor {
       m.map?.dispose();
       m.map = codeTex(b.code, SOUTH_CITIES[b.city]!.name);
       m.needsUpdate = true;
+    });
+  }
+
+  /**
+   * A shift of the planning game: the boards on the boxes show only their number, no city (the
+   * plan's robot cities are not the free simulation's); afterwards their own again.
+   */
+  shiftBoards(on: boolean): void {
+    if (!on) return this.setCountry();
+    this.bins.forEach((_, n) => {
+      const m = this.boardMats[n];
+      if (!m) return;
+      m.map?.dispose();
+      m.map = codeTex(`box ${n + 1}`, '');
+      m.needsUpdate = true;
+    });
+  }
+
+  /**
+   * A shift's cleardown for the robots: every box between x0 and x1 that holds parcels and
+   * that no robot is on its way to is closed and a forklift is called for it, full or not.
+   */
+  shipBins(x0: number, x1: number): void {
+    this.bins.forEach((bin, b) => {
+      if (b === this.tableBin || !bin.open || bin.n <= 0 || bin.x < x0 || bin.x > x1 || this.fleet.binBusy(b)) return;
+      bin.open = false;
+      this.handlers.full(b);
     });
   }
 

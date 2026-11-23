@@ -457,6 +457,17 @@ input[type='range'] {
   border-color: var(--teal-l);
 }
 
+/* The two ways in share the card's width. */
+.start .ways {
+  flex-wrap: nowrap;
+  margin-bottom: 0;
+}
+
+.start .ways button {
+  flex: 1 1 0;
+  min-height: 44px;
+}
+
 .start .keys {
   font-size: 12px;
   margin: 0;

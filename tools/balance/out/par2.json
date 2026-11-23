@@ -1,0 +1,107 @@
+{
+ "level": 2,
+ "profit": 611.95,
+ "plan": {
+  "blocks": [
+   {
+    "city": 0,
+    "start": 0,
+    "end": 120,
+    "people": 2,
+    "docks": 1
+   },
+   {
+    "city": 0,
+    "start": 120,
+    "end": 180,
+    "people": 1,
+    "docks": 1
+   },
+   {
+    "city": 1,
+    "start": 0,
+    "end": 90,
+    "people": 1,
+    "docks": 1
+   }
+  ],
+  "robotCities": [],
+  "robots": 0
+ },
+ "runs": [
+  {
+   "iters": 20000,
+   "restarts": [
+    628.5,
+    628.5,
+    623.6,
+    598.5
+   ]
+  },
+  {
+   "iters": 20000,
+   "restarts": [
+    628.5,
+    628.5,
+    623.6,
+    598.5
+   ]
+  },
+  {
+   "iters": 20000,
+   "restarts": [
+    619.6
+   ]
+  },
+  {
+   "iters": 20000,
+   "restarts": [
+    621.35,
+    619.6,
+    612.0,
+    598.5
+   ]
+  },
+  {
+   "note": "rules changed: cut-off and cleardown; block ends clipped",
+   "profit": 600.1
+  },
+  {
+   "iters": 20000,
+   "restarts": [
+    611.95,
+    611.95,
+    611.95,
+    601.5
+   ]
+  }
+ ],
+ "detail": {
+  "profit": 611.95,
+  "rev": 780.0,
+  "bonus": 156.0,
+  "late": 0.0,
+  "left": 0.0,
+  "dock": 118.75,
+  "staff": 202.5,
+  "robots": 0.0,
+  "store": 2.8000000000000083,
+  "peak": 18.66666666666672,
+  "ontime": 2,
+  "refused": 0.0,
+  "leave": [
+   195,
+   135
+  ],
+  "done": [
+   0,
+   0,
+   195
+  ],
+  "nlate": 0
+ },
+ "peaks": [
+  3,
+  2
+ ]
+}

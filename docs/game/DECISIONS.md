@@ -1,0 +1,45 @@
+# Decisions (coordinator writes; one line each)
+
+- 2026-11-14 Ten fixed levels, no seed; city names follow the country. Currency: Sorty, sign §.
+- 2026-11-14 Plan in steps of half an hour, blocks of at least an hour. No door numbers for the player.
+- 2026-11-14 Robots: § 11 × shift hours each for the whole shift; no separate price or timing for lines.
+- 2026-11-14 Levels 7–10 run a full hall (volumes × 2.3, 3, 2.5, 3 against the first draft).
+- 2026-11-14 Level 10: at most 40 people (was 32), so all 20 docks can open.
+- 2026-11-14 The planner shows fixed costs and a rough buffer guess only; real figures come with the result.
+- 2026-11-14 Skipping the shift stays. The score service answers after 5 seconds (as the server will later).
+- 2026-11-14 This build has no unloading plan for the player; unloading runs by itself in every level.
+- 2026-11-14 The old night game (seed, drift, moves) is removed once the new game is merged.
+- 2026-11-14 Open, for agent B: the price of a parcel left behind (now § 2.50). Aim: in levels 7–10 a plain
+  plan that gives every city enough docks still earns one star. Report a value; the coordinator decides.
+- 2026-11-14 Open, for agent B: par for every level under the final rules. `levels.json` holds provisional values.
+- 2026-11-14 New code lives in `src/shifts`, `src/ui/shifts` and `src/scene/director.ts`; `src/game` is the old game.
+- 2026-11-14 An invalid plan makes `ScoreService.run` reject with a plain `PlanProblem[]` (not an Error).
+- 2026-11-14 Badge counting: people and docks per minute a block is open; the buffer badge looks at every minute.
+- 2026-11-14 For agent B: write arrivals and volumes unrounded in `levels.json`; golden plans must be startable (half-hour grid, no robot cities where robots are off); `fixture.run` should compute the badge.
+- 2026-11-14 The game is wired into the app: after the start card the player chooses free simulation or game (`?start=free|game` skips the choice; a department or the demo tour in the address goes to the free simulation). The old night game is removed.
+- 2026-11-14 Until the hall's director is merged, a clock-only stand-in (`src/shifts/clockDirector.ts`) plays the shift: the game is fully playable, the hall just keeps running as in the free simulation.
+- 2026-11-14 While the game's screens cover the hall, the hall is not drawn (saves the device; it only draws during a shift).
+- 2026-11-14 The planner gives no verdict per city (no "fits", no "N too many"): only the block's fill bar.
+- 2026-11-14 The first screen is the start card: sound, country, update, and two ways in, Simulation or Play. The game has no choice screen of its own.
+- 2026-11-14 The game's menus and buttons use the hall's own style (dark glass panels, teal accent). Menus are kept terse.
+- 2026-11-14 Shift HUD: clock and the badges of departed trucks at the top; money and the speed buttons at the bottom.
+- 2026-11-14 The hall's director is wired in (`createDirector(scene)`); the clock-only stand-in is gone.
+- 2026-11-14 Open: the camera does not yet go to the docks that are open during a shift; space still pauses the scene (and with it the shift clock).
+- 2026-11-14 The planner shows no buffer at all (no rough guess either). Instead one diagram: total inflow per hour against the total capacity of crews and robots per hour.
+- 2026-11-14 A parcel left behind costs § 1.50 (was § 2.50): what it would have earned.
+- 2026-11-14 A robot loads 17 parcels an hour (was 20), as the hall's robots do. Line limit 60 an hour and table 20 stay.
+- 2026-11-14 Level 7: 10 docks. Level 8: volume × 2.8, 24 robots. Level 9: 16 docks, 32 people at most. Level 10:
+  volume × 2.8. Aim met: the plain plan earns one star in levels 7–10 (560, 514, 557, 528).
+- 2026-11-14 Badges: level 2 lean3, level 3 fleet3 (at most 3 robots), level 8 onTime9, level 10 onTime15.
+- 2026-11-14 Par under these rules: 177, 628, 809, 669, 1622, 2443, 7780, 12726, 13429, 24214 (see tools/balance/REPORT.md).
+- 2026-11-14 Model: the trailer, its swap and the belt belong to the door and the city, not to the block; a block
+  cut in two is the same plan.
+- 2026-11-14 Model: full is full. A parcel that finds no room while the buffer is full is refused: left behind, never back.
+- 2026-11-14 Level 3: small cities' trucks at 00:30, 00:30, 01:00. Level 4: third city 90 parcels. Level 8: 14 docks.
+  Level 10: volume × 2.2. Badges: level 6 lean6, level 9 lean16, level 10 allOnTime.
+- 2026-11-14 Par under these rules: 177, 621, 779, 596, 1601, 2398, 7577, 12570, 13029, 19342 (level 10 not settled).
+- 2026-11-15 A city's truck time is its cut-off; no block ends after it. Doors open at the cut-off clear their belt
+  (cleardown); the truck leaves when they are done, on time up to 15 minutes after the cut-off, at 45 at the latest.
+- 2026-11-15 Model: equal blocks (same city, start, end, crew) are one block with their docks added up.
+- 2026-11-15 Level 3: small cities 80, 90, 70 parcels. Level 4: third city 60. Level 8: volume × 2.7.
+- 2026-11-15 Par under these rules: 177, 611, 856, 530, 1606, 2408, 7566, 12300, 13084, 19424.

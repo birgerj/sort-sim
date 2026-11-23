@@ -133,6 +133,8 @@ interface Worker extends Human {
   rate: number;
   phase: number;
   style: number;
+  /** During a shift: its own chat place of the free simulation, put back afterwards. */
+  own?: { chat?: V3; chatMid?: V3; mates?: V3[] };
   /** Dances a little while working (headphones on); caught by the camera until this beat. */
   dancer?: boolean;
   caughtUntil?: number;
@@ -161,6 +163,40 @@ interface Dock {
    */
   inTrailer: { g: THREE.Group; items: DockParcel[] }[];
 }
+
+/**
+ * A dock during a shift of the planning game. The plan says whether it is in use, for which
+ * city and with how many people. The parcels are the plan's own: what comes down the belt is
+ * taken off, put in the cages and pushed into the trailer as in the free simulation, a little
+ * brisker (so that one person loads about 90 an hour of hall time and two about 170, as the
+ * score model has it). The shift's timeline says how many may have been taken by now: the
+ * pickers never run ahead of it.
+ */
+interface Run {
+  /** Cages stand at the dock (in use or being made ready). */
+  cages: boolean;
+  /** People at work: nobody, one who picks and loads alone, or two who both pick and take turns with the cages. */
+  people: 0 | 1 | 2;
+  /** Parcels the timeline has loaded here so far in this block, and parcels taken off the belt. */
+  allow: number;
+  taken: number;
+  /** The last minutes of the block: every cage with parcels goes into the trailer. */
+  clearing: boolean;
+  /** The last beat a parcel lay on the belt end. */
+  busyAt: number;
+  name: string;
+}
+/** Parcels waiting on the belt end from which it counts as backing up (the second person sorts too). */
+const RUN_BACKING = 4;
+/** Beats the belt must have been empty before a half-full cage is pushed in. */
+const RUN_IDLE = 8;
+/** How much shorter the cage runs are during a shift (beats × this), and how far a step goes then (m per beat). */
+const RUN_PACE = 0.4;
+const RUN_WALK = 2.8;
+/** The loader's place at the belt end during a shift (x offset from the belt, z offset from its end): beside the picker. */
+const SECOND_AT: [number, number] = [-1.0, -0.6];
+/** Places in a cage for the shift's small cartons: three across, two deep, four high. */
+export const RUN_CAGE = 24;
 
 /** A loader shared by two neighbouring doors: helps wherever there is a cage to push. */
 interface Helper {
@@ -235,6 +271,12 @@ function cageSlot(k: number, out: V3): V3 {
   return out.set((k % 2 ? 0.3 : -0.3), 0.36 + Math.floor(k / 4) * 0.48, (Math.floor(k / 2) % 2 ? 0.22 : -0.22));
 }
 
+/** Place k in a roll cage for the small cartons of a played shift: three across, two deep, in layers. */
+function runSlot(k: number, out: V3): V3 {
+  const n = k % RUN_CAGE;
+  return out.set(((n % 3) - 1) * 0.43, 0.36 + Math.floor(n / 6) * 0.36, Math.floor(n / 3) % 2 ? 0.24 : -0.24);
+}
+
 const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
 const UP = new THREE.Vector3(0, 1, 0);
@@ -262,6 +304,10 @@ export class Docks {
   /** Tempo on the last frame (air guitar when the music turns to acid techno). */
   private lastBpm = 0;
   private nextGuitar = 0;
+  /** Set while a shift of the planning game is played: each dock as the director runs it (null: the free simulation). */
+  private runs: Run[] | null = null;
+  /** During a shift: a cage is full at this many parcels. */
+  private runCap = 22;
 
   constructor(
     private kit: FloorKit,
@@ -395,7 +441,13 @@ export class Docks {
   cageNumber(chute: number, pc: number): number {
     const d = this.docks.find((x) => x.chute === chute);
     if (!d) return 0;
-    return rangeOf(d.cages.map((c) => c.range), pc) + 1;
+    return (this.runs ? this.fillCage(d) : this.cageIndex(d, pc)) + 1;
+  }
+
+  /** Which of a dock's cages takes this postcode (−1: none; during a shift there is always one). */
+  private cageIndex(d: Dock, pc: number): number {
+    const i = rangeOf(d.cages.map((c) => c.range), pc);
+    return i < 0 && this.runs ? Math.abs(pc) % CAGES : i;
   }
 
   /** The parcels banked up at the end of a dock's belt, front first (by chute). */
@@ -415,8 +467,24 @@ export class Docks {
   beat(b: number, day: boolean): void {
     this.now = b;
     // Now and then by day, a Mexican wave runs along the docks, west to east, half a beat apart.
-    if (day && b % 64 === 32 && Math.random() < 0.35) this.startWave(b + 1);
-    for (const d of this.docks) {
+    if (day && !this.runs && b % 64 === 32 && Math.random() < 0.35) this.startWave(b + 1);
+    for (const [i, d] of this.docks.entries()) {
+      const run = this.runs?.[i];
+      if (run) {
+        // A shift of the planning game: the people the plan has here, and nobody else.
+        this.leaveWithTruck(d);
+        this.show(d, run);
+        if (d.queue.length || !run.cages) run.busyAt = b;
+        this.chatAtBelt(d, run);
+        if (run.people >= 1) this.tick(d.worker, d, b, false, () => this.plan(d));
+        // Two people: the second runs the cages while the first keeps the belt moving; once the belt backs up, both sort.
+        if (run.people === 2) this.tick(d.loader, d, b, false, () => void ((d.queue.length < RUN_BACKING && this.planLoad(d, d.loader)) || this.plan(d, d.loader)));
+        // (For the checks: how long somebody here stood without a job beside a waiting parcel.)
+        const stood = run.people >= 1 && d.queue.length > 0 && ((!d.worker.step && !d.worker.steps.length) || (run.people === 2 && !d.loader.step && !d.loader.steps.length));
+        this.idleNow[i] = stood ? (this.idleNow[i] ?? 0) + 1 : 0;
+        this.idle[i] = Math.max(this.idle[i] ?? 0, this.idleNow[i]!);
+        continue;
+      }
       // After a cleardown the loader stretches (once the truck has gone and nothing waits).
       const clearing = this.handlers.truck.clearing?.(d.x) === true;
       if (d.wasClearing && !clearing) d.stretchDue = true;
@@ -427,19 +495,43 @@ export class Docks {
         // (Standing still while it lasts.)
         d.loader.steps.push({ beats: 4, to: d.loader.root.position.clone().setY(0), pose: 'walk' });
       }
-      // Cages in the trailer leave with it once the door is down.
-      if (d.inTrailer.length && this.handlers.truck.atDoor?.(d.x) === false) {
-        for (const c of d.inTrailer) {
-          for (const p of c.items) p.dead = true;
-          c.g.visible = false;
-          d.spares.push(c.g);
-        }
-        d.inTrailer.length = 0;
-      }
+      this.leaveWithTruck(d);
       this.tick(d.worker, d, b, day, () => this.plan(d));
       this.tick(d.loader, d, b, day, () => this.planLoad(d, d.loader));
     }
-    for (const h of this.helpers) {
+    // A shift: the helper of a pair of doors comes over for a cleardown (the belt first, then the cages), and goes again.
+    for (const h of this.runs && this.runHelpers ? this.helpers : []) {
+      const d = h.pair.find((x) => {
+        const r = this.runs![this.docks.indexOf(x)]!;
+        return r.clearing && r.people > 0 && (x.queue.length > 0 || this.cagesLeft(this.docks.indexOf(x)) > 0);
+      });
+      const busy = !!h.w.step || h.w.steps.length > 0;
+      if (!d && !busy) {
+        if (h.w.root.visible) {
+          h.w.root.visible = false;
+          h.w.root.position.copy(h.w.home);
+        }
+        continue;
+      }
+      h.w.root.visible = true;
+      if (d) h.w.job = d;
+      const at = h.w.job ?? h.pair[0]!;
+      this.tick(h.w, at, b, false, () => {
+        if (d) void (this.planLoad(d, h.w) || this.plan(d, h.w));
+      });
+    }
+    for (const [i, d] of this.runs ? this.docks.entries() : []) {
+      // (For the measurements: how long a cleardown took, from the cut-off until the belt and the cages were empty.)
+      const run = this.runs![i]!;
+      const c = this.clears[i];
+      if (run.clearing && run.people > 0 && !c) this.clears[i] = { from: b, belt: d.queue.length, cages: this.cagesLeft(i), people: run.people, beats: -1 };
+      else if (c && c.beats < 0 && d.queue.length === 0 && this.cagesLeft(i) === 0 && !this.crewOf(d).some((w) => w.step?.cage)) {
+        c.beats = b - c.from;
+        this.cleared.push({ dock: i, ...c });
+      }
+      if (!run.clearing && c) this.clears[i] = undefined;
+    }
+    for (const h of this.runs ? [] : this.helpers) {
       this.tick(h.w, h.w.job ?? h.pair[0]!, b, day, () => {
         // A door in cleardown first, then whichever has work.
         const order = [...h.pair].sort((a, c) => Number(this.handlers.truck.clearing?.(c.x) === true) - Number(this.handlers.truck.clearing?.(a.x) === true));
@@ -451,6 +543,72 @@ export class Docks {
         }
       });
     }
+  }
+
+  /**
+   * A shift, the last minutes of a block with nothing left on the belt: every cage with parcels
+   * goes into the trailer. (While parcels still lie there the crew goes on as before.)
+   */
+  private runClearing(d: Dock, run: Run): boolean {
+    return run.clearing && d.queue.length === 0;
+  }
+
+  /** A shift: the helper of a pair of doors comes over for a cleardown (off: for measuring without). */
+  runHelpers = true;
+
+  /** A shift: cages of this dock that still have to go into the trailer (with parcels in their place, or on their way). */
+  cagesLeft(i: number): number {
+    const d = this.docks[i];
+    return d ? d.cages.filter((c) => (c.state === 'home' && c.n > 0) || c.state === 'moving').length : 0;
+  }
+
+  /** A shift: the cleardown at this dock (the beat it began, parcels on the belt and cages to go then, people, beats it took or −1 while it runs). */
+  clearStat(i: number): { from: number; belt: number; cages: number; people: number; beats: number } | undefined {
+    return this.clears[i];
+  }
+  /** Every cleardown finished in this shift (for the measurements). */
+  readonly cleared: { dock: number; from: number; belt: number; cages: number; people: number; beats: number }[] = [];
+  private clears: ({ from: number; belt: number; cages: number; people: number; beats: number } | undefined)[] = [];
+
+  /** Is a cage standing by the door of this dock (waiting for a truck)? For the checks of a played shift. */
+  stagedAt(i: number): number {
+    return this.docks[i]?.staged.length ?? 0;
+  }
+
+  /** Beats this dock's people have stood without a job while parcels lay on its belt (the longest stretch so far in the shift). */
+  idleAt(i: number): number {
+    return this.runs ? (this.idle[i] ?? 0) : 0;
+  }
+  private idle: number[] = [];
+  private idleNow: number[] = [];
+
+  /**
+   * A shift, two people at a dock with nothing to do: they stand at the belt end and have a
+   * word (the free simulation's chat, without the walk to the others inside the loop).
+   */
+  private chatAtBelt(d: Dock, run: Run): void {
+    const two = run.people === 2;
+    const a = d.worker.home;
+    const b = v(d.x + SECOND_AT[0], 0, DOCK_BELT_END + SECOND_AT[1]);
+    const mates = [a, b];
+    const mid = a.clone().lerp(b, 0.5);
+    for (const [w, at] of [[d.worker, a], [d.loader, b]] as [Worker, V3][]) {
+      if (!w.own) w.own = { chat: w.chat, chatMid: w.chatMid, mates: w.mates };
+      w.chat = two ? at : undefined;
+      w.chatMid = two ? mid : undefined;
+      w.mates = two ? mates : undefined;
+    }
+  }
+
+  /** Cages in the trailer leave with it once the door is down. */
+  private leaveWithTruck(d: Dock): void {
+    if (!d.inTrailer.length || this.handlers.truck.atDoor?.(d.x) !== false) return;
+    for (const c of d.inTrailer) {
+      for (const p of c.items) p.dead = true;
+      c.g.visible = false;
+      d.spares.push(c.g);
+    }
+    d.inTrailer.length = 0;
   }
 
   /** One beat of one worker: finish the step, plan the next job (or go for a chat), start the next step. */
@@ -484,8 +642,10 @@ export class Docks {
     }
     if (!w.step && w.steps.length) {
       w.step = w.steps.shift()!;
+      // (A shift: the cage runs are brisker, see `Run`.)
+      if (this.runs && w.step.beats >= 2) w.step.beats = Math.max(1, Math.round(w.step.beats * RUN_PACE));
       // Walking takes as long as the distance needs (about 1.6 m a beat).
-      if (w.step.pose === 'walk') w.step.beats = Math.max(w.step.beats, Math.ceil(w.root.position.distanceTo(w.step.to) / 1.6));
+      if (w.step.pose === 'walk') w.step.beats = Math.max(w.step.beats, Math.ceil(w.root.position.distanceTo(w.step.to) / (this.runs ? RUN_WALK : 1.6)));
       w.t0 = b;
       w.from.copy(w.root.position).setY(0);
       if (w.step.cage) {
@@ -503,7 +663,8 @@ export class Docks {
    */
   private planLoad(d: Dock, w: Worker, onlyClear = false): boolean {
     const T = this.handlers.truck;
-    const clearing = T.clearing?.(d.x) === true;
+    const run = this.runs?.[this.docks.indexOf(d)];
+    const clearing = run ? this.runClearing(d, run) : T.clearing?.(d.x) === true;
     if (onlyClear && !clearing) return false;
     // A truck at the door with room for another cage.
     const truck = (T.open(d.x) || clearing) && !!T.slot?.(d.x);
@@ -532,12 +693,17 @@ export class Docks {
     }
     const full = home.find((x) => this.isFull(x));
     if (truck) {
-      // At cleardown every cage with parcels goes; otherwise full ones.
-      const c = clearing ? home.find((x) => x.n > 0) : full;
+      // At cleardown every cage with parcels goes; otherwise full ones. A shift: also the one
+      // being filled, once it is half full and the belt has been empty for a while (a fresh one
+      // is fetched in its place), so nobody stands waiting beside it.
+      const part = run && !clearing && !full && this.now - run.busyAt >= RUN_IDLE ? home.find((x) => x.n >= this.runCap / 2) : undefined;
+      const c = clearing ? home.find((x) => x.n > 0) : (full ?? part);
       if (c) this.pushJob(d, c, door, v(d.x, 0, c.at.z), w);
       return !!c;
     }
-    if (clearing) return false;
+    // (A shift: no cage is ever put down by the door. While the trailer is being swapped a full
+    // cage waits in its place and the parcels go into the others, see `pickCage`.)
+    if (clearing || run) return false;
     // No truck: a full cage is still taken away at once, to wait by the door, and replaced.
     const spot = STAGE_AT.findIndex((_, i) => !d.staged.some((x) => x.spot === i));
     if (full && spot >= 0 && d.spares.length) {
@@ -636,18 +802,32 @@ export class Docks {
   }
 
   /** The picker's next job: a parcel off the belt into its cage (one of the first three it can place). */
-  private plan(d: Dock): void {
-    const w = d.worker;
-    // At cleardown the picker helps to push the cages into the trailer (with nothing in hand).
-    if (this.planLoad(d, w, true)) return;
+  private plan(d: Dock, w: Worker = d.worker): void {
+    const run = this.runs?.[this.docks.indexOf(d)];
+    // Where this one stands to take parcels off the belt (during a shift the loader picks too, beside the picker).
+    const helper = w !== d.worker && w !== d.loader;
+    const at = w === d.worker ? w.home : v(d.x + (helper ? -SECOND_AT[0] : SECOND_AT[0]), 0, DOCK_BELT_END + SECOND_AT[1]);
+    if (run) {
+      // A shift: the belt comes first, always. Cage runs (see `planLoad`) only when the belt is
+      // empty, or when no cage has room for the next parcel (then a full one goes in, so
+      // sorting can go on).
+      if ((!d.queue.length || this.fillCage(d) < 0) && this.planLoad(d, w)) return;
+    } else if (this.planLoad(d, w, true)) return;
+    // (Otherwise: at cleardown the picker helps to push the cages into the trailer, with nothing in hand.)
     // Back to the belt end first (after helping at a cleardown).
-    if (w.root.position.distanceTo(w.home) > 0.6) {
-      w.steps.push({ beats: 2, to: w.home, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'walk' });
+    if (w.root.position.distanceTo(at) > (run ? 4.5 : 0.6)) {
+      w.steps.push({ beats: 2, to: at, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'walk' });
+      return;
+    }
+    // (During a shift nobody waits beside a parcel: the director sends down the chute only what
+    // the timeline has loaded by now, so whatever lies on the belt is theirs to take.)
+    if (run && !d.queue.length) {
+      if (w.root.position.distanceTo(at) > 0.3) w.steps.push({ beats: 1, to: at, face: v(d.x, 0, DOCK_BELT_END + 0.35), pose: 'walk' });
       return;
     }
     const first = d.queue[0];
     // Not for any cage here (sent to the wrong dock): into the return tote beside the belt.
-    if (first && rangeOf(d.cages.map((c) => c.range), first.pc) < 0) {
+    if (first && this.cageIndex(d, first.pc) < 0) {
       const p = first;
       d.queue.shift();
       w.parcel = p;
@@ -685,6 +865,7 @@ export class Docks {
     }
     if (qi < 0) return;
     const p = d.queue.splice(qi, 1)[0]!;
+    if (run) run.taken++;
     // A parcel: pick it off the belt (the projector shows its postcode), walk to its cage, put it in, step back.
     w.parcel = p;
     w.pickFrom.copy(p.pos);
@@ -694,6 +875,24 @@ export class Docks {
     // In front of the cage's open side, square to it, so the parcel goes straight in.
     const near = c.at.clone().addScaledVector(v(Math.sin(c.ry), 0, Math.cos(c.ry)), 1.15).setY(0);
     const fragile = !!p.tags?.includes('fragile');
+    if (run) {
+      // A shift: off the belt, over to the cage and in, two beats a parcel; the step back to
+      // the belt is part of reaching for the next one.
+      w.steps.push(
+        { beats: 1, to: at, face: belt, pose: 'pick' },
+        {
+          beats: 1,
+          to: near,
+          face: c.at,
+          pose: 'drop',
+          done: () => {
+            this.put(d, ci, p);
+            w.parcel = null;
+          },
+        },
+      );
+      return;
+    }
     if (this.docks.indexOf(d) === THROW_DOCK) {
       if (!fragile) {
         // This one does not walk: he throws it in from where he stands.
@@ -794,7 +993,7 @@ export class Docks {
       },
     });
     // During a cleardown: straight back for the next cage (the empties come with the next truck).
-    if (T.clearing?.(d.x)) {
+    if (this.runs ? this.runClearing(d, this.runs[this.docks.indexOf(d)]!) : T.clearing?.(d.x)) {
       w.steps.push({ beats: 3, to: door.clone().setZ(WALL_Z + 0.8), face: v(d.x, 0, DOCK_BELT_END), pose: 'walk' });
       return;
     }
@@ -855,7 +1054,7 @@ export class Docks {
       d.cages.forEach((c, i) => {
         c.g.updateMatrix();
         for (const side of [0, 1]) {
-          if (c.state === 'gone') this.m.makeScale(0, 0, 0);
+          if (c.state === 'gone' || !c.g.visible) this.m.makeScale(0, 0, 0);
           // On the cage's two closed sides (left and right of the loading side).
           else this.m.makeRotationY(side ? -Math.PI / 2 : Math.PI / 2).setPosition(side ? -0.705 : 0.705, 1.15, 0).premultiply(c.g.matrix);
           this.boards.place((n * CAGES + i) * 2 + side, this.m);
@@ -867,13 +1066,29 @@ export class Docks {
 
   /** The cage for this parcel's postcode, if it is by the belt and not full (−1 if not). */
   private pickCage(d: Dock, p: DockParcel): number {
-    const i = rangeOf(d.cages.map((c) => c.range), p.pc);
+    const i = this.cageIndex(d, p.pc);
     const c = d.cages[i];
+    if (this.runs) return this.fillCage(d);
     return c && c.state === 'home' && !this.isFull(c) ? i : -1;
+  }
+
+  /**
+   * A shift: every cage of a dock is for the one city, so they are filled one at a time. The
+   * cage being filled is the one in its place that has parcels and is not full (the fullest,
+   * should there be two); else the first empty one in its place. −1: none stands ready.
+   */
+  private fillCage(d: Dock): number {
+    let best = -1;
+    d.cages.forEach((x, k) => {
+      if (x.state !== 'home' || this.isFull(x)) return;
+      if (best < 0 || (x.n > 0 && x.n > d.cages[best]!.n)) best = k;
+    });
+    return best;
   }
 
   /** Full by volume (or out of places to stack). */
   private isFull(c: Cage): boolean {
+    if (this.runs) return c.n >= this.runCap;
     return c.n >= CAGE_FULL || c.vol >= CAGE_M3;
   }
 
@@ -889,12 +1104,20 @@ export class Docks {
   /** Where the next parcel goes in this cage (world). */
   private cageTop(c: Cage): V3 {
     c.g.updateMatrixWorld();
-    const p = cageSlot(c.n, new THREE.Vector3());
+    const p = this.runs ? runSlot(c.n, new THREE.Vector3()) : cageSlot(c.n, new THREE.Vector3());
     return p.setY(p.y + 0.3).applyMatrix4(c.g.matrixWorld);
   }
 
   private put(d: Dock, cage: number, p: DockParcel): void {
     const c = d.cages[cage]!;
+    if (this.runs) {
+      // During a shift: the plan's small cartons, closer together (see `runSlot`).
+      this.handlers.hold(p, c.g, runSlot(c.n, new THREE.Vector3()));
+      c.items.push(p);
+      c.n++;
+      this.handlers.shipped(d.chute);
+      return;
+    }
     // The parcel itself stays in the cage (same shape and colour), stacked, and rides along with it.
     this.handlers.hold(p, c.g, cageSlot(c.n, new THREE.Vector3()));
     c.items.push(p);
@@ -1222,11 +1445,221 @@ export class Docks {
   }
 
   /** A coloured card about A4 size on each cage, black print: postcodes, and the cage's number (as the projector shows it) and city. */
-  private cardsFor(n0: number, city: number, cages: Cage[]): void {
+  private cardsFor(n0: number, city: number | string, cages: Cage[], colour?: string): void {
+    const name = typeof city === 'string' ? city : NORTH_CITIES[city]!.name;
     cages.forEach((c, i) => {
+      if (colour) {
+        // A played shift: no postcodes, the city the plan has at this dock, in that city's colour (as on its parcels' bands), and the cage's number small below.
+        for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, name, `cage ${i + 1}`, { bg: colour, fg: '#ffffff', sub: '#ffffff', border: '#ffffff' });
+        return;
+      }
       const bg = CARD_COLS[i % CARD_COLS.length]!;
-      for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), `${i + 1} · ${NORTH_CITIES[city]!.name}`, { bg, fg: '#111111', sub: '#111111', border: '#111111' });
+      for (const side of [0, 1]) this.boards.set((n0 + i) * 2 + side, rangeText(c.range), `${i + 1} · ${name}`, { bg, fg: '#111111', sub: '#111111', border: '#111111' });
     });
+  }
+
+  // ---------- a shift of the planning game (see director.ts) ----------
+
+  /**
+   * Everything at the docks back to an empty start: cages empty in their places, nothing
+   * waiting by the doors or standing in the trailers, belts' ends clear, everyone at their
+   * place with empty hands. (Parcels that were there are gone.)
+   */
+  private clearAll(): void {
+    const drop = (w: Worker) => {
+      if (w.parcel) w.parcel.dead = true;
+      w.parcel = null;
+      w.steps.length = 0;
+      w.step = null;
+      w.root.position.copy(w.home);
+      w.root.visible = true;
+    };
+    for (const d of this.docks) {
+      for (const p of d.queue) p.dead = true;
+      d.queue.length = 0;
+      for (const c of d.cages) {
+        for (const p of c.items) p.dead = true;
+        c.items = [];
+        c.n = 0;
+        c.vol = 0;
+        c.kg = 0;
+        c.state = 'home';
+        c.g.position.copy(c.at);
+        c.g.rotation.y = c.ry;
+        c.g.visible = true;
+        this.writePile(c);
+      }
+      for (const st of [...d.staged, ...d.inTrailer]) {
+        for (const p of st.items) p.dead = true;
+        d.spares.push(st.g);
+      }
+      d.staged.length = 0;
+      d.inTrailer.length = 0;
+      for (const g of d.spares) g.visible = false;
+      d.wasClearing = false;
+      d.stretchDue = false;
+      drop(d.worker);
+      drop(d.loader);
+      d.worker.job = d;
+      d.loader.job = d;
+    }
+    for (const h of this.helpers) drop(h.w);
+    this.waveQueue.length = 0;
+  }
+
+  /**
+   * A shift begins (every dock bare: no cages, nobody, until the director opens it) or is
+   * over (the free simulation's docks again, empty, with their own cities on the cards).
+   * `cap`: parcels in a full cage during the shift.
+   */
+  setDirected(on: boolean, cap = 22): void {
+    if (!on && !this.runs) return;
+    this.clearAll();
+    this.idle = [];
+    this.idleNow = [];
+    this.clears = [];
+    this.cleared.length = 0;
+    this.runCap = clamp(Math.round(cap), 1, RUN_CAGE);
+    this.runs = on ? this.docks.map(() => ({ cages: false, people: 0, allow: 0, taken: 0, clearing: false, busyAt: 0, name: '' })) : null;
+    this.docks.forEach((d, n) => {
+      if (this.runs) return this.show(d, this.runs[n]!);
+      const ranges = split(NORTH_CITIES[d.city]!, CAGES);
+      d.cages.forEach((c, i) => (c.range = ranges[i]!));
+      this.cardsFor(n * CAGES, d.city, d.cages);
+    });
+    for (const h of this.helpers) h.w.root.visible = !on;
+    if (!on) for (const d of this.docks) for (const w of [d.worker, d.loader]) {
+      if (!w.own) continue;
+      w.chat = w.own.chat;
+      w.chatMid = w.own.chatMid;
+      w.mates = w.own.mates;
+      w.own = undefined;
+    }
+  }
+
+  /** What is in sight at a directed dock: its cages, its picker, its loader. */
+  private show(d: Dock, r: Run): void {
+    for (const c of d.cages) c.g.visible = r.cages && c.state !== 'gone';
+    d.worker.root.visible = r.people >= 1;
+    d.loader.root.visible = r.people === 2;
+  }
+
+  /** Someone leaves a directed dock: hands empty, the cage they were pushing back in its place. */
+  private sendOff(w: Worker): void {
+    if (w.parcel) w.parcel.dead = true;
+    w.parcel = null;
+    for (const st of [w.step, ...w.steps]) {
+      if (!st?.cage) continue;
+      const c = st.cage.c;
+      c.state = 'home';
+      c.g.position.copy(c.at);
+      c.g.rotation.y = c.ry;
+    }
+    w.steps.length = 0;
+    w.step = null;
+    w.root.position.copy(w.home);
+  }
+
+  /**
+   * The director sets a dock: cages standing or not, people at work, the city on the cards
+   * (with its postcode ranges for the six cages), how many parcels the timeline has loaded
+   * here so far in this block (`fresh`: a new block, the count of parcels taken starts again),
+   * and whether the block is in its last minutes.
+   */
+  directDock(i: number, o: { cages: boolean; people: 0 | 1 | 2; name: string; colour: string; ranges: [number, number][] | null; allow: number; clearing: boolean; fresh: boolean }): void {
+    const d = this.docks[i];
+    const r = this.runs?.[i];
+    if (!d || !r) return;
+    if (o.name !== r.name) {
+      r.name = o.name;
+      d.cages.forEach((c, k) => (c.range = o.ranges?.[k] ?? [k, k]));
+      if (o.name) this.cardsFor(i * CAGES, o.name, d.cages, o.colour);
+    }
+    if (o.fresh) r.taken = 0;
+    if (o.people < 1 && r.people >= 1) this.sendOff(d.worker);
+    if (o.people < 2 && r.people === 2) this.sendOff(d.loader);
+    r.cages = o.cages;
+    r.people = o.people;
+    r.allow = o.allow;
+    r.clearing = o.clearing;
+    this.show(d, r);
+  }
+
+  /** Parcels taken off the belt at a directed dock in its block so far, and parcels waiting on its belt end. */
+  directCount(i: number): { taken: number; waiting: number } {
+    return { taken: this.runs?.[i]?.taken ?? 0, waiting: this.docks[i]?.queue.length ?? 0 };
+  }
+
+  /**
+   * A block ends at a directed dock, in one go (there is no time left to show it): what the
+   * timeline has loaded and is still on the belt end goes into the cages, and every cage with
+   * parcels stands in the trailer (as far as it has places; the rest of those parcels are
+   * simply on board). Returns the parcels the timeline has loaded that were not at the dock
+   * yet. What is still on the belt after this has missed the truck: `keep` leaves it lying
+   * there, in sight; otherwise the belt end is cleared and the number taken away is returned.
+   */
+  closeOut(i: number, keep: boolean): { short: number; cleared: number } {
+    const d = this.docks[i];
+    const r = this.runs?.[i];
+    if (!d || !r) return { short: 0, cleared: 0 };
+    const T = this.handlers.truck;
+    this.sendOff(d.worker);
+    this.sendOff(d.loader);
+    for (const h of this.helpers) if (h.pair.includes(d) && h.w.job === d) this.sendOff(h.w);
+    let short = Math.max(0, r.allow - r.taken);
+    while (short > 0 && d.queue.length) {
+      const p = d.queue.shift()!;
+      const c = d.cages.filter((x) => x.state === 'home').sort((a, b) => a.n - b.n)[0];
+      if (c && c.n < RUN_CAGE) this.put(d, d.cages.indexOf(c), p);
+      else p.dead = true;
+      r.taken++;
+      short--;
+    }
+    const aboard = (g: THREE.Group, items: DockParcel[], vol: number, kg: number): boolean => {
+      const slot = T.open(d.x) ? T.slot?.(d.x) : null;
+      if (!slot) {
+        for (const p of items) p.dead = true;
+        return false;
+      }
+      g.position.copy(slot);
+      g.rotation.y = 0;
+      g.updateMatrixWorld();
+      T.load(d.x, vol, kg);
+      d.inTrailer.push({ g, items });
+      return true;
+    };
+    for (const c of d.cages) {
+      if (c.items.length) {
+        const spare = d.spares.pop();
+        if (spare && aboard(c.g, c.items, c.vol, c.kg)) {
+          // (The frame went along; a spare one stands in its place for the next block.)
+          c.g = spare;
+        } else {
+          if (spare) d.spares.push(spare);
+          for (const p of c.items) p.dead = true;
+        }
+      }
+      c.items = [];
+      c.n = 0;
+      c.vol = 0;
+      c.kg = 0;
+      c.state = 'home';
+      c.g.position.copy(c.at);
+      c.g.rotation.y = c.ry;
+    }
+    for (const st of d.staged) if (!aboard(st.g, st.items, st.vol, st.kg)) {
+      st.g.visible = false;
+      d.spares.push(st.g);
+    }
+    d.staged.length = 0;
+    let cleared = 0;
+    if (!keep) {
+      cleared = d.queue.length;
+      for (const p of d.queue) p.dead = true;
+      d.queue.length = 0;
+    }
+    r.allow = r.taken;
+    return { short, cleared };
   }
 
   /**

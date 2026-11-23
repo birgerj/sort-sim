@@ -1,7 +1,7 @@
 // The start card, shown at once while the hall is built behind it, so the choices can be made
-// in the meantime: sound on or off, and the country the hub serves (the one the browser points
-// to by default). Start goes straight in when the hall is ready; before that, the loading screen
-// shows until it is.
+// in the meantime: sound on or off, the country the hub serves (the one the browser points to by
+// default), and then the free simulation or the planning game. Either goes straight in when the
+// hall is ready; before that, the loading screen shows until it is.
 import { COUNTRIES, COUNTRY, setCountry, type CountryId } from '../sim/countries';
 import { loadSettings, saveSettings } from './hud';
 import { updateOnCard } from './pwa';
@@ -14,7 +14,7 @@ const SPEAKER_OFF =
   '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 6 6"/><path d="m22 9-6 6"/></svg>';
 
 /** Show the card at once (the hall builds behind it). Start can be pressed straight away. */
-export function startCard(onStart: (sound: boolean) => void): void {
+export function startCard(onStart: (sound: boolean, mode: 'free' | 'game') => void): void {
   const settings = loadSettings();
   const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') => {
     const e = document.createElement(tag);
@@ -62,8 +62,7 @@ export function startCard(onStart: (sound: boolean) => void): void {
     settings.country = id;
     saveSettings(settings);
     // (Live: the hall takes the new names, also when it is still being built.)
-    if (new URLSearchParams(location.search).get('game')) location.reload();
-    else setCountry(id);
+    setCountry(id);
   };
 
   // Update: only when a new version is waiting. It is then the first choice, at the top of the
@@ -83,18 +82,26 @@ export function startCard(onStart: (sound: boolean) => void): void {
     upd.focus({ preventScroll: true });
   });
 
-  const go = el('button', 'primary', 'Start');
-  go.type = 'button';
-  go.onclick = () => {
+  // Two ways in: the hall as a free simulation, or the planning game.
+  const enter = (mode: 'free' | 'game') => () => {
     wrap.remove();
     release();
-    onStart(sound);
+    onStart(sound, mode);
   };
+  const go = el('button', 'primary', 'Simulation');
+  go.type = 'button';
+  go.onclick = enter('free');
+  const play = el('button', 'primary', 'Play');
+  play.type = 'button';
+  play.title = 'Ten Shifts: plan the night shift in ten levels';
+  play.onclick = enter('game');
+  const ways = el('div', 'row ways');
+  ways.append(go, play);
 
   const row = el('div', 'row');
   row.append(snd, country);
   card.prepend(upd);
-  card.append(row, go);
+  card.append(row, ways);
   wrap.append(card);
   document.body.append(wrap);
   if (upd.hidden) go.focus({ preventScroll: true });

@@ -18,7 +18,7 @@ import { REAL } from './realDay';
 import { BODY } from './proportions';
 import { BODY_LEVELS, bodyField, bodySurfaceZ, buildBody, type BodyLevel } from './bodySdf';
 
-import { onXmas, XMAS } from '../sim/season';
+import { onDecor, shows } from '../sim/season';
 
 export interface Human {
   root: THREE.Group;
@@ -1162,7 +1162,7 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
   let coarseGear: THREE.BufferGeometry | null = null;
   // The gear with and without Christmas hats (hair flat under a hat), per level: the one not worn
   // now is baked the first time it is asked for (see wear).
-  const worn = XMAS;
+  const worn = shows('gifts');
   let hatOn = worn;
   const gears: { level: BodyLevel; mesh: THREE.SkinnedMesh; geo: Map<boolean, THREE.BufferGeometry> }[] = [];
   for (const level of ['coarse', 'far', 'fine'] as BodyLevel[]) {
@@ -1243,7 +1243,11 @@ export function buildHuman(k: FloorKit, look: HumanLook, at?: { x: number; z: nu
 /** Everyone's hats on or off (see buildHuman). */
 const WEARERS: ((on: boolean) => void)[] = [];
 // Christmas switched: hats go on (or come off) one person after another, in a second or three.
-onXmas((on) => {
+let hatsOn = shows('gifts');
+onDecor(() => {
+  const on = shows('gifts');
+  if (on === hatsOn) return;
+  hatsOn = on;
   const order = WEARERS.map((w) => ({ w, k: Math.random() }))
     .sort((a, b) => a.k - b.k)
     .map((x) => x.w);

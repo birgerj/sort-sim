@@ -10,12 +10,12 @@
  *   ui=0                   no controls, no start screen (for recordings and screenshots)
  *   speed=0.5|1|2|4        belt speed (multiple of 2 m per beat)
  *   night=party|calm|dark  what the night shows (Night effects panel; remembered otherwise)
- *   game=NL-7KQ2M0         play that night (with plan=…&reserve=…: the player's door plan)
+ *   start=game             with mute=1 (no start card): open the planning game
  *   quality=low|normal|high  render quality (high: ambient occlusion, sun shadows,
  *                            glossy night floor, depth of field; pixel ratio 1 / 1.5 / 2)
  */
-import { setCountry } from './sim/countries';
-import { setXmas } from './sim/season';
+import { COUNTRIES, COUNTRY, setCountry } from './sim/countries';
+import { setTrophies, setXmas } from './sim/season';
 import './ui/style.css';
 
 import { Music } from './audio/music';
@@ -29,7 +29,10 @@ import { Hud, loadSettings, saveSettings, type Settings, type TimeMode } from '.
 import { startCard } from './ui/startCard';
 import { Pwa, checkForUpdates } from './ui/pwa';
 import { WalkControls } from './ui/walk';
-import { GameUi } from './ui/game';
+import { mountShifts } from './ui/shifts/index';
+import { plannerView, shiftHud } from './ui/shifts/planner/index';
+import { LEVELS, LocalScoreService } from './shifts/model/index';
+import { createDirector } from './scene/director';
 import { ANTICS } from './scene/antics';
 
 const q = new URLSearchParams(location.search);
@@ -53,6 +56,8 @@ window.addEventListener('error', (e) => {
   // "Script error." without a file comes from a script of another origin (the browser's page
   // translation, an extension): nothing of ours, and nothing to show.
   if (!e.filename && (!e.message || e.message === 'Script error.')) return;
+  // A browser notice, not a fault: a size observer could not deliver everything in one frame.
+  if (e.message?.startsWith('ResizeObserver loop')) return;
   showProblem('Something went wrong', `${e.message}\n${e.filename?.split('/').pop() ?? ''}:${e.lineno}:${e.colno}`);
 });
 window.addEventListener('unhandledrejection', (e) => showProblem('Something went wrong', String((e.reason as Error)?.stack ?? e.reason)));
@@ -74,9 +79,13 @@ const mute = q.get('mute') === '1' || !showUi;
 // pressed (and only shows if the hall is not ready by then).
 /** The settings the HUD works with, once they are loaded (Start may come before or after). */
 let liveSettings: Settings | null = null;
+// The start card offers the free simulation or the planning game. Without a start card (mute=1)
+// `start=game` in the address opens the game.
+let wantGame = !(showUi && !mute) && q.get('start') === 'game';
+let offerGame = () => {};
 if (showUi && !mute) {
   loading?.classList.add('quiet');
-  startCard((sound) => {
+  startCard((sound, mode) => {
     const st = loadSettings();
     st.muted = !sound;
     saveSettings(st);
@@ -84,6 +93,8 @@ if (showUi && !mute) {
     music.setMuted(!sound);
     if (sound) void music.start();
     loading?.classList.remove('quiet');
+    wantGame = mode === 'game';
+    offerGame();
   });
 }
 await nextPaint();
@@ -128,11 +139,85 @@ music.setVolume(settings.volume);
 music.setMuted(settings.muted);
 
 let hudQuality = () => {};
-const hud = new Hud(scene, music, settings, { showStart: false, showUi, onQuality: () => hudQuality(), onGame: () => game?.openBriefing() });
+const hud = new Hud(scene, music, settings, { showStart: false, showUi, onQuality: () => hudQuality(), onGame: () => openShifts() });
 document.body.append(hud.root);
-// The night-shift game: its own dock at the top of the screen (see ui/game.ts).
-const game = showUi ? new GameUi(music, scene) : null;
-if (game) document.body.append(game.root);
+// Ten Shifts, the planning game: a full-screen layer over the hall (see ui/shifts). While it is open
+// the free simulation's own controls are out of the way.
+// Trophies: the decorations earned with badges stand in the hall while the game is open. The
+// free simulation follows its Christmas setting only.
+let earnedLevels: number[] = [];
+let inGame = false;
+function showTrophies(): void {
+  setTrophies(inGame ? earnedLevels : []);
+}
+const shifts = showUi
+  ? mountShifts({
+      score: new LocalScoreService(),
+      director: createDirector(scene),
+      levels: LEVELS,
+      // City i of a level is the i-th largest town of the chosen country.
+      cityNames: () => [...COUNTRY.cities].sort((a, b) => b.pop - a.pop).map((c) => c.name),
+      onFree: () => {
+        hud.root.style.display = '';
+        inGame = false;
+        showTrophies();
+        if (nightBefore) hud.setTime('night');
+        nightBefore = false;
+      },
+      views: { planner: plannerView, shiftHud },
+      // A badge earns a Christmas decoration in the hall, shown in the game.
+      onBadges: (levels) => {
+        earnedLevels = levels;
+        showTrophies();
+      },
+      settings: {
+        look: () => (settings.look === 'real' ? 'real' : 'minimal'),
+        setLook: (v) => hud.setTime('day', v),
+        quality: () => settings.quality,
+        setQuality: (v) => {
+          settings.quality = v;
+          saveSettings(settings);
+          hudQuality();
+        },
+        sound: () => !settings.muted,
+        setSound: (on) => {
+          settings.muted = !on;
+          saveSettings(settings);
+          music.setMuted(!on);
+          if (on) void music.start();
+        },
+        country: () => COUNTRY.id,
+        countries: () => COUNTRIES.map((c) => ({ id: c.id, name: c.native === c.name ? c.name : `${c.name} · ${c.native}` })),
+        setCountry: (id) => {
+          const next = COUNTRIES.find((c) => c.id === id);
+          if (!next) return;
+          settings.country = next.id;
+          saveSettings(settings);
+          setCountry(next.id);
+        },
+      },
+    })
+  : null;
+if (shifts) document.body.append(shifts.root);
+/** The free simulation was in its night look when the game opened; the game plays by day. */
+let nightBefore = false;
+function openShifts(): void {
+  if (!shifts) return;
+  hud.root.style.display = 'none';
+  inGame = true;
+  showTrophies();
+  if (settings.time === 'night') {
+    nightBefore = true;
+    hud.setTime('day');
+  }
+  shifts.open();
+}
+// Play on the start card: as soon as the hall exists.
+offerGame = () => {
+  if (wantGame) openShifts();
+  wantGame = false;
+};
+offerGame();
 // Walk and fly controls sit under the menu (an open panel may cover them).
 hud.root.prepend(walk.root);
 const pwa = new Pwa(hud.root, music);
@@ -175,12 +260,19 @@ function frame(now: number): void {
   last = now;
   walk.frame();
   const f = music.frame();
+  // The game's screens cover the hall except while a shift plays: nothing to draw until then
+  // (the scene re-phases by itself when the beats have moved on).
+  // (Behind the result the hall is in view and the camera flies on: that one is drawn.)
+  if (shifts && !shifts.root.hidden && !shifts.root.classList.contains('sh-root--live') && !shifts.root.classList.contains('sh-root--hall')) {
+    f.notes.length = 0;
+    requestAnimationFrame(frame);
+    return;
+  }
   if (music.paused) {
     f.notes.length = 0;
     // The hall stands still, but you can still walk, fly and look around.
     scene.renderPaused(dt);
     hud.update();
-    game?.frame(dt);
     requestAnimationFrame(frame);
     return;
   }
@@ -210,7 +302,6 @@ function frame(now: number): void {
   const r = Math.max(0, Math.min(1, (scene.rate - 20) / 780));
   music.setTempo(60 + 100 * Math.sqrt(r));
   hud.update();
-  game?.frame(dt);
   requestAnimationFrame(frame);
 }
 // Compile the shaders before the first frame (in parallel where the browser can), with the

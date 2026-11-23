@@ -1,0 +1,2613 @@
+[
+ {
+  "level": 1,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 120,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 78.75,
+  "lines": {
+   "revenue": 225,
+   "bonus": 45,
+   "late": 0,
+   "left": 0,
+   "docks": 56,
+   "people": 135,
+   "robots": 0,
+   "buffer": 0
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 150,
+    "planned": 135,
+    "left": 135,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 1,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 146.25,
+  "lines": {
+   "revenue": 225,
+   "bonus": 45,
+   "late": 0,
+   "left": 0,
+   "docks": 56,
+   "people": 68,
+   "robots": 0,
+   "buffer": 0
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 150,
+    "planned": 135,
+    "left": 135,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 2,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 120,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 468.5,
+  "lines": {
+   "revenue": 780,
+   "bonus": 156,
+   "late": 0,
+   "left": 0,
+   "docks": 138,
+   "people": 330,
+   "robots": 0,
+   "buffer": 0
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 400,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 120,
+    "planned": 135,
+    "left": 135,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 2,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 120,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 536.0,
+  "lines": {
+   "revenue": 780,
+   "bonus": 156,
+   "late": 0,
+   "left": 0,
+   "docks": 138,
+   "people": 262,
+   "robots": 0,
+   "buffer": 0
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 400,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 120,
+    "planned": 135,
+    "left": 135,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 3,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 0,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 30,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 269.5,
+  "lines": {
+   "revenue": 1110,
+   "bonus": 222,
+   "late": 0,
+   "left": 0,
+   "docks": 312,
+   "people": 750,
+   "robots": 0,
+   "buffer": 0
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 500,
+    "planned": 255,
+    "left": 255,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 80,
+    "planned": 165,
+    "left": 165,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 90,
+    "planned": 165,
+    "left": 165,
+    "status": "onTime"
+   },
+   {
+    "city": 3,
+    "loaded": 70,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 3,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 0,
+     "end": 150,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    1,
+    3
+   ],
+   "robots": 6
+  },
+  "profit": 555.5,
+  "lines": {
+   "revenue": 1110,
+   "bonus": 222,
+   "late": 0,
+   "left": 0,
+   "docks": 175,
+   "people": 338,
+   "robots": 264,
+   "buffer": 0
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 500,
+    "planned": 255,
+    "left": 255,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 80,
+    "planned": 165,
+    "left": 165,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 90,
+    "planned": 165,
+    "left": 165,
+    "status": "onTime"
+   },
+   {
+    "city": 3,
+    "loaded": 70,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 4,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 105,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 161.75,
+  "lines": {
+   "revenue": 660,
+   "bonus": 132,
+   "late": 0,
+   "left": 90,
+   "docks": 156,
+   "people": 375,
+   "robots": 0,
+   "buffer": 9
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 240,
+    "planned": 120,
+    "left": 120,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 200,
+    "planned": 255,
+    "left": 255,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 0,
+    "planned": 195,
+    "left": 195,
+    "status": "incomplete"
+   }
+  ]
+ },
+ {
+  "level": 4,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 105,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 120,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 0,
+     "end": 180,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 342.0,
+  "lines": {
+   "revenue": 750,
+   "bonus": 150,
+   "late": 0,
+   "left": 0,
+   "docks": 188,
+   "people": 352,
+   "robots": 0,
+   "buffer": 18
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 240,
+    "planned": 120,
+    "left": 120,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 200,
+    "planned": 255,
+    "left": 255,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 60,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 5,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 60,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 30,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 90,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 480.0,
+  "lines": {
+   "revenue": 2100,
+   "bonus": 420,
+   "late": 0,
+   "left": 0,
+   "docks": 600,
+   "people": 1440,
+   "robots": 0,
+   "buffer": 0
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 420,
+    "planned": 285,
+    "left": 285,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 300,
+    "planned": 225,
+    "left": 225,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 260,
+    "planned": 315,
+    "left": 315,
+    "status": "onTime"
+   },
+   {
+    "city": 3,
+    "loaded": 180,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   },
+   {
+    "city": 4,
+    "loaded": 140,
+    "planned": 285,
+    "left": 285,
+    "status": "onTime"
+   },
+   {
+    "city": 5,
+    "loaded": 100,
+    "planned": 315,
+    "left": 315,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 5,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 60,
+     "end": 300,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 180,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    4,
+    5
+   ],
+   "robots": 5
+  },
+  "profit": 1108.12,
+  "lines": {
+   "revenue": 2100,
+   "bonus": 420,
+   "late": 0,
+   "left": 0,
+   "docks": 400,
+   "people": 735,
+   "robots": 275,
+   "buffer": 2
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 420,
+    "planned": 285,
+    "left": 285,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 300,
+    "planned": 225,
+    "left": 225,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 260,
+    "planned": 315,
+    "left": 315,
+    "status": "onTime"
+   },
+   {
+    "city": 3,
+    "loaded": 180,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   },
+   {
+    "city": 4,
+    "loaded": 140,
+    "planned": 285,
+    "left": 285,
+    "status": "onTime"
+   },
+   {
+    "city": 5,
+    "loaded": 100,
+    "planned": 315,
+    "left": 315,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 6,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 90,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 0,
+     "end": 180,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 120,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 100,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 818.59,
+  "lines": {
+   "revenue": 3150,
+   "bonus": 630,
+   "late": 0,
+   "left": 0,
+   "docks": 871,
+   "people": 2090,
+   "robots": 0,
+   "buffer": 1
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 520,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 380,
+    "planned": 255,
+    "left": 255,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 320,
+    "planned": 375,
+    "left": 375,
+    "status": "onTime"
+   },
+   {
+    "city": 3,
+    "loaded": 260,
+    "planned": 225,
+    "left": 225,
+    "status": "onTime"
+   },
+   {
+    "city": 4,
+    "loaded": 220,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   },
+   {
+    "city": 5,
+    "loaded": 160,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   },
+   {
+    "city": 6,
+    "loaded": 140,
+    "planned": 375,
+    "left": 375,
+    "status": "onTime"
+   },
+   {
+    "city": 7,
+    "loaded": 100,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 6,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 90,
+     "end": 360,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 210,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 0,
+     "end": 180,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    4,
+    6,
+    7
+   ],
+   "robots": 9
+  },
+  "profit": 1460.87,
+  "lines": {
+   "revenue": 3145,
+   "bonus": 534,
+   "late": 104,
+   "left": 5,
+   "docks": 548,
+   "people": 958,
+   "robots": 594,
+   "buffer": 8
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 520,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 380,
+    "planned": 255,
+    "left": 255,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 316,
+    "planned": 375,
+    "left": 386,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 260,
+    "planned": 225,
+    "left": 225,
+    "status": "onTime"
+   },
+   {
+    "city": 4,
+    "loaded": 220,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   },
+   {
+    "city": 5,
+    "loaded": 160,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   },
+   {
+    "city": 6,
+    "loaded": 140,
+    "planned": 375,
+    "left": 375,
+    "status": "onTime"
+   },
+   {
+    "city": 7,
+    "loaded": 100,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 7,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 340,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 250,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 60,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 30,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 120,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 0,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 0,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 8,
+     "start": 100,
+     "end": 350,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 1391.83,
+  "lines": {
+   "revenue": 7248,
+   "bonus": 511,
+   "late": 238,
+   "left": 2412,
+   "docks": 1023,
+   "people": 2455,
+   "robots": 0,
+   "buffer": 239
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 906,
+    "planned": 355,
+    "left": 360,
+    "status": "incomplete"
+   },
+   {
+    "city": 1,
+    "loaded": 679,
+    "planned": 265,
+    "left": 270,
+    "status": "incomplete"
+   },
+   {
+    "city": 2,
+    "loaded": 682,
+    "planned": 375,
+    "left": 375,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 427,
+    "planned": 165,
+    "left": 165,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 690,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   },
+   {
+    "city": 5,
+    "loaded": 436,
+    "planned": 375,
+    "left": 375,
+    "status": "incomplete"
+   },
+   {
+    "city": 6,
+    "loaded": 414,
+    "planned": 285,
+    "left": 285,
+    "status": "onTime"
+   },
+   {
+    "city": 7,
+    "loaded": 322,
+    "planned": 225,
+    "left": 225,
+    "status": "onTime"
+   },
+   {
+    "city": 8,
+    "loaded": 276,
+    "planned": 365,
+    "left": 365,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 7,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 340,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 0,
+     "end": 340,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 250,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 250,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 180,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 150,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 150,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 30,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 180,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 0,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 0,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 8,
+     "start": 100,
+     "end": 350,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 2344.47,
+  "lines": {
+   "revenue": 8340,
+   "bonus": 511,
+   "late": 1145,
+   "left": 1320,
+   "docks": 1288,
+   "people": 2546,
+   "robots": 0,
+   "buffer": 208
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 1350,
+    "planned": 355,
+    "left": 366,
+    "status": "incomplete"
+   },
+   {
+    "city": 1,
+    "loaded": 1018,
+    "planned": 265,
+    "left": 276,
+    "status": "incomplete"
+   },
+   {
+    "city": 2,
+    "loaded": 484,
+    "planned": 375,
+    "left": 375,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 637,
+    "planned": 165,
+    "left": 184,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 690,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   },
+   {
+    "city": 5,
+    "loaded": 369,
+    "planned": 375,
+    "left": 375,
+    "status": "incomplete"
+   },
+   {
+    "city": 6,
+    "loaded": 414,
+    "planned": 285,
+    "left": 285,
+    "status": "onTime"
+   },
+   {
+    "city": 7,
+    "loaded": 322,
+    "planned": 225,
+    "left": 225,
+    "status": "onTime"
+   },
+   {
+    "city": 8,
+    "loaded": 276,
+    "planned": 365,
+    "left": 365,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 8,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 0,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 120,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 0,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 60,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 200,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 8,
+     "start": 0,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 9,
+     "start": 150,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": -675.76,
+  "lines": {
+   "revenue": 10707,
+   "bonus": 454,
+   "late": 135,
+   "left": 6303,
+   "docks": 1519,
+   "people": 3645,
+   "robots": 0,
+   "buffer": 234
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 1167,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 1,
+    "loaded": 877,
+    "planned": 345,
+    "left": 345,
+    "status": "incomplete"
+   },
+   {
+    "city": 2,
+    "loaded": 850,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 901,
+    "planned": 495,
+    "left": 500,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 715,
+    "planned": 285,
+    "left": 285,
+    "status": "incomplete"
+   },
+   {
+    "city": 5,
+    "loaded": 864,
+    "planned": 465,
+    "left": 465,
+    "status": "onTime"
+   },
+   {
+    "city": 6,
+    "loaded": 647,
+    "planned": 255,
+    "left": 255,
+    "status": "incomplete"
+   },
+   {
+    "city": 7,
+    "loaded": 468,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 8,
+    "loaded": 378,
+    "planned": 405,
+    "left": 405,
+    "status": "onTime"
+   },
+   {
+    "city": 9,
+    "loaded": 270,
+    "planned": 495,
+    "left": 495,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 8,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 330,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 0,
+     "end": 450,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 0,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 120,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 0,
+     "end": 270,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 0,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 60,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 0,
+     "end": 240,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 200,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 8,
+     "start": 0,
+     "end": 390,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    9
+   ],
+   "robots": 4
+  },
+  "profit": 1503.95,
+  "lines": {
+   "revenue": 13165,
+   "bonus": 664,
+   "late": 1710,
+   "left": 3845,
+   "docks": 2145,
+   "people": 4021,
+   "robots": 352,
+   "buffer": 254
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 1798,
+    "planned": 465,
+    "left": 486,
+    "status": "incomplete"
+   },
+   {
+    "city": 1,
+    "loaded": 1339,
+    "planned": 345,
+    "left": 356,
+    "status": "incomplete"
+   },
+   {
+    "city": 2,
+    "loaded": 1055,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 901,
+    "planned": 495,
+    "left": 500,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 1001,
+    "planned": 285,
+    "left": 285,
+    "status": "incomplete"
+   },
+   {
+    "city": 5,
+    "loaded": 864,
+    "planned": 465,
+    "left": 465,
+    "status": "onTime"
+   },
+   {
+    "city": 6,
+    "loaded": 702,
+    "planned": 255,
+    "left": 255,
+    "status": "onTime"
+   },
+   {
+    "city": 7,
+    "loaded": 468,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 8,
+    "loaded": 378,
+    "planned": 405,
+    "left": 405,
+    "status": "onTime"
+   },
+   {
+    "city": 9,
+    "loaded": 270,
+    "planned": 495,
+    "left": 495,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 9,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 30,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 0,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 90,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 30,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 8,
+     "start": 120,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 9,
+     "start": 0,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 10,
+     "start": 150,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 11,
+     "start": 60,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": -7.75,
+  "lines": {
+   "revenue": 13388,
+   "bonus": 330,
+   "late": 0,
+   "left": 5362,
+   "docks": 1762,
+   "people": 6345,
+   "robots": 0,
+   "buffer": 257
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 1167,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 1,
+    "loaded": 792,
+    "planned": 315,
+    "left": 315,
+    "status": "incomplete"
+   },
+   {
+    "city": 2,
+    "loaded": 1012,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 650,
+    "planned": 255,
+    "left": 255,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 941,
+    "planned": 435,
+    "left": 435,
+    "status": "incomplete"
+   },
+   {
+    "city": 5,
+    "loaded": 794,
+    "planned": 375,
+    "left": 375,
+    "status": "incomplete"
+   },
+   {
+    "city": 6,
+    "loaded": 700,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 7,
+    "loaded": 719,
+    "planned": 345,
+    "left": 345,
+    "status": "incomplete"
+   },
+   {
+    "city": 8,
+    "loaded": 700,
+    "planned": 465,
+    "left": 465,
+    "status": "onTime"
+   },
+   {
+    "city": 9,
+    "loaded": 566,
+    "planned": 225,
+    "left": 225,
+    "status": "incomplete"
+   },
+   {
+    "city": 10,
+    "loaded": 484,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 11,
+    "loaded": 400,
+    "planned": 405,
+    "left": 405,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 9,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 300,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 270,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 240,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 420,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 0,
+     "end": 360,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 0,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 240,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 30,
+     "end": 330,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 30,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 8,
+     "start": 120,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 9,
+     "start": 0,
+     "end": 210,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 9,
+     "start": 0,
+     "end": 210,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 10,
+     "start": 240,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 11,
+     "start": 60,
+     "end": 390,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": -33.28,
+  "lines": {
+   "revenue": 14990,
+   "bonus": 900,
+   "late": 2212,
+   "left": 3760,
+   "docks": 2553,
+   "people": 7150,
+   "robots": 0,
+   "buffer": 248
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 1795,
+    "planned": 465,
+    "left": 486,
+    "status": "incomplete"
+   },
+   {
+    "city": 1,
+    "loaded": 1210,
+    "planned": 315,
+    "left": 336,
+    "status": "incomplete"
+   },
+   {
+    "city": 2,
+    "loaded": 542,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 965,
+    "planned": 255,
+    "left": 266,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 1100,
+    "planned": 435,
+    "left": 435,
+    "status": "onTime"
+   },
+   {
+    "city": 5,
+    "loaded": 942,
+    "planned": 375,
+    "left": 375,
+    "status": "incomplete"
+   },
+   {
+    "city": 6,
+    "loaded": 481,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 7,
+    "loaded": 800,
+    "planned": 345,
+    "left": 345,
+    "status": "onTime"
+   },
+   {
+    "city": 8,
+    "loaded": 700,
+    "planned": 465,
+    "left": 465,
+    "status": "onTime"
+   },
+   {
+    "city": 9,
+    "loaded": 643,
+    "planned": 225,
+    "left": 225,
+    "status": "incomplete"
+   },
+   {
+    "city": 10,
+    "loaded": 413,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 11,
+    "loaded": 400,
+    "planned": 405,
+    "left": 405,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 10,
+  "name": "safe",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 30,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 0,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 90,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 30,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 8,
+     "start": 120,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 9,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 10,
+     "start": 150,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 11,
+     "start": 60,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 12,
+     "start": 0,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 13,
+     "start": 180,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 14,
+     "start": 30,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 15,
+     "start": 210,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 1192.98,
+  "lines": {
+   "revenue": 16975,
+   "bonus": 465,
+   "late": 166,
+   "left": 7775,
+   "docks": 2402,
+   "people": 5765,
+   "robots": 0,
+   "buffer": 138
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 1167,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 1,
+    "loaded": 1104,
+    "planned": 435,
+    "left": 440,
+    "status": "incomplete"
+   },
+   {
+    "city": 2,
+    "loaded": 1058,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 715,
+    "planned": 285,
+    "left": 285,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 960,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 5,
+    "loaded": 775,
+    "planned": 345,
+    "left": 345,
+    "status": "incomplete"
+   },
+   {
+    "city": 6,
+    "loaded": 744,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 7,
+    "loaded": 884,
+    "planned": 405,
+    "left": 405,
+    "status": "incomplete"
+   },
+   {
+    "city": 8,
+    "loaded": 814,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 9,
+    "loaded": 548,
+    "planned": 255,
+    "left": 255,
+    "status": "incomplete"
+   },
+   {
+    "city": 10,
+    "loaded": 540,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 11,
+    "loaded": 572,
+    "planned": 375,
+    "left": 375,
+    "status": "onTime"
+   },
+   {
+    "city": 12,
+    "loaded": 457,
+    "planned": 315,
+    "left": 315,
+    "status": "incomplete"
+   },
+   {
+    "city": 13,
+    "loaded": 418,
+    "planned": 495,
+    "left": 495,
+    "status": "onTime"
+   },
+   {
+    "city": 14,
+    "loaded": 326,
+    "planned": 435,
+    "left": 435,
+    "status": "onTime"
+   },
+   {
+    "city": 15,
+    "loaded": 233,
+    "planned": 495,
+    "left": 495,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 10,
+  "name": "sensible",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 0,
+     "start": 0,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 420,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 0,
+     "end": 420,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 270,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 270,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 3,
+     "start": 0,
+     "end": 270,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 450,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 4,
+     "start": 60,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 0,
+     "end": 330,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 5,
+     "start": 0,
+     "end": 330,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 6,
+     "start": 270,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 30,
+     "end": 390,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 7,
+     "start": 30,
+     "end": 390,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 8,
+     "start": 120,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 9,
+     "start": 0,
+     "end": 240,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 9,
+     "start": 0,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 10,
+     "start": 150,
+     "end": 450,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 11,
+     "start": 60,
+     "end": 360,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 12,
+     "start": 0,
+     "end": 300,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 13,
+     "start": 180,
+     "end": 480,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 15,
+     "start": 210,
+     "end": 480,
+     "people": 1,
+     "docks": 1
+    }
+   ],
+   "robotCities": [
+    14
+   ],
+   "robots": 4
+  },
+  "profit": 2700.23,
+  "lines": {
+   "revenue": 19088,
+   "bonus": 744,
+   "late": 1742,
+   "left": 5662,
+   "docks": 3140,
+   "people": 6094,
+   "robots": 352,
+   "buffer": 141
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 1793,
+    "planned": 465,
+    "left": 486,
+    "status": "incomplete"
+   },
+   {
+    "city": 1,
+    "loaded": 1645,
+    "planned": 435,
+    "left": 440,
+    "status": "incomplete"
+   },
+   {
+    "city": 2,
+    "loaded": 566,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 3,
+    "loaded": 1108,
+    "planned": 285,
+    "left": 296,
+    "status": "incomplete"
+   },
+   {
+    "city": 4,
+    "loaded": 1228,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 5,
+    "loaded": 939,
+    "planned": 345,
+    "left": 345,
+    "status": "incomplete"
+   },
+   {
+    "city": 6,
+    "loaded": 482,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 7,
+    "loaded": 931,
+    "planned": 405,
+    "left": 405,
+    "status": "onTime"
+   },
+   {
+    "city": 8,
+    "loaded": 814,
+    "planned": 495,
+    "left": 495,
+    "status": "incomplete"
+   },
+   {
+    "city": 9,
+    "loaded": 673,
+    "planned": 255,
+    "left": 255,
+    "status": "incomplete"
+   },
+   {
+    "city": 10,
+    "loaded": 540,
+    "planned": 465,
+    "left": 465,
+    "status": "incomplete"
+   },
+   {
+    "city": 11,
+    "loaded": 572,
+    "planned": 375,
+    "left": 375,
+    "status": "onTime"
+   },
+   {
+    "city": 12,
+    "loaded": 457,
+    "planned": 315,
+    "left": 315,
+    "status": "incomplete"
+   },
+   {
+    "city": 13,
+    "loaded": 418,
+    "planned": 495,
+    "left": 495,
+    "status": "onTime"
+   },
+   {
+    "city": 14,
+    "loaded": 326,
+    "planned": 435,
+    "left": 435,
+    "status": "onTime"
+   },
+   {
+    "city": 15,
+    "loaded": 233,
+    "planned": 495,
+    "left": 495,
+    "status": "onTime"
+   }
+  ]
+ },
+ {
+  "level": 4,
+  "name": "example",
+  "plan": {
+   "blocks": [
+    {
+     "city": 0,
+     "start": 0,
+     "end": 105,
+     "people": 2,
+     "docks": 1
+    },
+    {
+     "city": 2,
+     "start": 60,
+     "end": 180,
+     "people": 1,
+     "docks": 1
+    },
+    {
+     "city": 1,
+     "start": 120,
+     "end": 240,
+     "people": 2,
+     "docks": 1
+    }
+   ],
+   "robotCities": [],
+   "robots": 0
+  },
+  "profit": 393.4,
+  "lines": {
+   "revenue": 750,
+   "bonus": 150,
+   "late": 0,
+   "left": 0,
+   "docks": 162,
+   "people": 322,
+   "robots": 0,
+   "buffer": 22
+  },
+  "trucks": [
+   {
+    "city": 0,
+    "loaded": 240,
+    "planned": 120,
+    "left": 120,
+    "status": "onTime"
+   },
+   {
+    "city": 1,
+    "loaded": 200,
+    "planned": 255,
+    "left": 255,
+    "status": "onTime"
+   },
+   {
+    "city": 2,
+    "loaded": 60,
+    "planned": 195,
+    "left": 195,
+    "status": "onTime"
+   }
+  ]
+ }
+]
