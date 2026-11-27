@@ -52,7 +52,7 @@ function bakedBodies(): Plugin {
 }
 
 export default defineConfig({
-  // Relative asset paths, so the build works on GitHub Pages under /sort-sim/.
+  // Relative asset paths, so the build works from any folder of a static web server.
   base: './',
   build: {
     chunkSizeWarningLimit: 1200,

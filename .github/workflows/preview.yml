@@ -1,9 +1,6 @@
 name: Preview
 
-# Tests and builds the test branch. When it passes, the Pages workflow on main
-# (workflow_run) builds this branch into /next/ next to the live site.
-#
-# The build is also uploaded as the run's artifact (sort-sim-<branch>-<commit>):
+# Tests and builds the test branch. The build is uploaded as the run's artifact (sort-sim-<branch>-<commit>):
 # open the run under Actions, download it and unzip it into any folder of any
 # static web server. Paths are relative (base './'), so a subfolder works too;
 # index.html sits at the root of the zip. Artifacts are kept for 90 days.
